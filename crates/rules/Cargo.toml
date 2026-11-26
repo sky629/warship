@@ -1,0 +1,12 @@
+[package]
+name = "warship_rules"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# 게임 규칙은 외부 크레이트에 의존하지 않습니다. scripts/check-deps.sh가 이 조건을 검사합니다.
+[dependencies]
+
+[lints]
+workspace = true

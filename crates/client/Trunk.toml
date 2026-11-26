@@ -1,0 +1,5 @@
+# `trunk serve`가 사용하는 주소입니다.
+[serve]
+addresses = ["127.0.0.1"]
+port = 8080
+open = false

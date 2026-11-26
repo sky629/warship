@@ -1,0 +1,23 @@
+[package]
+name = "warship_client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "warship-client"
+path = "src/main.rs"
+
+[dependencies]
+warship_rules.workspace = true
+warship_protocol.workspace = true
+warship_client_core.workspace = true
+warship_ws_client.workspace = true
+bevy.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { workspace = true, features = ["web"] }
+
+[lints]
+workspace = true

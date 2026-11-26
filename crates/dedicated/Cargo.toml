@@ -1,0 +1,20 @@
+[package]
+name = "warship_dedicated"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "warship-dedicated"
+path = "src/main.rs"
+
+[dependencies]
+warship_rules.workspace = true
+warship_protocol.workspace = true
+warship_server.workspace = true
+warship_bot.workspace = true
+warship_ws_server.workspace = true
+
+[lints]
+workspace = true

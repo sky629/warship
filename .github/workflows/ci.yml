@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  native:
+    name: Format, lint, test, dependency rules
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the pinned toolchain
+        # Without a name, rustup installs the toolchain, components, and targets that rust-toolchain.toml lists.
+        run: rustup toolchain install
+
+      - name: Install the Linux libraries Bevy links
+        # libudev-sys and wayland-sys find these with pkg-config when the client builds. No audio feature, so no ALSA.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y pkg-config libudev-dev libwayland-dev
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Check dependency rules
+        run: sh scripts/check-deps.sh
+
+  web:
+    name: Web build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install trunk 0.22.2
+        # The SHA-256 is the one of the release asset trunk-x86_64-unknown-linux-gnu.tar.gz of v0.22.2. The archive is unpacked only when it matches.
+        # When trunk is upgraded, download the new asset, compute its SHA-256 yourself, and compare it with the digest the GitHub release page shows.
+        env:
+          TRUNK_SHA256: 26fca8a9952e46cd7d8b8b9a2e2c1786c090fc14b8e10b6678ab4d0f9f1a385f
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/trunk.tar.gz" https://github.com/trunk-rs/trunk/releases/download/v0.22.2/trunk-x86_64-unknown-linux-gnu.tar.gz
+          echo "$TRUNK_SHA256  $RUNNER_TEMP/trunk.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/trunk.tar.gz" -C "$HOME/.cargo/bin"
+
+      - name: Clippy for wasm32
+        run: cargo clippy -p warship_client --target wasm32-unknown-unknown --locked -- -D warnings
+
+      - name: Build the web client
+        working-directory: crates/client
+        run: trunk build --locked

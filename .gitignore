@@ -1,0 +1,6 @@
+/target
+/crates/client/dist
+.DS_Store
+# 참고용으로 받은 원작 맵 파일과 거기서 추출한 수치입니다. 저장소에 넣지 않습니다.
+/maps
+/data

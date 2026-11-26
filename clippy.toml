@@ -1,0 +1,2 @@
+# 테스트에서는 실패하면 곧바로 멈추는 것이 원하는 동작이므로 unwrap을 허용합니다.
+allow-unwrap-in-tests = true
