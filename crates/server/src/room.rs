@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use warship_protocol::{InputMsg, LinkId, RejectReason, RoomCode, Snapshot, Welcome};
+use warship_protocol::{CommandMsg, InputMsg, LinkId, RejectReason, RoomCode, Snapshot, Welcome};
 use warship_rules::{PlayerInput, PlayerInputs, ShipId, Sim, Tuning, Waypoint};
 
 pub(crate) struct Room {
@@ -71,6 +71,13 @@ impl Room {
             destination,
         };
         self.pending.insert(ship, input);
+    }
+
+    /// 명령을 바로 처리합니다. 조건의 검사와 순서 번호의 확인은 규칙이 합니다.
+    pub fn take_command(&mut self, link: LinkId, msg: CommandMsg) {
+        if let Some(&ship) = self.ships.get(&link) {
+            self.sim.command(ship, msg.seq, msg.command.into());
+        }
     }
 
     /// Tick 하나를 실행하고, 접속마다 보낼 스냅샷을 돌려줍니다. 스냅샷은 진영마다 한 번 만듭니다.

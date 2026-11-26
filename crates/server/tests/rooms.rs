@@ -5,9 +5,9 @@
 use std::time::{Duration, Instant};
 
 use warship_protocol::{
-    ClientEvent, ClientMsg, ClientTransport, InputMsg, LoopbackClient, LoopbackConnector,
-    PROTOCOL_VERSION, RejectReason, ServerLimits, ServerMsg, Snapshot, Welcome, WireTeam, WireVec2,
-    loopback,
+    ClientEvent, ClientMsg, ClientTransport, CommandMsg, InputMsg, LoopbackClient,
+    LoopbackConnector, PROTOCOL_VERSION, RejectReason, ServerLimits, ServerMsg, Snapshot, Welcome,
+    WireCommand, WireRefusal, WireTeam, WireVec2, loopback,
 };
 use warship_rules::{Tuning, Vec2};
 use warship_server::{GameServer, Notice};
@@ -83,6 +83,11 @@ impl Player {
             _ => None,
         });
         found.expect("the server sent a snapshot")
+    }
+
+    fn command(&mut self, seq: u32, command: WireCommand) {
+        self.link
+            .send(&ClientMsg::Command(CommandMsg { seq, command }));
     }
 
     fn sail_to(&mut self, seq: u32, x: f32, y: f32) {
@@ -348,7 +353,48 @@ fn a_snapshot_carries_own_creeps_and_own_gold_but_not_the_far_enemys() {
             .all(|creep| creep.team == WireTeam::Red)
     );
     assert_eq!(snapshot.structures.len(), 10, "structures of both teams");
-    let golds: Vec<Option<u32>> = snapshot.ships.iter().map(|ship| ship.gold).collect();
+    let own = snapshot.ships.iter().map(|ship| ship.own.as_ref());
+    let golds: Vec<Option<u32>> = own.map(|own| own.map(|own| own.gold)).collect();
     assert_eq!(golds, [Some(6)]);
     assert_eq!(snapshot.outcome, None);
+}
+
+#[test]
+fn a_command_is_handled_once_and_its_result_comes_back_in_the_snapshot() {
+    let mut bench = Bench::new(Tuning::default());
+    let mut kang = bench.join("test");
+    bench.run_ticks(1);
+
+    kang.command(1, WireCommand::Learn { skill: 0 });
+    kang.command(1, WireCommand::Learn { skill: 1 });
+    bench.run_ticks(1);
+    let own = kang.last_snapshot().ships[0].own.clone().expect("my ship");
+    let ranks: Vec<u8> = own.skills.iter().map(|skill| skill.rank).collect();
+    assert_eq!(ranks, [1, 0, 0], "the repeated number is ignored");
+    assert_eq!((own.skill_points, own.last_command_seq), (0, 1));
+    assert_eq!(own.refusal, None);
+
+    // 시작 자리는 본진의 상점 안이지만 골드가 모자랍니다.
+    kang.command(2, WireCommand::Buy { weapon: 0 });
+    bench.run_ticks(1);
+    let own = kang.last_snapshot().ships[0].own.clone().expect("my ship");
+    assert_eq!(own.last_command_seq, 2);
+    assert_eq!(own.refusal, Some(WireRefusal::NotEnoughGold));
+}
+
+#[test]
+fn a_ship_buys_a_weapon_at_its_base_once_it_has_the_gold() {
+    let mut bench = Bench::new(Tuning::default());
+    let mut kang = bench.join("test");
+    // 수입은 1초에 2골드이고, 0번 무기의 가격은 100입니다.
+    bench.run_ticks(1000);
+
+    kang.command(1, WireCommand::Buy { weapon: 0 });
+    bench.run_ticks(1);
+
+    let ship = kang.last_snapshot().ships.remove(0);
+    let weapons: Vec<u16> = ship.mounts.iter().map(|mount| mount.weapon).collect();
+    assert_eq!(weapons, [0, 0], "the start weapon and the bought one");
+    let own = ship.own.expect("my ship");
+    assert_eq!((own.gold, own.refusal), (0, None));
 }

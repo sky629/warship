@@ -1,13 +1,14 @@
 //! 플레이어가 조종하는 배와 그 이동입니다.
 
-use crate::ids::{ShipId, Team, WeaponId};
+use crate::command::Refusal;
+use crate::ids::{HullId, ShipId, Team, WeaponId};
 use crate::input::PlayerInputs;
 use crate::math::Vec2;
 use crate::tuning::Tuning;
 use crate::weapon::Target;
 use crate::world::World;
 
-/// 배 한 척이 달 수 있는 무기의 수입니다.
+/// 가장 큰 선체가 달 수 있는 무기의 수입니다. 선체마다 쓰는 칸의 수는 `HullSpec::mounts`입니다.
 pub const MOUNTS: usize = 6;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -15,15 +16,43 @@ pub struct Ship {
     pub id: ShipId,
     pub team: Team,
     pub pos: Vec2,
+    pub hull: HullId,
     pub hp: u32,
     pub life: Life,
     pub gold: u32,
+    /// 지금까지 받은 경험치입니다.
+    pub xp: u32,
+    /// 스킬마다 넣은 스킬 포인트와 쿨다운입니다. 순서는 스킬 표의 순서입니다.
+    pub skills: Vec<SkillState>,
+    /// 속도를 올리는 스킬의 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
+    pub sprint: Option<Sprint>,
     /// 배가 향하는 지점입니다. 없으면 멈춰 있습니다.
     pub destination: Option<Vec2>,
     /// 무기를 다는 칸입니다. 빈 칸은 `None`입니다.
     pub mounts: [Option<Mount>; MOUNTS],
     /// 마지막으로 처리한 입력의 순서 번호입니다.
     pub last_input_seq: u32,
+    /// 마지막으로 처리한 명령의 순서 번호입니다.
+    pub last_command_seq: u32,
+    /// 마지막으로 처리한 명령을 거절한 이유입니다. 그 명령을 실행했으면 없습니다.
+    pub refusal: Option<Refusal>,
+}
+
+/// 배가 스킬 하나에 대해 가진 상태입니다.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SkillState {
+    /// 넣은 스킬 포인트의 수입니다. 0이면 배우지 않은 스킬입니다.
+    pub rank: u8,
+    /// 이 Tick부터 다시 쓸 수 있습니다.
+    pub ready_at: u64,
+}
+
+/// 속도를 올리는 효과입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sprint {
+    /// 이 Tick까지 속도가 오릅니다.
+    pub until: u64,
+    pub percent: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,13 +89,31 @@ impl Ship {
             id,
             team,
             pos,
-            hp: tuning.ship.max_hp,
+            hull: HullId(0),
+            hp: tuning.hulls[0].max_hp,
             life: Life::Afloat,
             gold: 0,
+            xp: 0,
+            skills: vec![SkillState::default(); tuning.skills.len()],
+            sprint: None,
             destination: None,
             mounts,
             last_input_seq: 0,
+            last_command_seq: 0,
+            refusal: None,
         }
+    }
+
+    /// 배의 레벨입니다. 1부터 시작합니다.
+    pub fn level(&self, tuning: &Tuning) -> u32 {
+        let reached = |needed: &&u32| **needed <= self.xp;
+        1 + tuning.growth.level_xp.iter().take_while(reached).count() as u32
+    }
+
+    /// 아직 스킬에 넣지 않은 스킬 포인트의 수입니다.
+    pub fn skill_points(&self, tuning: &Tuning) -> u32 {
+        let spent: u32 = self.skills.iter().map(|skill| u32::from(skill.rank)).sum();
+        self.level(tuning) - spent
     }
 
     pub fn is_afloat(&self) -> bool {
@@ -74,12 +121,12 @@ impl Ship {
     }
 }
 
-/// 다시 나타날 Tick이 된 배를 최대 HP로 그 진영의 시작 자리에 놓습니다. 목적지는 지워지고, 무기와 골드는 그대로입니다.
+/// 다시 나타날 Tick이 된 배를 최대 HP로 그 진영의 시작 자리에 놓습니다. 목적지는 지워지고, 나머지는 그대로입니다.
 pub(crate) fn respawn(world: &mut World, tuning: &Tuning, tick: u64) {
     for ship in world.ships.values_mut() {
         if matches!(ship.life, Life::Sunk { respawn_at } if respawn_at <= tick) {
             ship.life = Life::Afloat;
-            ship.hp = tuning.ship.max_hp;
+            ship.hp = tuning.hull(ship.hull).max_hp;
             ship.pos = tuning.map.spawns[ship.team.index()];
             ship.destination = None;
         }
@@ -88,8 +135,7 @@ pub(crate) fn respawn(world: &mut World, tuning: &Tuning, tick: u64) {
 
 /// 입력을 받은 배의 목적지를 바꾸고, 떠 있는 배를 목적지 쪽으로 한 Tick만큼 움직입니다.
 /// 한 Tick에 갈 수 있는 거리 안에 목적지가 있으면 목적지에 정확히 섭니다.
-pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuning) {
-    let step = tuning.ship.speed / tuning.tick_hz as f32;
+pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuning, tick: u64) {
     for ship in world.ships.values_mut() {
         if let Some(input) = inputs.get(&ship.id) {
             ship.last_input_seq = input.seq;
@@ -101,6 +147,12 @@ pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuni
         let Some(destination) = ship.destination else {
             continue;
         };
+        let boost = match ship.sprint {
+            Some(sprint) if tick <= sprint.until => sprint.percent,
+            _ => 0,
+        };
+        let speed = tuning.hull(ship.hull).speed * (100 + boost) as f32 / 100.0;
+        let step = speed / tuning.tick_hz as f32;
         let offset = destination - ship.pos;
         let distance = offset.length();
         ship.pos = if distance <= step {

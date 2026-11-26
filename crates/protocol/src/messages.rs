@@ -1,13 +1,13 @@
 //! 클라이언트와 서버가 주고받는 메시지입니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::Team;
+use warship_rules::{Command, HullId, SkillId, Team, WeaponId};
 
 use crate::snapshot::Snapshot;
 use crate::welcome::Welcome;
 
 /// 메시지의 형식이 바뀔 때마다 올리는 번호입니다. 서버는 다른 번호의 입장 요청을 거절합니다.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// 클라이언트에서 서버로 가는 메시지입니다. `Join`은 첫째 변형이어야 합니다(`codec`이 변형 번호 0으로 알아봅니다).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -19,6 +19,7 @@ pub enum ClientMsg {
         room: String,
     },
     Input(InputMsg),
+    Command(CommandMsg),
     /// 플레이어가 스스로 방을 나갑니다.
     Leave,
 }
@@ -31,6 +32,37 @@ pub struct InputMsg {
     pub seq: u32,
     /// 배가 향할 지점입니다. 없으면 배가 멈춥니다.
     pub destination: Option<WireVec2>,
+}
+
+/// 한 번만 실행해야 하는 조작(구매, 판매, 선체 교체, 스킬)입니다. 모든 조건은 서버가 검사합니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandMsg {
+    /// 클라이언트가 명령을 보낼 때마다 1씩 늘리는 순서 번호입니다. 서버는 이미 처리한 번호보다 크지 않은 명령을 버리고,
+    /// 처리한 번호와 거절한 이유를 스냅샷의 `WireOwn`에 싣습니다.
+    pub seq: u32,
+    pub command: WireCommand,
+}
+
+/// 번호는 `Welcome`의 무기, 선체, 스킬 목록의 자리입니다. 목록에 없는 번호는 서버가 거절합니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WireCommand {
+    Buy { weapon: u16 },
+    Sell { slot: u8 },
+    ChangeHull { hull: u16 },
+    Learn { skill: u16 },
+    Cast { skill: u16 },
+}
+
+impl From<WireCommand> for Command {
+    fn from(command: WireCommand) -> Command {
+        match command {
+            WireCommand::Buy { weapon } => Command::Buy(WeaponId(weapon)),
+            WireCommand::Sell { slot } => Command::Sell { slot },
+            WireCommand::ChangeHull { hull } => Command::ChangeHull(HullId(hull)),
+            WireCommand::Learn { skill } => Command::Learn(SkillId(skill)),
+            WireCommand::Cast { skill } => Command::Cast(SkillId(skill)),
+        }
+    }
 }
 
 /// 수면 위의 좌표입니다. 클라이언트가 보낸 값은 서버가 검사하기 전이므로 NaN이나 무한대일 수 있습니다.

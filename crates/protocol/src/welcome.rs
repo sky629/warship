@@ -16,9 +16,12 @@ pub struct Welcome {
     pub tick_hz: u32,
     pub map_width: f32,
     pub map_height: f32,
-    pub ship_max_hp: u32,
-    /// 무기 표입니다. 스냅샷의 무기 번호가 이 목록의 자리입니다.
+    /// 선체 표입니다. 스냅샷의 선체 번호가 이 목록의 자리입니다.
+    pub hulls: Vec<WireHull>,
+    /// 무기 표입니다. 스냅샷의 무기 번호가 이 목록의 자리이고, 상점이 이 무기를 모두 팝니다.
     pub weapons: Vec<WireWeapon>,
+    /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서입니다.
+    pub skills: Vec<WireSkillSpec>,
     pub tower: WireStructureSpec,
     pub harbor: WireStructureSpec,
     pub base: WireStructureSpec,
@@ -38,10 +41,28 @@ impl Welcome {
     }
 }
 
-/// 클라이언트가 사거리와 날아가는 포탄을 그리는 데 쓰는 무기의 수치입니다.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WireHull {
+    pub name: String,
+    pub price: u32,
+    pub max_hp: u32,
+    /// 무기를 달 수 있는 칸의 수입니다.
+    pub mounts: u8,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WireSkillSpec {
+    pub name: String,
+    pub cooldown_ticks: u32,
+    pub max_rank: u8,
+}
+
+/// 클라이언트가 사거리와 날아가는 포탄을 그리고 상점의 목록을 보여 주는 데 쓰는 무기의 수치입니다.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WireWeapon {
     pub name: String,
+    /// 상점에서 사는 가격입니다. 건물과 NPC 배의 포에서는 뜻이 없습니다.
+    pub price: u32,
     pub range: f32,
     pub cooldown_ticks: u32,
     pub shot_speed: f32,
@@ -64,6 +85,7 @@ pub struct WireCreepSpec {
 fn wire_weapon(spec: &WeaponSpec) -> WireWeapon {
     WireWeapon {
         name: spec.name.to_string(),
+        price: spec.price,
         range: spec.range,
         cooldown_ticks: spec.cooldown_ticks,
         shot_speed: spec.shot_speed,
@@ -98,7 +120,25 @@ impl Welcome {
             tick_hz: tuning.tick_hz,
             map_width: tuning.map.width,
             map_height: tuning.map.height,
-            ship_max_hp: tuning.ship.max_hp,
+            hulls: tuning
+                .hulls
+                .iter()
+                .map(|hull| WireHull {
+                    name: hull.name.to_string(),
+                    price: hull.price,
+                    max_hp: hull.max_hp,
+                    mounts: hull.mounts as u8,
+                })
+                .collect(),
+            skills: tuning
+                .skills
+                .iter()
+                .map(|skill| WireSkillSpec {
+                    name: skill.name.to_string(),
+                    cooldown_ticks: skill.cooldown_ticks,
+                    max_rank: skill.max_rank,
+                })
+                .collect(),
             weapons: tuning.weapons.iter().map(wire_weapon).collect(),
             tower: structure(StructureKind::Tower),
             harbor: structure(StructureKind::Harbor),

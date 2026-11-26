@@ -3,7 +3,7 @@
 //! 거리의 단위는 타일이고, 시간의 단위는 수치마다 적혀 있습니다(초 또는 Tick).
 //! 기본 수치(`Tuning::default`)는 프로토타입용 값이고, 배와 무기의 이름과 맵의 배치는 이 게임에서 새로 지은 것입니다.
 
-use crate::ids::{Team, WeaponId};
+use crate::ids::{HullId, Team, WeaponId};
 use crate::math::Vec2;
 use crate::ship::MOUNTS;
 use crate::structures::StructureKind;
@@ -15,8 +15,14 @@ pub struct Tuning {
     /// 한 진영에 들어올 수 있는 배의 수입니다.
     pub team_size: usize,
     pub ship: ShipTuning,
-    /// 무기 표입니다. `WeaponId`가 이 표의 행 번호입니다.
+    /// 선체 표입니다. `HullId`가 이 표의 행 번호이고, 새 배는 0번 선체로 시작합니다.
+    pub hulls: Vec<HullSpec>,
+    /// 무기 표입니다. `WeaponId`가 이 표의 행 번호입니다. 상점은 이 표의 무기를 모두 팝니다.
     pub weapons: Vec<WeaponSpec>,
+    /// 스킬 표입니다. `SkillId`가 이 표의 행 번호이고, 모든 배가 같은 스킬을 배울 수 있습니다.
+    pub skills: Vec<SkillSpec>,
+    pub shop: ShopTuning,
+    pub growth: GrowthTuning,
     pub structures: StructureTable,
     /// NPC 배의 종류입니다. `Wave::creep`이 이 표의 행 번호입니다.
     pub creeps: Vec<CreepSpec>,
@@ -29,17 +35,66 @@ pub struct Tuning {
 /// 플레이어의 배에 관한 수치입니다.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShipTuning {
-    pub max_hp: u32,
-    /// 1초에 움직이는 거리입니다.
-    pub speed: f32,
-    /// 이 거리 안의 적이 배의 진영에 보입니다.
-    pub vision: f32,
     /// 배가 처음 가지는 무기입니다. 앞 칸부터 차례로 답니다.
     pub start_weapons: Vec<WeaponId>,
     /// 가라앉은 배가 시작 자리에 다시 나타날 때까지의 Tick 수입니다.
     pub respawn_ticks: u32,
     /// 이 배를 가라앉힌 배가 받는 골드입니다.
     pub bounty: u32,
+}
+
+/// 선체 한 종류의 수치입니다. 플레이어는 상점에서 선체를 바꿉니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HullSpec {
+    pub name: &'static str,
+    pub price: u32,
+    pub max_hp: u32,
+    /// 1초에 움직이는 거리입니다.
+    pub speed: f32,
+    /// 이 거리 안의 적이 배의 진영에 보입니다.
+    pub vision: f32,
+    /// 무기를 달 수 있는 칸의 수입니다. 앞에서부터 이 수만큼의 칸을 씁니다.
+    pub mounts: usize,
+}
+
+/// 상점에 관한 수치입니다. 자기 진영의 서 있는 본진과 항구가 상점입니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShopTuning {
+    /// 상점에서 이 거리 안에 있는 배가 사고팔 수 있습니다.
+    pub range: f32,
+    /// 무기를 팔거나 선체를 바꿀 때 돌려받는, 가격에 대한 백분율입니다.
+    pub refund_percent: u32,
+}
+
+/// 레벨에 관한 수치입니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GrowthTuning {
+    /// 2레벨부터 차례로, 그 레벨이 되는 데 필요한 누적 경험치입니다. 배는 레벨마다 스킬 포인트 하나를 받습니다.
+    pub level_xp: Vec<u32>,
+    /// 적이 가라앉거나 파괴된 자리에서 이 거리 안에 떠 있는 배가 경험치를 나누어 받습니다.
+    pub share_range: f32,
+}
+
+/// 스킬 한 종류의 수치입니다. 스킬마다 다른 점은 모두 이 구조체의 값입니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkillSpec {
+    pub name: &'static str,
+    /// 한 번 쓴 뒤 다시 쓸 수 있을 때까지의 Tick 수입니다.
+    pub cooldown_ticks: u32,
+    /// 스킬 포인트를 넣을 수 있는 횟수입니다.
+    pub max_rank: u8,
+    pub effect: SkillEffect,
+}
+
+/// 스킬이 하는 일입니다. 수치는 스킬의 단계(넣은 스킬 포인트의 수)에 비례합니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SkillEffect {
+    /// 자기 배의 HP를 최대 HP까지 회복합니다.
+    Repair { hp_per_rank: u32 },
+    /// `radius` 안의 모든 적의 배와 NPC 배에 피해를 줍니다. 건물에는 피해가 없습니다.
+    Salvo { damage_per_rank: u32, radius: f32 },
+    /// `ticks` 동안 자기 배의 속도를 백분율만큼 올립니다.
+    Sprint { percent_per_rank: u32, ticks: u32 },
 }
 
 /// 무기 한 종류의 수치입니다. 무기마다 다른 점은 모두 이 구조체의 값입니다.
@@ -55,6 +110,8 @@ pub struct WeaponSpec {
     /// 포탄이 1초에 날아가는 거리입니다. 피해는 포탄이 표적까지 날아가는 시간이 지난 뒤에 들어갑니다.
     pub shot_speed: f32,
     pub hits: Hits,
+    /// 상점에서 사는 가격입니다. 건물과 NPC 배의 포에서는 쓰지 않습니다.
+    pub price: u32,
 }
 
 /// 무기가 쏠 수 있는 표적의 종류입니다. 배에는 플레이어의 배와 NPC 배가 모두 들어갑니다.
@@ -146,6 +203,12 @@ pub struct StructureSite {
     pub lane: Option<usize>,
 }
 
+impl Tuning {
+    pub fn hull(&self, id: HullId) -> &HullSpec {
+        &self.hulls[usize::from(id.0)]
+    }
+}
+
 impl MapSpec {
     pub fn contains(&self, p: Vec2) -> bool {
         p.x >= 0.0 && p.x <= self.width && p.y >= 0.0 && p.y <= self.height
@@ -209,8 +272,39 @@ impl Tuning {
         if self.team_size == 0 {
             return Err("team_size must be at least 1".to_string());
         }
-        if !is_positive(self.ship.speed) {
-            return Err("ship speed must be positive".to_string());
+        let Some(starter) = self.hulls.first() else {
+            return Err("the hull table needs at least one hull".to_string());
+        };
+        for hull in &self.hulls {
+            if !is_positive(hull.speed) {
+                return Err(format!("hull {}: speed must be positive", hull.name));
+            }
+            if hull.mounts == 0 || hull.mounts > MOUNTS {
+                return Err(format!("hull {}: mounts must be 1 to {MOUNTS}", hull.name));
+            }
+        }
+        if !is_positive(self.shop.range) || self.shop.refund_percent > 100 {
+            return Err(
+                "the shop needs a positive range and a refund of at most 100 percent".to_string(),
+            );
+        }
+        if !is_positive(self.growth.share_range) {
+            return Err("the experience share range must be positive".to_string());
+        }
+        if !self.growth.level_xp.is_sorted_by(|a, b| a < b) {
+            return Err("level_xp must increase with every level".to_string());
+        }
+        for skill in &self.skills {
+            let radius_fits = match skill.effect {
+                SkillEffect::Salvo { radius, .. } => is_positive(radius),
+                SkillEffect::Repair { .. } | SkillEffect::Sprint { .. } => true,
+            };
+            if skill.cooldown_ticks == 0 || skill.max_rank == 0 || !radius_fits {
+                return Err(format!(
+                    "skill {}: cooldown_ticks, max_rank and radius must be positive",
+                    skill.name
+                ));
+            }
         }
         let kinds = [
             StructureKind::Tower,
@@ -218,8 +312,8 @@ impl Tuning {
             StructureKind::Base,
         ];
         let structures = kinds.map(|kind| self.structures.of(kind));
-        let mut max_hps = vec![self.ship.max_hp];
-        let mut visions = vec![self.ship.vision];
+        let mut max_hps: Vec<u32> = self.hulls.iter().map(|hull| hull.max_hp).collect();
+        let mut visions: Vec<f32> = self.hulls.iter().map(|hull| hull.vision).collect();
         let mut weapons: Vec<&WeaponSpec> = self.weapons.iter().collect();
         for spec in structures {
             max_hps.push(spec.max_hp);
@@ -243,8 +337,11 @@ impl Tuning {
         for weapon in weapons {
             weapon.validate()?;
         }
-        if self.ship.start_weapons.len() > MOUNTS {
-            return Err(format!("a ship carries at most {MOUNTS} weapons"));
+        if self.ship.start_weapons.len() > starter.mounts {
+            return Err(format!(
+                "the starting hull carries at most {} weapons",
+                starter.mounts
+            ));
         }
         for id in &self.ship.start_weapons {
             if usize::from(id.0) >= self.weapons.len() {
@@ -319,6 +416,22 @@ impl Default for Tuning {
             cooldown_ticks,
             shot_speed,
             hits,
+            price: 0,
+        };
+        let sold = |price, weapon: WeaponSpec| WeaponSpec { price, ..weapon };
+        let hull = |name, price, max_hp, speed, vision, mounts| HullSpec {
+            name,
+            price,
+            max_hp,
+            speed,
+            vision,
+            mounts,
+        };
+        let skill = |name, cooldown_ticks, effect| SkillSpec {
+            name,
+            cooldown_ticks,
+            max_rank: 3,
+            effect,
         };
         let both = Hits::ShipsAndStructures;
         let (north, south) = (36.0, 12.0);
@@ -342,18 +455,47 @@ impl Default for Tuning {
             tick_hz: 20,
             team_size: 5,
             ship: ShipTuning {
-                max_hp: 400,
-                speed: 4.0,
-                vision: 9.0,
                 start_weapons: vec![WeaponId(0)],
                 respawn_ticks: 200,
                 bounty: 200,
             },
-            weapons: vec![
-                gun("Deck Gun", 20, 5.5, 30, 14.0, both),
-                gun("Swivel Gun", 4, 3.5, 3, 18.0, both),
-                gun("Long Nine", 30, 12.0, 25, 12.0, Hits::ShipsOnly),
+            hulls: vec![
+                hull("Sloop", 0, 400, 4.0, 9.0, 3),
+                hull("Frigate", 600, 800, 3.6, 9.5, 5),
+                hull("Galleon", 1500, 1500, 3.0, 10.0, 6),
             ],
+            weapons: vec![
+                sold(100, gun("Deck Gun", 20, 5.5, 30, 14.0, both)),
+                sold(150, gun("Swivel Gun", 4, 3.5, 3, 18.0, both)),
+                sold(300, gun("Long Nine", 30, 12.0, 25, 12.0, Hits::ShipsOnly)),
+            ],
+            skills: vec![
+                skill("Patch Up", 600, SkillEffect::Repair { hp_per_rank: 80 }),
+                skill(
+                    "Grapeshot",
+                    300,
+                    SkillEffect::Salvo {
+                        damage_per_rank: 40,
+                        radius: 4.0,
+                    },
+                ),
+                skill(
+                    "Full Sail",
+                    400,
+                    SkillEffect::Sprint {
+                        percent_per_rank: 20,
+                        ticks: 80,
+                    },
+                ),
+            ],
+            shop: ShopTuning {
+                range: 5.0,
+                refund_percent: 50,
+            },
+            growth: GrowthTuning {
+                level_xp: vec![100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200],
+                share_range: 10.0,
+            },
             structures: StructureTable {
                 tower: StructureSpec {
                     max_hp: 3000,

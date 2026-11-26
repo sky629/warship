@@ -23,12 +23,13 @@ pub use codec::{DecodeError, decode_client, decode_server, encode_client, encode
 pub use limits::ServerLimits;
 pub use loopback::{LoopbackClient, LoopbackConnector, LoopbackServer, loopback};
 pub use messages::{
-    ClientMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg, WireTeam, WireVec2,
+    ClientMsg, CommandMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg, WireCommand,
+    WireTeam, WireVec2,
 };
 pub use room_code::{RoomCode, RoomCodeError};
 pub use snapshot::{
-    Snapshot, WireCreep, WireMount, WireOutcome, WireShip, WireStructure, WireStructureKind,
-    WireTarget,
+    Snapshot, WireCreep, WireMount, WireOutcome, WireOwn, WireRefusal, WireShip, WireSkill,
+    WireStructure, WireStructureKind, WireTarget,
 };
 pub use transport::{ClientEvent, ClientTransport, LinkId, PeerKey, ServerEvent, ServerTransport};
-pub use welcome::{Welcome, WireCreepSpec, WireStructureSpec, WireWeapon};
+pub use welcome::{Welcome, WireCreepSpec, WireHull, WireSkillSpec, WireStructureSpec, WireWeapon};

@@ -1,9 +1,9 @@
-//! 접속과 입력입니다. 접속 방식에 도착한 이벤트를 `Session`에 넘기고, 클릭을 이동 입력으로 보냅니다.
+//! 접속과 입력입니다. 접속 방식에 도착한 이벤트를 `Session`에 넘기고, 클릭을 이동 입력으로, 단축키의 명령을 서버로 보냅니다.
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use warship_client_core::{Frame, LaunchOptions, Session};
-use warship_protocol::{ClientEvent, ClientTransport};
+use warship_protocol::{ClientEvent, ClientTransport, WireCommand};
 use warship_ws_client::WsClient;
 
 use crate::draw::TILE_PX;
@@ -13,6 +13,16 @@ use crate::draw::TILE_PX;
 pub struct Net {
     transport: Option<Box<dyn ClientTransport>>,
     pub session: Session,
+}
+
+impl Net {
+    /// 구매, 판매, 선체 교체, 스킬의 명령을 보냅니다. 방 안에 있지 않으면 아무 일도 하지 않습니다.
+    pub fn send_command(&mut self, command: WireCommand) {
+        if let (Some(order), Some(transport)) = (self.session.command(command), &mut self.transport)
+        {
+            transport.send(&order);
+        }
+    }
 }
 
 /// 이번 프레임에 그릴 방의 모습입니다. 입장하기 전에는 없습니다.

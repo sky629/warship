@@ -3,7 +3,9 @@
 //! 포탄은 싣지 않습니다. 클라이언트는 무기가 마지막으로 쏜 Tick(`ready_at`에서 쿨다운을 뺀 값)과 표적에서 날아가는 포탄을 그립니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::{Creep, Life, Outcome, Ship, Sim, Structure, StructureKind, Target, Team};
+use warship_rules::{
+    Creep, Life, Outcome, Refusal, Ship, Sim, Structure, StructureKind, Target, Team, Tuning,
+};
 
 use crate::messages::WireTeam;
 
@@ -27,15 +29,75 @@ pub struct WireShip {
     pub team: WireTeam,
     pub x: f32,
     pub y: f32,
+    /// `Welcome::hulls`의 자리입니다.
+    pub hull: u16,
     pub hp: u32,
+    pub level: u8,
     /// 가라앉은 배가 다시 나타나는 Tick입니다. 떠 있는 배에는 없습니다.
     pub respawn_at: Option<u64>,
-    /// 배가 가진 골드입니다. 받는 진영의 배에만 있습니다.
-    pub gold: Option<u32>,
+    /// 적에게 보이지 않는 정보입니다. 받는 진영의 배에만 있습니다.
+    pub own: Option<WireOwn>,
     /// 무기가 달린 칸만 있습니다.
     pub mounts: Vec<WireMount>,
     /// 서버가 마지막으로 처리한 이 배의 입력 순서 번호입니다.
     pub last_input_seq: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireOwn {
+    pub gold: u32,
+    pub xp: u32,
+    /// 아직 스킬에 넣지 않은 스킬 포인트의 수입니다.
+    pub skill_points: u8,
+    /// `Welcome::skills`와 같은 순서입니다.
+    pub skills: Vec<WireSkill>,
+    /// 서버가 마지막으로 처리한 이 배의 명령 순서 번호입니다.
+    pub last_command_seq: u32,
+    /// 그 명령을 거절한 이유입니다. 실행했으면 없습니다.
+    pub refusal: Option<WireRefusal>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireSkill {
+    /// 넣은 스킬 포인트의 수입니다.
+    pub rank: u8,
+    /// 이 Tick부터 다시 쓸 수 있습니다.
+    pub ready_at: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WireRefusal {
+    Sunk,
+    NoShopInRange,
+    UnknownItem,
+    NotEnoughGold,
+    NoFreeMount,
+    EmptyMount,
+    MountsInUse,
+    SameHull,
+    NoSkillPoint,
+    MaxRank,
+    NotLearned,
+    OnCooldown,
+}
+
+impl From<Refusal> for WireRefusal {
+    fn from(refusal: Refusal) -> WireRefusal {
+        match refusal {
+            Refusal::Sunk => WireRefusal::Sunk,
+            Refusal::NoShopInRange => WireRefusal::NoShopInRange,
+            Refusal::UnknownItem => WireRefusal::UnknownItem,
+            Refusal::NotEnoughGold => WireRefusal::NotEnoughGold,
+            Refusal::NoFreeMount => WireRefusal::NoFreeMount,
+            Refusal::EmptyMount => WireRefusal::EmptyMount,
+            Refusal::MountsInUse => WireRefusal::MountsInUse,
+            Refusal::SameHull => WireRefusal::SameHull,
+            Refusal::NoSkillPoint => WireRefusal::NoSkillPoint,
+            Refusal::MaxRank => WireRefusal::MaxRank,
+            Refusal::NotLearned => WireRefusal::NotLearned,
+            Refusal::OnCooldown => WireRefusal::OnCooldown,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,7 +178,7 @@ impl Snapshot {
             ships: sim
                 .ships()
                 .filter(ship_shown)
-                .map(|ship| wire_ship(ship, team))
+                .map(|ship| wire_ship(ship, team, sim.tuning()))
                 .collect(),
             creeps: sim.creeps().filter(creep_shown).map(wire_creep).collect(),
             structures: sim.structures().map(wire_structure).collect(),
@@ -128,7 +190,7 @@ impl Snapshot {
     }
 }
 
-fn wire_ship(ship: &Ship, viewer: Team) -> WireShip {
+fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning) -> WireShip {
     let mounts = ship.mounts.iter().enumerate().filter_map(|(slot, mount)| {
         let mount = mount.as_ref()?;
         Some(WireMount {
@@ -143,12 +205,28 @@ fn wire_ship(ship: &Ship, viewer: Team) -> WireShip {
         team: ship.team.into(),
         x: ship.pos.x,
         y: ship.pos.y,
+        hull: ship.hull.0,
         hp: ship.hp,
+        level: ship.level(tuning) as u8,
         respawn_at: match ship.life {
             Life::Afloat => None,
             Life::Sunk { respawn_at } => Some(respawn_at),
         },
-        gold: (ship.team == viewer).then_some(ship.gold),
+        own: (ship.team == viewer).then(|| WireOwn {
+            gold: ship.gold,
+            xp: ship.xp,
+            skill_points: ship.skill_points(tuning) as u8,
+            skills: ship
+                .skills
+                .iter()
+                .map(|skill| WireSkill {
+                    rank: skill.rank,
+                    ready_at: skill.ready_at,
+                })
+                .collect(),
+            last_command_seq: ship.last_command_seq,
+            refusal: ship.refusal.map(WireRefusal::from),
+        }),
         mounts: mounts.collect(),
         last_input_seq: ship.last_input_seq,
     }

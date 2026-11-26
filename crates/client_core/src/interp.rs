@@ -8,7 +8,8 @@
 use std::collections::VecDeque;
 
 use warship_protocol::{
-    Snapshot, Welcome, WireOutcome, WireStructureKind, WireTarget, WireTeam, WireWeapon,
+    Snapshot, Welcome, WireOutcome, WireRefusal, WireShip, WireStructureKind, WireTarget, WireTeam,
+    WireWeapon,
 };
 use warship_rules::Vec2;
 
@@ -25,11 +26,35 @@ pub struct Frame {
     pub structures: Vec<StructureView>,
     /// 날아가고 있는 포탄입니다.
     pub shots: Vec<ShotView>,
-    /// 내 배가 가진 골드입니다.
-    pub gold: u32,
-    /// 내 배가 가라앉아 있으면, 다시 나타날 때까지 남은 시간(초)입니다.
-    pub respawn_secs: Option<f32>,
+    /// 이 접속이 조종하는 배의 상태입니다.
+    pub me: Option<MyShip>,
     pub outcome: Option<WireOutcome>,
+}
+
+/// 이 접속이 조종하는 배에 대해 화면이 글자로 보여 주는 것입니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MyShip {
+    pub gold: u32,
+    /// 가라앉아 있으면, 다시 나타날 때까지 남은 시간(초)입니다.
+    pub respawn_secs: Option<f32>,
+    /// `Welcome::hulls`의 자리입니다.
+    pub hull: u16,
+    pub level: u8,
+    pub xp: u32,
+    pub skill_points: u8,
+    /// 선체의 칸마다 달린 무기(`Welcome::weapons`의 자리)입니다. 빈 칸은 `None`입니다.
+    pub mounts: Vec<Option<u16>>,
+    /// `Welcome::skills`와 같은 순서입니다.
+    pub skills: Vec<SkillView>,
+    /// 마지막 명령이 거절되었으면 그 이유입니다.
+    pub refusal: Option<WireRefusal>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkillView {
+    pub rank: u8,
+    /// 다시 쓸 수 있을 때까지 남은 시간(초)입니다. 쓸 수 있으면 0입니다.
+    pub ready_secs: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -109,6 +134,12 @@ impl History {
     }
 }
 
+/// 배의 선체의 최대 HP입니다. 선체 표에 없는 번호이면 1입니다.
+fn max_hp(welcome: &Welcome, ship: &WireShip) -> u32 {
+    let hull = welcome.hulls.get(usize::from(ship.hull));
+    hull.map_or(1, |hull| hull.max_hp)
+}
+
 fn lerp(a: Vec2, b: Vec2, alpha: f32) -> Vec2 {
     a + (b - a) * alpha
 }
@@ -184,7 +215,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             id: ship.id,
             team: ship.team,
             pos,
-            hp: ship.hp as f32 / welcome.ship_max_hp as f32,
+            hp: ship.hp as f32 / max_hp(welcome, ship) as f32,
             sunk: ship.respawn_at.is_some(),
             mine: ship.id == welcome.ship,
             ranges,
@@ -230,17 +261,40 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             range: spec.weapon.as_ref().map(|weapon| weapon.range),
         });
     }
-    let me = next.ships.iter().find(|ship| ship.id == welcome.ship);
-    let respawn_secs = me
-        .and_then(|ship| ship.respawn_at)
-        .map(|at| (at as f32 - tick).max(0.0) / welcome.tick_hz as f32);
+    let secs_until = |at: u64| (at as f32 - tick).max(0.0) / welcome.tick_hz as f32;
+    let mine = next.ships.iter().find(|ship| ship.id == welcome.ship);
+    let me = mine.and_then(|ship| {
+        let own = ship.own.as_ref()?;
+        let slots = welcome.hulls.get(usize::from(ship.hull))?.mounts;
+        let weapon_in = |slot: u8| {
+            let mount = ship.mounts.iter().find(|mount| mount.slot == slot);
+            mount.map(|mount| mount.weapon)
+        };
+        Some(MyShip {
+            gold: own.gold,
+            respawn_secs: ship.respawn_at.map(secs_until),
+            hull: ship.hull,
+            level: ship.level,
+            xp: own.xp,
+            skill_points: own.skill_points,
+            mounts: (0..slots).map(weapon_in).collect(),
+            skills: own
+                .skills
+                .iter()
+                .map(|skill| SkillView {
+                    rank: skill.rank,
+                    ready_secs: secs_until(skill.ready_at),
+                })
+                .collect(),
+            refusal: own.refusal,
+        })
+    });
     Frame {
         ships,
         creeps,
         structures,
         shots,
-        gold: me.and_then(|ship| ship.gold).unwrap_or(0),
-        respawn_secs,
+        me,
         outcome: next.outcome,
     }
 }

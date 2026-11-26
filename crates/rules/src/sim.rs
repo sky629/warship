@@ -1,5 +1,6 @@
 //! `Sim`은 방 하나의 게임 상태 전체이며, 규칙 크레이트의 공개 진입점입니다.
 
+use crate::command::{self, Command};
 use crate::creep::{self, Creep};
 use crate::economy;
 use crate::ids::{CreepId, ShipId, StructureId, Team};
@@ -11,7 +12,7 @@ use crate::vision::{self, Sight};
 use crate::weapon::{self, Target};
 use crate::world::World;
 
-/// 방 하나의 게임입니다. 바깥 코드는 `&Sim`으로 상태를 읽고, `join`, `remove_ship`, `step`으로만 상태를 바꿉니다.
+/// 방 하나의 게임입니다. 바깥 코드는 `&Sim`으로 상태를 읽고, `join`, `remove_ship`, `command`, `step`으로만 상태를 바꿉니다.
 pub struct Sim {
     tuning: Tuning,
     /// 방이 만들어진 뒤 실행한 Tick의 수입니다. 대전이 끝나면 늘지 않습니다.
@@ -113,7 +114,7 @@ impl Sim {
         let (world, tuning) = (&mut self.world, &self.tuning);
         ship::respawn(world, tuning, self.tick);
         creep::spawn(world, tuning, self.tick, &mut self.next_creep);
-        ship::move_ships(world, inputs, tuning);
+        ship::move_ships(world, inputs, tuning, self.tick);
         creep::move_creeps(world, &self.sight, tuning);
         self.sight = vision::look(world, tuning);
         weapon::fire_all(world, &self.sight, tuning, self.tick);
@@ -126,6 +127,14 @@ impl Sim {
             [loser] => Some(Outcome::Victory(loser.enemy())),
             _ => Some(Outcome::Draw),
         };
+    }
+
+    /// 배의 명령 하나를 Tick과 Tick 사이에 처리합니다. 결과는 `Ship::last_command_seq`와 `Ship::refusal`에 남습니다.
+    /// 없는 배의 명령, 이미 처리한 순서 번호의 명령, 대전이 끝난 뒤의 명령은 무시합니다.
+    pub fn command(&mut self, ship: ShipId, seq: u32, command: Command) {
+        if self.outcome.is_none() {
+            command::apply(&mut self.world, &self.tuning, self.tick, ship, seq, command);
+        }
     }
 
     /// 마지막 Tick에 `team`이 이 적을 보았는지입니다. 진영별 스냅샷은 보인 적만 싣습니다.

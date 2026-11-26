@@ -3,7 +3,8 @@
 //! 이 타입은 접속 방식을 직접 호출하지 않습니다. 그래서 Bevy와 소켓 없이 테스트합니다.
 
 use warship_protocol::{
-    ClientEvent, ClientMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg, Welcome, WireVec2,
+    ClientEvent, ClientMsg, CommandMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg,
+    Welcome, WireCommand, WireVec2,
 };
 
 use crate::interp::{Frame, History};
@@ -27,6 +28,8 @@ pub struct Session {
     history: History,
     /// 마지막으로 보낸 입력의 순서 번호입니다.
     last_seq: u32,
+    /// 마지막으로 보낸 명령의 순서 번호입니다.
+    last_command_seq: u32,
 }
 
 impl Session {
@@ -37,6 +40,7 @@ impl Session {
             welcome: None,
             history: History::default(),
             last_seq: 0,
+            last_command_seq: 0,
         }
     }
 
@@ -91,6 +95,18 @@ impl Session {
         Some(ClientMsg::Input(InputMsg {
             seq: self.last_seq,
             destination: Some(WireVec2::new(x, y)),
+        }))
+    }
+
+    /// 구매, 판매, 선체 교체, 스킬의 명령입니다. 방 안에 있을 때만 만들어집니다.
+    pub fn command(&mut self, command: WireCommand) -> Option<ClientMsg> {
+        if self.phase != Phase::Playing {
+            return None;
+        }
+        self.last_command_seq += 1;
+        Some(ClientMsg::Command(CommandMsg {
+            seq: self.last_command_seq,
+            command,
         }))
     }
 

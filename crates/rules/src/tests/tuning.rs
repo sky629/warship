@@ -29,13 +29,14 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 13] = [
+    let broken: [fn(&mut Tuning); 22] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
         |t| t.weapons[1].range = f32::NAN,
         |t| t.ship.start_weapons = vec![WeaponId(99)],
-        |t| t.ship.start_weapons = vec![WeaponId(0); 7],
+        // 시작 선체의 칸은 3개입니다.
+        |t| t.ship.start_weapons = vec![WeaponId(0); 4],
         |t| t.map.spawns[0] = Vec2::new(-1.0, 0.0),
         |t| t.creeps[0].speed = 0.0,
         |t| t.waves[0].creep = 9,
@@ -47,6 +48,15 @@ fn tunings_that_break_the_rules_are_refused() {
             t.map.structures.push(base);
         },
         |t| t.map.structures[1].lane = Some(7),
+        |t| t.hulls.clear(),
+        |t| t.hulls[1].mounts = 7,
+        |t| t.hulls[1].max_hp = 0,
+        |t| t.hulls[2].speed = 0.0,
+        |t| t.shop.refund_percent = 101,
+        |t| t.shop.range = 0.0,
+        |t| t.growth.level_xp = vec![100, 100],
+        |t| t.skills[0].max_rank = 0,
+        |t| t.skills[1].cooldown_ticks = 0,
     ];
     for adjust in broken {
         let mut tuning = Tuning::default();

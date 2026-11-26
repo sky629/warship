@@ -4,10 +4,11 @@
 //! 웹: `cd crates/client && trunk serve` 뒤에 `http://127.0.0.1:8080/` 열기 (기본 서버와 기본 방에 들어갑니다)
 //!
 //! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 위에서 내려다본 도형으로 그립니다.
-//! 오른쪽 클릭으로 배가 갈 지점을 정합니다. 무기는 스스로 쏩니다.
-//! 읽는 순서는 `main`(한 프레임의 순서), `net`, `draw`입니다.
+//! 오른쪽 클릭으로 배가 갈 지점을 정합니다. 무기는 스스로 쏩니다. 상점과 스킬은 단축키로 씁니다.
+//! 읽는 순서는 `main`(한 프레임의 순서), `net`, `draw`, `hud`입니다.
 
 mod draw;
+mod hud;
 mod net;
 
 use bevy::prelude::*;
@@ -28,15 +29,17 @@ fn main() {
     }));
     net::install(&mut app, launch);
     app.insert_resource(ClearColor(draw::SEA))
-        .add_systems(Startup, draw::setup)
+        .add_systems(Startup, (draw::setup, hud::setup))
         .add_systems(
             Update,
             (
                 net::pump_network,
                 net::order_moves,
+                hud::order_commands,
                 draw::center_camera,
                 draw::draw_room,
                 draw::show_status,
+                hud::show_hud,
             )
                 .chain(),
         )

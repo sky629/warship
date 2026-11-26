@@ -29,7 +29,10 @@ impl Sight {
 /// 개체가 자기 진영에 주는 시야 거리입니다.
 fn vision_of(world: &World, tuning: &Tuning, watcher: Target) -> f32 {
     match watcher {
-        Target::Ship(_) => tuning.ship.vision,
+        Target::Ship(id) => world
+            .ships
+            .get(&id)
+            .map_or(0.0, |ship| tuning.hull(ship.hull).vision),
         Target::Creep(id) => world
             .creeps
             .get(&id)

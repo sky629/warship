@@ -3,13 +3,14 @@
 //! 시험용 방은 1초에 20Tick이고, 무기 0번은 쿨다운 10Tick에 포탄이 한 Tick에 1타일을 납니다.
 
 use warship_protocol::{
-    ClientEvent, ClientMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg, Snapshot, Welcome,
-    WireCreep, WireCreepSpec, WireMount, WireOutcome, WireShip, WireStructure, WireStructureKind,
+    ClientEvent, ClientMsg, CommandMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg,
+    Snapshot, Welcome, WireCommand, WireCreep, WireCreepSpec, WireHull, WireMount, WireOutcome,
+    WireOwn, WireRefusal, WireShip, WireSkill, WireSkillSpec, WireStructure, WireStructureKind,
     WireStructureSpec, WireTarget, WireTeam, WireVec2, WireWeapon,
 };
 use warship_rules::Vec2;
 
-use crate::{Phase, Session};
+use crate::{Phase, Session, SkillView};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -17,6 +18,7 @@ const ENEMY: u32 = 2;
 fn welcome() -> Welcome {
     let gun = WireWeapon {
         name: "gun".to_string(),
+        price: 100,
         range: 5.0,
         cooldown_ticks: 10,
         shot_speed: 20.0,
@@ -32,8 +34,26 @@ fn welcome() -> Welcome {
         tick_hz: 20,
         map_width: 40.0,
         map_height: 40.0,
-        ship_max_hp: 1000,
+        hulls: vec![
+            WireHull {
+                name: "small".to_string(),
+                price: 0,
+                max_hp: 1000,
+                mounts: 2,
+            },
+            WireHull {
+                name: "big".to_string(),
+                price: 400,
+                max_hp: 2000,
+                mounts: 4,
+            },
+        ],
         weapons: vec![gun.clone()],
+        skills: vec![WireSkillSpec {
+            name: "skill".to_string(),
+            cooldown_ticks: 100,
+            max_rank: 2,
+        }],
         tower: armed.clone(),
         harbor: WireStructureSpec {
             max_hp: 1000,
@@ -59,9 +79,21 @@ fn ship(id: u32, x: f32) -> WireShip {
         },
         x,
         y: 10.0,
+        hull: 0,
         hp: 500,
+        level: 1,
         respawn_at: None,
-        gold: (id == ME).then_some(70),
+        own: (id == ME).then(|| WireOwn {
+            gold: 70,
+            xp: 0,
+            skill_points: 1,
+            skills: vec![WireSkill {
+                rank: 0,
+                ready_at: 0,
+            }],
+            last_command_seq: 0,
+            refusal: None,
+        }),
         mounts: Vec::new(),
         last_input_seq: 0,
     }
@@ -270,10 +302,70 @@ fn the_frame_shows_creeps_structures_gold_the_respawn_time_and_the_outcome() {
     let frame = session.frame(1.15).unwrap();
 
     assert!(frame.ships[0].sunk);
-    assert_eq!(frame.gold, 70);
-    assert_eq!(frame.respawn_secs, Some(39.0 / 20.0));
+    let me = frame.me.as_ref().expect("my ship is in the snapshot");
+    assert_eq!((me.gold, me.respawn_secs), (70, Some(39.0 / 20.0)));
     assert_eq!(frame.outcome, Some(WireOutcome::Victory(WireTeam::Blue)));
     assert_eq!((frame.creeps[0].pos.x, frame.creeps[0].hp), (29.9, 0.25));
     let site = &frame.structures[0];
     assert_eq!((site.hp, site.range), (0.4, None), "a harbor has no gun");
+}
+
+#[test]
+fn every_command_carries_the_next_sequence_number() {
+    let mut session = Session::new("test");
+    assert_eq!(session.command(WireCommand::Sell { slot: 0 }), None);
+    let mut session = playing();
+
+    let buy = WireCommand::Buy { weapon: 0 };
+    let cast = WireCommand::Cast { skill: 0 };
+    let sent = [session.command(buy), session.command(cast)];
+
+    let msg = |seq, command| Some(ClientMsg::Command(CommandMsg { seq, command }));
+    assert_eq!(sent, [msg(1, buy), msg(2, cast)]);
+}
+
+#[test]
+fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
+    // 큰 선체(HP 2000, 칸 4개)의 둘째 칸에 무기가 있고, 스킬은 120번째 Tick부터 다시 쓸 수 있습니다.
+    let mount = WireMount {
+        slot: 1,
+        weapon: 0,
+        target: None,
+        ready_at: 0,
+    };
+    let mine = WireShip {
+        hull: 1,
+        level: 3,
+        mounts: vec![mount],
+        own: Some(WireOwn {
+            gold: 250,
+            xp: 320,
+            skill_points: 2,
+            skills: vec![WireSkill {
+                rank: 1,
+                ready_at: 120,
+            }],
+            last_command_seq: 4,
+            refusal: Some(WireRefusal::NoShopInRange),
+        }),
+        ..ship(ME, 10.0)
+    };
+    let mut session = playing();
+    receive(&mut session, 1.00, snapshot(100, vec![mine.clone()]));
+    receive(&mut session, 1.05, snapshot(101, vec![mine]));
+
+    // 1.15초에 보여 주는 것은 101번째 Tick입니다.
+    let frame = session.frame(1.15).unwrap();
+
+    assert_eq!(frame.ships[0].hp, 0.25, "500 of the big hull's 2000");
+    let me = frame.me.expect("my ship is in the snapshot");
+    assert_eq!((me.hull, me.level, me.xp, me.skill_points), (1, 3, 320, 2));
+    assert_eq!(me.gold, 250);
+    assert_eq!(me.mounts, [None, Some(0), None, None]);
+    let skill = SkillView {
+        rank: 1,
+        ready_secs: 19.0 / 20.0,
+    };
+    assert_eq!(me.skills, [skill]);
+    assert_eq!(me.refusal, Some(WireRefusal::NoShopInRange));
 }

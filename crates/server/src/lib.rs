@@ -178,12 +178,13 @@ impl GameServer {
                 self.join(link, version, &room, notices);
             }
             ServerEvent::Message(link, ClientMsg::Input(input)) => {
-                let room = self
-                    .seats
-                    .get(&link)
-                    .and_then(|code| self.rooms.get_mut(code));
-                if let Some(room) = room {
+                if let Some(room) = self.room_of(link) {
                     room.take_input(link, input);
+                }
+            }
+            ServerEvent::Message(link, ClientMsg::Command(command)) => {
+                if let Some(room) = self.room_of(link) {
+                    room.take_command(link, command);
                 }
             }
             ServerEvent::Message(link, ClientMsg::Leave) | ServerEvent::Disconnected(link) => {
@@ -194,6 +195,12 @@ impl GameServer {
                 notices.push(Notice::LinkClosed { link, reason });
             }
         }
+    }
+
+    /// 접속이 들어가 있는 방입니다. 입장하지 않은 접속에는 없습니다.
+    fn room_of(&mut self, link: LinkId) -> Option<&mut Room> {
+        let code = self.seats.get(&link)?;
+        self.rooms.get_mut(code)
     }
 
     /// 입장 요청을 검사하고, 받아들이면 입장 안내를 보냅니다. 이미 입장한 접속의 입장 요청은 무시합니다.

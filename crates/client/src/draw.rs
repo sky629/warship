@@ -184,8 +184,9 @@ pub fn show_status(
         (Phase::Playing, Some(welcome)) => {
             let mut line = format!("Room {}   Team {:?}", welcome.room, welcome.team);
             if let Some(frame) = &frame.0 {
-                line += &format!("   Gold {}", frame.gold);
-                line += &match (frame.outcome, frame.respawn_secs) {
+                let me = frame.me.as_ref();
+                line += &format!("   Gold {}", me.map_or(0, |me| me.gold));
+                line += &match (frame.outcome, me.and_then(|me| me.respawn_secs)) {
                     (Some(WireOutcome::Victory(winner)), _) if winner == welcome.team => {
                         "   VICTORY".to_string()
                     }
