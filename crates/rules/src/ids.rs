@@ -1,0 +1,37 @@
+//! 개체를 구분하는 번호와 개체가 속한 진영입니다.
+//!
+//! 번호는 종류마다 별도의 타입으로 감쌉니다. 타워 번호를 배 번호 자리에 넣는 실수를 컴파일러가 막습니다.
+//! `Sim`은 번호를 하나씩 늘려서 나누어 주고 다시 사용하지 않습니다.
+//! 그래서 이미 사라진 개체를 가리키는 번호(무기의 표적, 날아가는 포탄의 표적)가 새 개체를 가리킬 수 없습니다.
+
+/// 플레이어가 조종하는 배의 번호입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ShipId(pub u32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TowerId(pub u32);
+
+/// 무기 표(`Tuning::weapons`)의 행 번호입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WeaponId(pub u16);
+
+/// 개체가 편들어 싸우는 쪽입니다. 진영은 둘뿐이고, 이 타입의 값은 `RED`와 `BLUE`만 있습니다.
+///
+/// 「누가 누구를 공격할 수 있는가」는 `is_hostile_to`로 판정합니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Team(u8);
+
+impl Team {
+    pub const RED: Team = Team(0);
+    pub const BLUE: Team = Team(1);
+    pub const ALL: [Team; 2] = [Team::RED, Team::BLUE];
+
+    pub fn is_hostile_to(self, other: Team) -> bool {
+        self != other
+    }
+
+    /// 진영마다 하나씩 있는 배열의 자리입니다.
+    pub fn index(self) -> usize {
+        usize::from(self.0)
+    }
+}
