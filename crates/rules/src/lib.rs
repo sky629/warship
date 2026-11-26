@@ -26,7 +26,7 @@ pub use ids::{ShipId, Team, TowerId, WeaponId};
 pub use input::{PlayerInput, PlayerInputs, Waypoint};
 pub use math::Vec2;
 pub use ship::{Life, MOUNTS, Mount, Ship};
-pub use sim::Sim;
+pub use sim::{RoomFull, Sim};
 pub use structures::Tower;
 pub use tuning::{Hits, MapSpec, ShipTuning, TowerSite, TowerTuning, Tuning, WeaponSpec};
 pub use weapon::Target;

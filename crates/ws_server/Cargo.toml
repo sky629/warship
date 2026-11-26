@@ -9,6 +9,7 @@ publish.workspace = true
 warship_protocol.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
+futures-util.workspace = true
 
 [lints]
 workspace = true

@@ -5,8 +5,8 @@ use crate::input::PlayerInputs;
 use crate::ship::{self, Ship};
 use crate::structures::{self, Tower};
 use crate::tuning::Tuning;
-use crate::vision;
-use crate::weapon;
+use crate::vision::{self, Sight};
+use crate::weapon::{self, Target};
 use crate::world::World;
 
 /// 방 하나의 게임입니다. 바깥 코드는 `&Sim`으로 상태를 읽고, `add_ship`과 `step`으로만 상태를 바꿉니다.
@@ -15,7 +15,16 @@ pub struct Sim {
     /// 방이 만들어진 뒤 실행한 Tick의 수입니다.
     tick: u64,
     world: World,
+    /// 마지막 Tick에 진영마다 보인 적입니다. 첫 Tick을 실행하기 전에는 아무도 보이지 않습니다.
+    sight: Sight,
     next_ship: u32,
+}
+
+/// 두 진영이 모두 가득 차서 배를 더 받을 수 없습니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RoomFull {
+    /// 방 전체의 정원입니다.
+    pub capacity: usize,
 }
 
 impl Sim {
@@ -38,12 +47,32 @@ impl Sim {
             tuning,
             tick: 0,
             world,
+            sight: Sight::default(),
             next_ship: 1,
         }
     }
 
+    /// 새 플레이어의 배를 배가 적은 진영에 추가합니다. 두 진영의 배의 수가 같으면 `Team::RED`에 추가합니다.
+    /// 두 진영이 모두 가득 차 있으면 거절합니다.
+    pub fn join(&mut self) -> Result<ShipId, RoomFull> {
+        let size = |team| self.ships().filter(|ship| ship.team == team).count();
+        let (red, blue) = (size(Team::RED), size(Team::BLUE));
+        if red.min(blue) >= self.tuning.team_size {
+            return Err(RoomFull {
+                capacity: self.tuning.team_size * 2,
+            });
+        }
+        let team = if blue < red { Team::BLUE } else { Team::RED };
+        Ok(self.add_ship(team))
+    }
+
+    /// 배를 즉시 제거합니다. 없는 번호는 무시하므로 같은 퇴장을 두 번 처리해도 안전합니다.
+    pub fn remove_ship(&mut self, id: ShipId) {
+        self.world.ships.remove(&id);
+    }
+
     /// 새 배를 최대 HP로 그 진영의 시작 자리에 추가하고 번호를 돌려줍니다.
-    pub fn add_ship(&mut self, team: Team) -> ShipId {
+    pub(crate) fn add_ship(&mut self, team: Team) -> ShipId {
         let id = ShipId(self.next_ship);
         self.next_ship += 1;
         let spawn = self.tuning.map.spawns[team.index()];
@@ -58,10 +87,15 @@ impl Sim {
     pub fn step(&mut self, inputs: &PlayerInputs) {
         self.tick += 1;
         ship::move_ships(&mut self.world, inputs, &self.tuning);
-        let sight = vision::look(&self.world, &self.tuning);
-        weapon::fire_all(&mut self.world, &sight, &self.tuning, self.tick);
+        self.sight = vision::look(&self.world, &self.tuning);
+        weapon::fire_all(&mut self.world, &self.sight, &self.tuning, self.tick);
         weapon::land_impacts(&mut self.world, self.tick);
         structures::remove_destroyed(&mut self.world);
+    }
+
+    /// 마지막 Tick에 `team`이 이 적을 보았는지입니다. 진영별 스냅샷은 보인 적만 싣습니다.
+    pub fn sees(&self, team: Team, target: Target) -> bool {
+        self.sight.sees(team, target)
     }
 
     pub fn tick(&self) -> u64 {

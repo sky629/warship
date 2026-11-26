@@ -124,6 +124,7 @@ fn open_sea_tuning() -> Tuning {
     };
     Tuning {
         tick_hz: 20,
+        team_size: 5,
         ship: ShipTuning {
             max_hp: 1000,
             speed: 4.0,

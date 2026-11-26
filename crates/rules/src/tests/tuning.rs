@@ -28,8 +28,9 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 6] = [
+    let broken: [fn(&mut Tuning); 7] = [
         |t| t.tick_hz = 0,
+        |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
         |t| t.weapons[1].range = f32::NAN,
         |t| t.ship.start_weapons = vec![WeaponId(99)],

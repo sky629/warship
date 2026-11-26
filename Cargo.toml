@@ -45,6 +45,7 @@ serde = { version = "1", features = ["derive"] }
 postcard = { version = "1.2", default-features = false, features = ["alloc"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
 tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 ewebsock = "0.8"
 bevy = { version = "0.20", default-features = false, features = ["2d", "ui"] }
 

@@ -6,7 +6,8 @@ use crate::tuning::Tuning;
 use crate::weapon::Target;
 use crate::world::World;
 
-/// 한 Tick에 진영마다 보이는 적입니다.
+/// 한 Tick에 진영마다 보이는 적입니다. 기본값은 아무도 보이지 않는 상태입니다.
+#[derive(Default)]
 pub(crate) struct Sight {
     /// `Team::index` 자리의 진영에 보이는 적입니다. 순서는 `World::targets`의 순서입니다.
     seen: [Vec<(Target, Vec2)>; 2],
@@ -16,6 +17,12 @@ impl Sight {
     /// `team`에 보이는 적과 그 위치입니다.
     pub fn enemies_seen_by(&self, team: Team) -> &[(Target, Vec2)] {
         &self.seen[team.index()]
+    }
+
+    pub fn sees(&self, team: Team, target: Target) -> bool {
+        self.enemies_seen_by(team)
+            .iter()
+            .any(|(seen, _)| *seen == target)
     }
 }
 

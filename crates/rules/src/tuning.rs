@@ -11,6 +11,8 @@ use crate::ship::MOUNTS;
 pub struct Tuning {
     /// 서버가 1초에 실행하는 Tick의 수입니다. Tick 속도는 이 값 하나로만 정합니다.
     pub tick_hz: u32,
+    /// 한 진영에 들어올 수 있는 배의 수입니다.
+    pub team_size: usize,
     pub ship: ShipTuning,
     /// 무기 표입니다. `WeaponId`가 이 표의 행 번호입니다.
     pub weapons: Vec<WeaponSpec>,
@@ -117,6 +119,9 @@ impl Tuning {
         if self.tick_hz == 0 {
             return Err("tick_hz must be at least 1".to_string());
         }
+        if self.team_size == 0 {
+            return Err("team_size must be at least 1".to_string());
+        }
         if self.ship.max_hp == 0 || self.tower.max_hp == 0 {
             return Err("max_hp must be at least 1".to_string());
         }
@@ -152,6 +157,7 @@ impl Default for Tuning {
     fn default() -> Tuning {
         Tuning {
             tick_hz: 20,
+            team_size: 5,
             ship: ShipTuning {
                 max_hp: 400,
                 speed: 4.0,
