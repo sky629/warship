@@ -5,7 +5,7 @@
 
 use super::support::{GUN, LONG_GUN, Scenario};
 use crate::ids::Team;
-use crate::ship::Life;
+
 use crate::weapon::Target;
 
 #[test]
@@ -124,7 +124,7 @@ fn a_ships_only_gun_leaves_towers_alone() {
 
     s.run_ticks(40);
 
-    assert_eq!(s.sim.tower(tower).unwrap().hp, 1000);
+    assert_eq!(s.sim.structure(tower).unwrap().hp, 1000);
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn a_ship_sinks_at_zero_hp_and_takes_no_part_in_the_fight_after_that() {
 
     // 두 배가 첫 Tick에 서로 쏘고, 두 번째 Tick에 포탄이 닿습니다.
     s.run_ticks(2);
-    assert_eq!(s.ship(b).life, Life::Sunk);
+    assert!(!s.ship(b).is_afloat());
     assert_eq!(s.ship(b).hp, 0);
     assert_eq!(s.ship(a).hp, 990, "the shell fired before sinking lands");
 

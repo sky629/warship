@@ -4,7 +4,8 @@
 
 use warship_protocol::{
     ClientEvent, ClientMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg, Snapshot, Welcome,
-    WireMount, WireShip, WireTarget, WireTeam, WireVec2, WireWeapon,
+    WireCreep, WireCreepSpec, WireMount, WireOutcome, WireShip, WireStructure, WireStructureKind,
+    WireStructureSpec, WireTarget, WireTeam, WireVec2, WireWeapon,
 };
 use warship_rules::Vec2;
 
@@ -20,6 +21,10 @@ fn welcome() -> Welcome {
         cooldown_ticks: 10,
         shot_speed: 20.0,
     };
+    let armed = WireStructureSpec {
+        max_hp: 1000,
+        weapon: Some(gun.clone()),
+    };
     Welcome {
         room: "test".to_string(),
         ship: ME,
@@ -28,9 +33,19 @@ fn welcome() -> Welcome {
         map_width: 40.0,
         map_height: 40.0,
         ship_max_hp: 1000,
-        tower_max_hp: 1000,
         weapons: vec![gun.clone()],
-        tower_weapon: gun,
+        tower: armed.clone(),
+        harbor: WireStructureSpec {
+            max_hp: 1000,
+            weapon: None,
+        },
+        base: armed,
+        creeps: vec![WireCreepSpec {
+            name: "creep".to_string(),
+            max_hp: 100,
+            weapon: gun,
+        }],
+        lanes: Vec::new(),
     }
 }
 
@@ -45,7 +60,8 @@ fn ship(id: u32, x: f32) -> WireShip {
         x,
         y: 10.0,
         hp: 500,
-        sunk: false,
+        respawn_at: None,
+        gold: (id == ME).then_some(70),
         mounts: Vec::new(),
         last_input_seq: 0,
     }
@@ -55,7 +71,9 @@ fn snapshot(tick: u64, ships: Vec<WireShip>) -> ServerMsg {
     ServerMsg::Snapshot(Box::new(Snapshot {
         tick,
         ships,
-        towers: Vec::new(),
+        creeps: Vec::new(),
+        structures: Vec::new(),
+        outcome: None,
     }))
 }
 
@@ -206,4 +224,56 @@ fn a_shell_is_drawn_between_the_gun_and_its_target_while_it_flies() {
     // 25번째 Tick에는 포탄이 이미 닿았습니다.
     let landed = session.frame(1.30).unwrap();
     assert_eq!(landed.shots, []);
+}
+
+#[test]
+fn the_frame_shows_creeps_structures_gold_the_respawn_time_and_the_outcome() {
+    let sunk = WireShip {
+        hp: 0,
+        respawn_at: Some(140),
+        ..ship(ME, 10.0)
+    };
+    let creep = |x| WireCreep {
+        id: 7,
+        team: WireTeam::Blue,
+        kind: 0,
+        x,
+        y: 20.0,
+        hp: 25,
+        target: None,
+        ready_at: 0,
+    };
+    let harbor = WireStructure {
+        id: 3,
+        kind: WireStructureKind::Harbor,
+        team: WireTeam::Red,
+        x: 5.0,
+        y: 5.0,
+        hp: 400,
+        target: None,
+        ready_at: 0,
+    };
+    let room = |tick, creep_x| {
+        ServerMsg::Snapshot(Box::new(Snapshot {
+            tick,
+            ships: vec![sunk.clone()],
+            creeps: vec![creep(creep_x)],
+            structures: vec![harbor.clone()],
+            outcome: Some(WireOutcome::Victory(WireTeam::Blue)),
+        }))
+    };
+    let mut session = playing();
+    receive(&mut session, 1.00, room(100, 30.0));
+    receive(&mut session, 1.05, room(101, 29.9));
+
+    // 1.15초에 보여 주는 것은 101번째 Tick입니다.
+    let frame = session.frame(1.15).unwrap();
+
+    assert!(frame.ships[0].sunk);
+    assert_eq!(frame.gold, 70);
+    assert_eq!(frame.respawn_secs, Some(39.0 / 20.0));
+    assert_eq!(frame.outcome, Some(WireOutcome::Victory(WireTeam::Blue)));
+    assert_eq!((frame.creeps[0].pos.x, frame.creeps[0].hp), (29.9, 0.25));
+    let site = &frame.structures[0];
+    assert_eq!((site.hp, site.range), (0.4, None), "a harbor has no gun");
 }

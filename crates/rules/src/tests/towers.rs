@@ -1,7 +1,8 @@
-//! 타워의 사격, 파괴, 시야를 확인합니다. 타워의 포는 사거리 6, 피해 15, 쿨다운 10Tick이고 배만 쏩니다.
+//! 타워의 사격, 파괴, 시야를 확인합니다. 타워의 포는 사거리 6, 피해 15, 쿨다운 10Tick이고 배만 쏩니다. 항구는 쏘지 않습니다.
 
 use super::support::{GUN, LONG_GUN, Scenario};
 use crate::ids::Team;
+use crate::structures::StructureKind;
 use crate::weapon::Target;
 
 #[test]
@@ -17,7 +18,10 @@ fn a_tower_shoots_the_nearest_enemy_ship_in_range() {
     assert_eq!(s.ship(near).hp, 985);
     assert_eq!(s.ship(far).hp, 1000);
     assert_eq!(s.ship(ally).hp, 1000);
-    assert_eq!(s.sim.tower(tower).unwrap().target, Some(Target::Ship(near)));
+    assert_eq!(
+        s.sim.structure(tower).unwrap().target,
+        Some(Target::Ship(near))
+    );
 }
 
 #[test]
@@ -26,12 +30,12 @@ fn a_tower_at_zero_hp_is_removed() {
     let a = s.ship_at(Team::RED, 10.0, 10.0);
     let tower = s.tower_at(Team::BLUE, 12.0, 10.0);
     s.arm(a, GUN);
-    s.set_tower_hp(tower, 10);
+    s.set_structure_hp(tower, 10);
 
     s.run_ticks(3);
 
-    assert!(s.sim.tower(tower).is_none());
-    assert_eq!(s.sim.towers().count(), 0);
+    assert!(s.sim.structure(tower).is_none());
+    assert_eq!(s.sim.structures().count(), 0);
 }
 
 #[test]
@@ -46,4 +50,15 @@ fn a_tower_lets_its_team_see() {
     s.run_ticks(12);
 
     assert_eq!(s.ship(b).hp, 990);
+}
+
+#[test]
+fn a_harbor_does_not_shoot() {
+    let mut s = Scenario::open_sea();
+    s.structure_at(StructureKind::Harbor, Team::RED, 10.0, 10.0);
+    let enemy = s.ship_at(Team::BLUE, 12.0, 10.0);
+
+    s.run_ticks(30);
+
+    assert_eq!(s.ship(enemy).hp, 1000);
 }

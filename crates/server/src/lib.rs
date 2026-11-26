@@ -94,8 +94,11 @@ pub struct GameServer {
     rooms: BTreeMap<RoomCode, Room>,
     /// 입장한 접속이 들어가 있는 방입니다. 입장하지 않은 접속은 없습니다.
     seats: BTreeMap<LinkId, RoomCode>,
+    /// 열려 있지만 입장하지 않은 접속과 그 접속이 열린 시각입니다.
+    waiting: BTreeMap<LinkId, Instant>,
     clock: TickClock,
     events_per_pump: usize,
+    join_deadline: Duration,
 }
 
 impl GameServer {
@@ -113,12 +116,15 @@ impl GameServer {
             tuning,
             rooms: BTreeMap::new(),
             seats: BTreeMap::new(),
+            waiting: BTreeMap::new(),
             events_per_pump: limits.events_per_pump,
+            join_deadline: limits.join_deadline,
         })
     }
 
     /// 서버를 한 번 진행합니다. 기다리지 않습니다.
-    /// 접속 방식에 도착한 이벤트를 `events_per_pump`개까지 처리하고, `now`까지 실행해야 하는 Tick을 실행한 뒤, 알릴 일을 돌려줍니다.
+    /// 접속 방식에 도착한 이벤트를 `events_per_pump`개까지 처리하고, 기한 안에 입장하지 않은 접속을 닫고,
+    /// `now`까지 실행해야 하는 Tick을 실행한 뒤, 알릴 일을 돌려줍니다.
     /// 처리하지 못한 이벤트는 다음 호출이 처리합니다.
     pub fn pump(&mut self, now: Instant) -> Vec<Notice> {
         let mut notices = Vec::new();
@@ -126,8 +132,9 @@ impl GameServer {
             let Some(event) = self.transport.poll() else {
                 break;
             };
-            self.handle_event(event, &mut notices);
+            self.handle_event(event, now, &mut notices);
         }
+        self.close_late_links(now, &mut notices);
         for _ in 0..self.clock.due(now) {
             for room in self.rooms.values_mut() {
                 for (link, snapshot) in room.tick() {
@@ -143,9 +150,30 @@ impl GameServer {
         self.clock.time_until_next(now)
     }
 
-    fn handle_event(&mut self, event: ServerEvent, notices: &mut Vec<Notice>) {
+    /// 기한 안에 입장하지 않은 접속을 닫습니다. 닫힌 접속의 `Disconnected`는 다음 이벤트 처리에서 옵니다.
+    fn close_late_links(&mut self, now: Instant, notices: &mut Vec<Notice>) {
+        let deadline = self.join_deadline;
+        let late: Vec<LinkId> = self
+            .waiting
+            .iter()
+            .filter(|(_, opened)| now.saturating_duration_since(**opened) >= deadline)
+            .map(|(link, _)| *link)
+            .collect();
+        for link in late {
+            self.waiting.remove(&link);
+            self.transport.close(link);
+            notices.push(Notice::LinkClosed {
+                link,
+                reason: "did not join in time".to_string(),
+            });
+        }
+    }
+
+    fn handle_event(&mut self, event: ServerEvent, now: Instant, notices: &mut Vec<Notice>) {
         match event {
-            ServerEvent::Connected(..) => {}
+            ServerEvent::Connected(link, _) => {
+                self.waiting.insert(link, now);
+            }
             ServerEvent::Message(link, ClientMsg::Join { version, room }) => {
                 self.join(link, version, &room, notices);
             }
@@ -159,6 +187,7 @@ impl GameServer {
                 }
             }
             ServerEvent::Message(link, ClientMsg::Leave) | ServerEvent::Disconnected(link) => {
+                self.waiting.remove(&link);
                 self.leave(link, notices);
             }
             ServerEvent::LimitReached(link, reason) => {
@@ -193,6 +222,7 @@ impl GameServer {
                     notices.push(Notice::RoomCreated { room: code.clone() });
                 }
                 self.seats.insert(link, code.clone());
+                self.waiting.remove(&link);
                 self.transport
                     .send(link, &ServerMsg::Welcome(Box::new(welcome)));
                 notices.push(Notice::Joined {

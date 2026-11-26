@@ -1,20 +1,24 @@
-//! Tick마다 보내는 방의 상태입니다. 진영마다 따로 만들고, 받는 진영에 보이지 않는 적의 배는 싣지 않습니다.
+//! Tick마다 보내는 방의 상태입니다. 진영마다 따로 만들고, 받는 진영에 보이지 않는 적의 배와 NPC 배는 싣지 않습니다.
 //!
 //! 포탄은 싣지 않습니다. 클라이언트는 무기가 마지막으로 쏜 Tick(`ready_at`에서 쿨다운을 뺀 값)과 표적에서 날아가는 포탄을 그립니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::{Ship, Sim, Target, Team, Tower};
+use warship_rules::{Creep, Life, Outcome, Ship, Sim, Structure, StructureKind, Target, Team};
 
 use crate::messages::WireTeam;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
-    /// 서버의 Tick 번호입니다.
+    /// 서버의 Tick 번호입니다. 대전이 끝나면 늘지 않습니다.
     pub tick: u64,
     /// 번호가 작은 배부터입니다. 받는 진영의 배는 모두 있고, 적의 배는 이번 Tick에 보인 것만 있습니다.
     pub ships: Vec<WireShip>,
-    /// 번호가 작은 타워부터입니다. 타워는 두 진영에 모두 보이고, 파괴된 타워는 없습니다.
-    pub towers: Vec<WireTower>,
+    /// 번호가 작은 NPC 배부터입니다. 받는 진영의 것은 모두 있고, 적의 것은 이번 Tick에 보인 것만 있습니다.
+    pub creeps: Vec<WireCreep>,
+    /// 번호가 작은 건물부터입니다. 건물은 두 진영에 모두 보이고, 파괴된 건물은 없습니다.
+    pub structures: Vec<WireStructure>,
+    /// 대전의 결과입니다. 끝나기 전에는 없습니다.
+    pub outcome: Option<WireOutcome>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -24,7 +28,10 @@ pub struct WireShip {
     pub x: f32,
     pub y: f32,
     pub hp: u32,
-    pub sunk: bool,
+    /// 가라앉은 배가 다시 나타나는 Tick입니다. 떠 있는 배에는 없습니다.
+    pub respawn_at: Option<u64>,
+    /// 배가 가진 골드입니다. 받는 진영의 배에만 있습니다.
+    pub gold: Option<u32>,
     /// 무기가 달린 칸만 있습니다.
     pub mounts: Vec<WireMount>,
     /// 서버가 마지막으로 처리한 이 배의 입력 순서 번호입니다.
@@ -46,12 +53,44 @@ pub struct WireMount {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WireTarget {
     Ship(u32),
-    Tower(u32),
+    Creep(u32),
+    Structure(u32),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct WireTower {
+pub struct WireCreep {
     pub id: u32,
+    pub team: WireTeam,
+    /// `Welcome::creeps`의 자리입니다.
+    pub kind: u8,
+    pub x: f32,
+    pub y: f32,
+    pub hp: u32,
+    pub target: Option<WireTarget>,
+    pub ready_at: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WireStructureKind {
+    Tower,
+    Harbor,
+    Base,
+}
+
+impl From<StructureKind> for WireStructureKind {
+    fn from(kind: StructureKind) -> WireStructureKind {
+        match kind {
+            StructureKind::Tower => WireStructureKind::Tower,
+            StructureKind::Harbor => WireStructureKind::Harbor,
+            StructureKind::Base => WireStructureKind::Base,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WireStructure {
+    pub id: u32,
+    pub kind: WireStructureKind,
     pub team: WireTeam,
     pub x: f32,
     pub y: f32,
@@ -60,19 +99,36 @@ pub struct WireTower {
     pub ready_at: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WireOutcome {
+    Victory(WireTeam),
+    Draw,
+}
+
 impl Snapshot {
     /// `team`에 보이는 방의 상태입니다. 게임 상태를 전송 형식으로 바꾸는 곳은 이 함수 하나입니다.
     pub fn from_sim(sim: &Sim, team: Team) -> Snapshot {
-        let shown = |ship: &&Ship| ship.team == team || sim.sees(team, Target::Ship(ship.id));
+        let ship_shown = |ship: &&Ship| ship.team == team || sim.sees(team, Target::Ship(ship.id));
+        let creep_shown =
+            |creep: &&Creep| creep.team == team || sim.sees(team, Target::Creep(creep.id));
         Snapshot {
             tick: sim.tick(),
-            ships: sim.ships().filter(shown).map(wire_ship).collect(),
-            towers: sim.towers().map(wire_tower).collect(),
+            ships: sim
+                .ships()
+                .filter(ship_shown)
+                .map(|ship| wire_ship(ship, team))
+                .collect(),
+            creeps: sim.creeps().filter(creep_shown).map(wire_creep).collect(),
+            structures: sim.structures().map(wire_structure).collect(),
+            outcome: sim.outcome().map(|outcome| match outcome {
+                Outcome::Victory(winner) => WireOutcome::Victory(winner.into()),
+                Outcome::Draw => WireOutcome::Draw,
+            }),
         }
     }
 }
 
-fn wire_ship(ship: &Ship) -> WireShip {
+fn wire_ship(ship: &Ship, viewer: Team) -> WireShip {
     let mounts = ship.mounts.iter().enumerate().filter_map(|(slot, mount)| {
         let mount = mount.as_ref()?;
         Some(WireMount {
@@ -88,27 +144,46 @@ fn wire_ship(ship: &Ship) -> WireShip {
         x: ship.pos.x,
         y: ship.pos.y,
         hp: ship.hp,
-        sunk: !ship.is_afloat(),
+        respawn_at: match ship.life {
+            Life::Afloat => None,
+            Life::Sunk { respawn_at } => Some(respawn_at),
+        },
+        gold: (ship.team == viewer).then_some(ship.gold),
         mounts: mounts.collect(),
         last_input_seq: ship.last_input_seq,
     }
 }
 
-fn wire_tower(tower: &Tower) -> WireTower {
-    WireTower {
-        id: tower.id.0,
-        team: tower.team.into(),
-        x: tower.pos.x,
-        y: tower.pos.y,
-        hp: tower.hp,
-        target: tower.target.map(wire_target),
-        ready_at: tower.ready_at,
+fn wire_creep(creep: &Creep) -> WireCreep {
+    WireCreep {
+        id: creep.id.0,
+        team: creep.team.into(),
+        kind: creep.kind as u8,
+        x: creep.pos.x,
+        y: creep.pos.y,
+        hp: creep.hp,
+        target: creep.target.map(wire_target),
+        ready_at: creep.ready_at,
+    }
+}
+
+fn wire_structure(structure: &Structure) -> WireStructure {
+    WireStructure {
+        id: structure.id.0,
+        kind: structure.kind.into(),
+        team: structure.team.into(),
+        x: structure.pos.x,
+        y: structure.pos.y,
+        hp: structure.hp,
+        target: structure.target.map(wire_target),
+        ready_at: structure.ready_at,
     }
 }
 
 fn wire_target(target: Target) -> WireTarget {
     match target {
         Target::Ship(id) => WireTarget::Ship(id.0),
-        Target::Tower(id) => WireTarget::Tower(id.0),
+        Target::Creep(id) => WireTarget::Creep(id.0),
+        Target::Structure(id) => WireTarget::Structure(id.0),
     }
 }

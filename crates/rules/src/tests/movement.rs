@@ -4,7 +4,6 @@ use super::support::{Scenario, assert_close};
 use crate::ids::Team;
 use crate::input::Waypoint;
 use crate::math::Vec2;
-use crate::ship::Life;
 
 #[test]
 fn a_ship_sails_toward_its_destination_at_its_speed() {
@@ -81,11 +80,11 @@ fn a_sunk_ship_does_not_move() {
     let a = s.ship_at(Team::RED, 10.0, 10.0);
     s.sim
         .world_mut()
-        .damage(crate::weapon::Target::Ship(a), 1000);
+        .damage(crate::weapon::Target::Ship(a), 1000, u64::MAX);
     s.sail_to(a, 20.0, 10.0);
 
     s.run_ticks(20);
 
-    assert_eq!(s.ship(a).life, Life::Sunk);
+    assert!(!s.ship(a).is_afloat());
     assert_eq!(s.ship(a).pos, Vec2::new(10.0, 10.0));
 }

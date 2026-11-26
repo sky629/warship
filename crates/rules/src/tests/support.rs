@@ -1,15 +1,19 @@
 //! 테스트에서만 쓰는 상황 구성 도구입니다. 개체를 필요한 자리에 놓은 뒤,
 //! 서버가 하는 것과 같은 방식(누르고 있는 입력과 `step`)으로 게임을 진행합니다.
 
-use crate::ids::{ShipId, Team, TowerId, WeaponId};
+use crate::creep::Creep;
+use crate::ids::{CreepId, ShipId, StructureId, Team, WeaponId};
 use crate::input::{PlayerInput, PlayerInputs, Waypoint};
 use crate::math::Vec2;
 use crate::ship::{Mount, Ship};
 use crate::sim::Sim;
-use crate::structures::Tower;
-use crate::tuning::{Hits, MapSpec, ShipTuning, TowerTuning, Tuning, WeaponSpec};
+use crate::structures::{Structure, StructureKind};
+use crate::tuning::{
+    CreepSpec, EconomyTuning, Hits, MapSpec, ShipTuning, StructureSpec, StructureTable, Tuning,
+    WeaponSpec,
+};
 
-/// 사거리 5, 피해 10, 쿨다운 10Tick이고 배와 타워를 쏘는 포입니다. 포탄은 한 Tick에 1타일을 납니다.
+/// 사거리 5, 피해 10, 쿨다운 10Tick이고 배와 건물을 쏘는 포입니다. 포탄은 한 Tick에 1타일을 납니다.
 pub(crate) const GUN: WeaponId = WeaponId(0);
 /// 사거리 12, 피해 10, 쿨다운 10Tick이고 배만 쏘는 포입니다. 사거리가 배의 시야(9)보다 깁니다.
 pub(crate) const LONG_GUN: WeaponId = WeaponId(1);
@@ -20,8 +24,11 @@ pub(crate) struct Scenario {
 }
 
 impl Scenario {
-    /// 타워가 없는 40 x 40 맵입니다. 배는 HP가 1000이고 무기 없이 놓이며, 무기는 테스트가 `arm`으로 답니다.
-    /// 1초는 20Tick이고 배는 1초에 4타일을 갑니다. 배와 타워의 시야는 9이고, 타워의 포는 사거리 6, 피해 15, 쿨다운 10Tick입니다.
+    /// 건물도 라인도 없는 40 x 40 맵입니다. 배는 HP가 1000이고 무기 없이 놓이며, 무기는 테스트가 `arm`으로 답니다.
+    /// 1초는 20Tick이고 배는 1초에 4타일을 갑니다. 배, NPC 배, 건물의 시야는 9입니다.
+    /// 타워와 본진의 포는 사거리 6, 피해 15, 쿨다운 10Tick이고 배만 쏩니다. 항구는 쏘지 않습니다. 건물의 HP는 1000입니다.
+    /// NPC 배는 HP 100, 1초에 2타일, 포는 `GUN`과 같습니다. NPC 배는 저절로 나오지 않습니다(일정이 없습니다).
+    /// 수입은 1초에 2골드이고, 보상은 배 200, NPC 배 20, 타워 300, 항구 500입니다. 가라앉은 배는 100Tick 뒤에 다시 나타납니다.
     pub fn open_sea() -> Scenario {
         Scenario::with_tuning(|_| {})
     }
@@ -58,19 +65,46 @@ impl Scenario {
         });
     }
 
-    pub fn tower_at(&mut self, team: Team, x: f32, y: f32) -> TowerId {
-        let max_hp = self.sim.tuning().tower.max_hp;
-        let towers = &mut self.sim.world_mut().towers;
-        let id = TowerId(towers.len() as u32 + 1);
-        let tower = Tower {
+    pub fn tower_at(&mut self, team: Team, x: f32, y: f32) -> StructureId {
+        self.structure_at(StructureKind::Tower, team, x, y)
+    }
+
+    /// 건물을 최대 HP로 놓습니다. 항구는 0번 라인을 맡습니다.
+    pub fn structure_at(&mut self, kind: StructureKind, team: Team, x: f32, y: f32) -> StructureId {
+        let max_hp = self.sim.tuning().structures.of(kind).max_hp;
+        let structures = &mut self.sim.world_mut().structures;
+        let id = StructureId(structures.len() as u32 + 1);
+        let structure = Structure {
+            id,
+            kind,
+            team,
+            pos: Vec2::new(x, y),
+            hp: max_hp,
+            lane: (kind == StructureKind::Harbor).then_some(0),
+            ready_at: 0,
+            target: None,
+        };
+        structures.insert(id, structure);
+        id
+    }
+
+    /// 0번 종류의 NPC 배를 0번 라인에 놓습니다. 길의 첫 지점으로 향합니다.
+    pub fn creep_at(&mut self, team: Team, x: f32, y: f32) -> CreepId {
+        let max_hp = self.sim.tuning().creeps[0].max_hp;
+        let creeps = &mut self.sim.world_mut().creeps;
+        let id = CreepId(1000 + creeps.len() as u32);
+        let creep = Creep {
             id,
             team,
+            kind: 0,
+            lane: 0,
+            leg: 0,
             pos: Vec2::new(x, y),
             hp: max_hp,
             ready_at: 0,
             target: None,
         };
-        towers.insert(id, tower);
+        creeps.insert(id, creep);
         id
     }
 
@@ -78,9 +112,9 @@ impl Scenario {
         self.ship_mut(ship).hp = hp;
     }
 
-    pub fn set_tower_hp(&mut self, tower: TowerId, hp: u32) {
-        let tower = self.sim.world_mut().towers.get_mut(&tower);
-        tower.expect("the tower stands").hp = hp;
+    pub fn set_structure_hp(&mut self, structure: StructureId, hp: u32) {
+        let structure = self.sim.world_mut().structures.get_mut(&structure);
+        structure.expect("the structure stands").hp = hp;
     }
 
     /// 배가 이 지점으로 가라는 입력을 계속 보냅니다.
@@ -113,14 +147,26 @@ impl Scenario {
     }
 }
 
-fn open_sea_tuning() -> Tuning {
-    let gun = |name, range, hits| WeaponSpec {
+fn gun(name: &'static str, range: f32, hits: Hits) -> WeaponSpec {
+    WeaponSpec {
         name,
         damage: 10,
         range,
         cooldown_ticks: 10,
         shot_speed: 20.0,
         hits,
+    }
+}
+
+fn open_sea_tuning() -> Tuning {
+    let armed = |bounty| StructureSpec {
+        max_hp: 1000,
+        vision: 9.0,
+        weapon: Some(WeaponSpec {
+            damage: 15,
+            ..gun("tower gun", 6.0, Hits::ShipsOnly)
+        }),
+        bounty,
     };
     Tuning {
         tick_hz: 20,
@@ -130,24 +176,37 @@ fn open_sea_tuning() -> Tuning {
             speed: 4.0,
             vision: 9.0,
             start_weapons: Vec::new(),
+            respawn_ticks: 100,
+            bounty: 200,
         },
         weapons: vec![
             gun("gun", 5.0, Hits::ShipsAndStructures),
             gun("long gun", 12.0, Hits::ShipsOnly),
         ],
-        tower: TowerTuning {
-            max_hp: 1000,
-            vision: 9.0,
-            weapon: WeaponSpec {
-                damage: 15,
-                ..gun("tower gun", 6.0, Hits::ShipsOnly)
+        structures: StructureTable {
+            tower: armed(300),
+            harbor: StructureSpec {
+                weapon: None,
+                ..armed(500)
             },
+            base: armed(0),
         },
+        creeps: vec![CreepSpec {
+            name: "creep",
+            max_hp: 100,
+            speed: 2.0,
+            vision: 9.0,
+            weapon: gun("creep gun", 5.0, Hits::ShipsAndStructures),
+            bounty: 20,
+        }],
+        waves: Vec::new(),
+        economy: EconomyTuning { income_per_sec: 2 },
         map: MapSpec {
             width: 40.0,
             height: 40.0,
             spawns: [Vec2::new(1.0, 1.0), Vec2::new(39.0, 39.0)],
-            towers: Vec::new(),
+            lanes: Vec::new(),
+            structures: Vec::new(),
         },
     }
 }

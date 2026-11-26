@@ -8,7 +8,7 @@ mod interp;
 mod launch;
 mod session;
 
-pub use interp::{Frame, ShipView, ShotView, TowerView};
+pub use interp::{CreepView, Frame, ShipView, ShotView, StructureView};
 pub use launch::{DEFAULT_ROOM, DEFAULT_SERVER, LaunchOptions};
 pub use session::{Phase, Session};
 

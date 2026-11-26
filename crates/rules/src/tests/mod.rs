@@ -5,7 +5,10 @@
 
 mod support;
 
+mod creeps; // 라인의 NPC 배: 항구에서 나오는 일정, 길, 멈춰서 싸우는 것, 항구가 파괴된 라인
+mod economy; // 골드: 수입, 보상
 mod joining; // 입장: 진영 배정, 정원, 퇴장
+mod matches; // 한 판: 다시 나타나는 배, 본진의 파괴와 승패, 사람 없이 끝나는 판
 mod movement; // 이동: 속도, 목적지에 서는 것, 맵 경계, 멈춤, 가라앉은 배
 mod towers; // 타워: 사격, 파괴, 시야
 mod tuning; // 기본 수치의 검사와 잘못된 수치의 거절

@@ -112,14 +112,14 @@ fn a_ship_joins_over_a_websocket_and_its_input_moves_it() {
         }),
     );
 
-    // 기본 맵에서 빨간 진영의 시작 자리는 x = 6입니다. 배가 1타일 넘게 움직인 스냅샷이 올 때까지 읽습니다.
+    // 기본 맵에서 빨간 진영의 시작 자리는 x = 7입니다. 배가 1타일 넘게 움직인 스냅샷이 올 때까지 읽습니다.
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         assert!(Instant::now() < deadline, "the ship did not move in time");
         if let ServerMsg::Snapshot(snapshot) = read(&mut socket) {
             let ship = &snapshot.ships[0];
             assert_eq!(ship.id, welcome.ship);
-            if ship.x > 7.0 {
+            if ship.x > 8.0 {
                 assert_eq!(ship.last_input_seq, 1);
                 break;
             }

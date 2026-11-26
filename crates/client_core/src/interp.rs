@@ -7,7 +7,9 @@
 
 use std::collections::VecDeque;
 
-use warship_protocol::{Snapshot, Welcome, WireShip, WireTarget, WireTeam, WireWeapon};
+use warship_protocol::{
+    Snapshot, Welcome, WireOutcome, WireStructureKind, WireTarget, WireTeam, WireWeapon,
+};
 use warship_rules::Vec2;
 
 /// 화면이 보여 주는 방의 모습은 이 시간만큼 이전의 것입니다.
@@ -19,9 +21,15 @@ const KEEP_SECS: f64 = 1.0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Frame {
     pub ships: Vec<ShipView>,
-    pub towers: Vec<TowerView>,
+    pub creeps: Vec<CreepView>,
+    pub structures: Vec<StructureView>,
     /// 날아가고 있는 포탄입니다.
     pub shots: Vec<ShotView>,
+    /// 내 배가 가진 골드입니다.
+    pub gold: u32,
+    /// 내 배가 가라앉아 있으면, 다시 나타날 때까지 남은 시간(초)입니다.
+    pub respawn_secs: Option<f32>,
+    pub outcome: Option<WireOutcome>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,13 +47,24 @@ pub struct ShipView {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TowerView {
+pub struct CreepView {
     pub id: u32,
     pub team: WireTeam,
     pub pos: Vec2,
     /// 최대 HP에 대한 비율입니다(0 이상 1 이하).
     pub hp: f32,
-    pub range: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructureView {
+    pub id: u32,
+    pub kind: WireStructureKind,
+    pub team: WireTeam,
+    pub pos: Vec2,
+    /// 최대 HP에 대한 비율입니다(0 이상 1 이하).
+    pub hp: f32,
+    /// 건물의 포의 사거리입니다. 쏘지 않는 건물에는 없습니다.
+    pub range: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -94,28 +113,48 @@ fn lerp(a: Vec2, b: Vec2, alpha: f32) -> Vec2 {
     a + (b - a) * alpha
 }
 
+/// `next`의 자리와, 같은 번호의 개체가 `prev`에 있으면 그 자리 사이의 `alpha` 지점입니다.
+/// `next`에만 있는 개체(막 보이기 시작한 적)는 `next`의 자리입니다.
+fn between(prev: Option<(f32, f32)>, next: (f32, f32), alpha: f32) -> Vec2 {
+    let to = Vec2::new(next.0, next.1);
+    prev.map_or(to, |(x, y)| lerp(Vec2::new(x, y), to, alpha))
+}
+
 /// 두 스냅샷 사이의 `alpha` 지점(0은 `prev`, 1은 `next`)의 방입니다. 위치만 보간하고, 나머지는 `next`의 값입니다.
-/// `next`에만 있는 배(막 보이기 시작한 적)는 `next`의 자리에 그립니다.
 fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Frame {
     let tick = prev.tick as f32 + (next.tick - prev.tick) as f32 * alpha;
-    let ship_pos = |ship: &WireShip| {
-        let to = Vec2::new(ship.x, ship.y);
-        let from = prev.ships.iter().find(|old| old.id == ship.id);
-        from.map_or(to, |old| lerp(Vec2::new(old.x, old.y), to, alpha))
+    let ship_pos = |id: u32| {
+        let ship = next.ships.iter().find(|ship| ship.id == id)?;
+        let old = prev.ships.iter().find(|old| old.id == id);
+        Some(between(
+            old.map(|old| (old.x, old.y)),
+            (ship.x, ship.y),
+            alpha,
+        ))
+    };
+    let creep_pos = |id: u32| {
+        let creep = next.creeps.iter().find(|creep| creep.id == id)?;
+        let old = prev.creeps.iter().find(|old| old.id == id);
+        Some(between(
+            old.map(|old| (old.x, old.y)),
+            (creep.x, creep.y),
+            alpha,
+        ))
     };
     let position_of = |target: WireTarget| match target {
-        WireTarget::Ship(id) => next.ships.iter().find(|ship| ship.id == id).map(ship_pos),
-        WireTarget::Tower(id) => {
-            let tower = next.towers.iter().find(|tower| tower.id == id)?;
-            Some(Vec2::new(tower.x, tower.y))
+        WireTarget::Ship(id) => ship_pos(id),
+        WireTarget::Creep(id) => creep_pos(id),
+        WireTarget::Structure(id) => {
+            let site = next.structures.iter().find(|site| site.id == id)?;
+            Some(Vec2::new(site.x, site.y))
         }
     };
-    let per_tick = |weapon: &WireWeapon| weapon.shot_speed / welcome.tick_hz as f32;
     // 무기가 마지막으로 쏜 포탄이 아직 날아가고 있으면 그 위치입니다.
     let shot = |from: Vec2, weapon: &WireWeapon, target: Option<WireTarget>, ready_at: u64| {
         let to = position_of(target?)?;
         let fired = ready_at.checked_sub(u64::from(weapon.cooldown_ticks))? as f32;
-        let flight = (from.distance(to) / per_tick(weapon)).ceil().max(1.0);
+        let per_tick = weapon.shot_speed / welcome.tick_hz as f32;
+        let flight = (from.distance(to) / per_tick).ceil().max(1.0);
         let progress = (tick - fired) / flight;
         (0.0..1.0)
             .contains(&progress)
@@ -125,7 +164,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
     let mut shots = Vec::new();
     let mut ships = Vec::new();
     for ship in &next.ships {
-        let pos = ship_pos(ship);
+        let pos = ship_pos(ship.id).unwrap_or(Vec2::new(ship.x, ship.y));
         let mut ranges: Vec<f32> = Vec::new();
         for mount in &ship.mounts {
             let Some(weapon) = welcome.weapons.get(usize::from(mount.weapon)) else {
@@ -146,32 +185,62 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             team: ship.team,
             pos,
             hp: ship.hp as f32 / welcome.ship_max_hp as f32,
-            sunk: ship.sunk,
+            sunk: ship.respawn_at.is_some(),
             mine: ship.id == welcome.ship,
             ranges,
         });
     }
-    let mut towers = Vec::new();
-    for tower in &next.towers {
-        let pos = Vec2::new(tower.x, tower.y);
-        let weapon = &welcome.tower_weapon;
-        if let Some(pos) = shot(pos, weapon, tower.target, tower.ready_at) {
+    let mut creeps = Vec::new();
+    for creep in &next.creeps {
+        let Some(spec) = welcome.creeps.get(usize::from(creep.kind)) else {
+            continue;
+        };
+        let pos = creep_pos(creep.id).unwrap_or(Vec2::new(creep.x, creep.y));
+        if let Some(pos) = shot(pos, &spec.weapon, creep.target, creep.ready_at) {
             shots.push(ShotView {
                 pos,
-                team: tower.team,
+                team: creep.team,
             });
         }
-        towers.push(TowerView {
-            id: tower.id,
-            team: tower.team,
+        creeps.push(CreepView {
+            id: creep.id,
+            team: creep.team,
             pos,
-            hp: tower.hp as f32 / welcome.tower_max_hp as f32,
-            range: weapon.range,
+            hp: creep.hp as f32 / spec.max_hp as f32,
         });
     }
+    let mut structures = Vec::new();
+    for site in &next.structures {
+        let pos = Vec2::new(site.x, site.y);
+        let spec = welcome.structure(site.kind);
+        if let Some(weapon) = &spec.weapon
+            && let Some(pos) = shot(pos, weapon, site.target, site.ready_at)
+        {
+            shots.push(ShotView {
+                pos,
+                team: site.team,
+            });
+        }
+        structures.push(StructureView {
+            id: site.id,
+            kind: site.kind,
+            team: site.team,
+            pos,
+            hp: site.hp as f32 / spec.max_hp as f32,
+            range: spec.weapon.as_ref().map(|weapon| weapon.range),
+        });
+    }
+    let me = next.ships.iter().find(|ship| ship.id == welcome.ship);
+    let respawn_secs = me
+        .and_then(|ship| ship.respawn_at)
+        .map(|at| (at as f32 - tick).max(0.0) / welcome.tick_hz as f32);
     Frame {
         ships,
-        towers,
+        creeps,
+        structures,
         shots,
+        gold: me.and_then(|ship| ship.gold).unwrap_or(0),
+        respawn_secs,
+        outcome: next.outcome,
     }
 }

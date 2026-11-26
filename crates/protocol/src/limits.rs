@@ -25,6 +25,9 @@ pub struct ServerLimits {
     pub write_timeout: Duration,
     /// `GameServer::pump` 한 번이 처리하는 접속 이벤트의 최대 수입니다.
     pub events_per_pump: usize,
+    /// 접속한 뒤 입장해야 하는 시간입니다. 입장하지 않고 접속 자리만 차지하는 상대를 닫습니다.
+    /// 입장이 거절된 접속도 이 시간이 지나면 닫습니다.
+    pub join_deadline: Duration,
 }
 
 impl Default for ServerLimits {
@@ -39,6 +42,7 @@ impl Default for ServerLimits {
             outbox_capacity: 64,
             write_timeout: Duration::from_secs(3),
             events_per_pump: 512,
+            join_deadline: Duration::from_secs(5),
         }
     }
 }

@@ -26,6 +26,9 @@ pub use messages::{
     ClientMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg, WireTeam, WireVec2,
 };
 pub use room_code::{RoomCode, RoomCodeError};
-pub use snapshot::{Snapshot, WireMount, WireShip, WireTarget, WireTower};
+pub use snapshot::{
+    Snapshot, WireCreep, WireMount, WireOutcome, WireShip, WireStructure, WireStructureKind,
+    WireTarget,
+};
 pub use transport::{ClientEvent, ClientTransport, LinkId, PeerKey, ServerEvent, ServerTransport};
-pub use welcome::{Welcome, WireWeapon};
+pub use welcome::{Welcome, WireCreepSpec, WireStructureSpec, WireWeapon};

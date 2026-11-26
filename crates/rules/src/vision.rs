@@ -26,20 +26,29 @@ impl Sight {
     }
 }
 
-/// 적은 아군의 떠 있는 배나 서 있는 타워 가운데 하나의 시야 거리 안에 있으면 보입니다.
+/// 개체가 자기 진영에 주는 시야 거리입니다.
+fn vision_of(world: &World, tuning: &Tuning, watcher: Target) -> f32 {
+    match watcher {
+        Target::Ship(_) => tuning.ship.vision,
+        Target::Creep(id) => world
+            .creeps
+            .get(&id)
+            .map_or(0.0, |creep| tuning.creeps[creep.kind].vision),
+        Target::Structure(id) => world
+            .structures
+            .get(&id)
+            .map_or(0.0, |structure| tuning.structures.of(structure.kind).vision),
+    }
+}
+
+/// 적은 아군의 떠 있는 배, NPC 배, 서 있는 건물 가운데 하나의 시야 거리 안에 있으면 보입니다.
 pub(crate) fn look(world: &World, tuning: &Tuning) -> Sight {
     let mut seen = [Vec::new(), Vec::new()];
     for team in Team::ALL {
         let eyes: Vec<(Vec2, f32)> = world
             .targets()
             .filter(|(_, owner, _)| *owner == team)
-            .map(|(watcher, _, pos)| {
-                let vision = match watcher {
-                    Target::Ship(_) => tuning.ship.vision,
-                    Target::Tower(_) => tuning.tower.vision,
-                };
-                (pos, vision)
-            })
+            .map(|(watcher, _, pos)| (pos, vision_of(world, tuning, watcher)))
             .collect();
         seen[team.index()] = world
             .targets()

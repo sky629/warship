@@ -93,10 +93,11 @@ impl Player {
     }
 }
 
-/// 두 진영의 시작 자리가 서로 보이는 거리(5타일)에 있는 수치입니다. 타워는 없고, 배는 무기 없이 시작합니다.
+/// 두 진영의 시작 자리가 서로 보이는 거리(5타일)에 있는 수치입니다. 건물과 NPC 배는 없고, 배는 무기 없이 시작합니다.
 fn close_spawns() -> Tuning {
     let mut tuning = Tuning::default();
-    tuning.map.towers.clear();
+    tuning.map.structures.clear();
+    tuning.waves.clear();
     tuning.ship.start_weapons.clear();
     tuning.map.spawns = [Vec2::new(10.0, 10.0), Vec2::new(15.0, 10.0)];
     tuning
@@ -293,4 +294,61 @@ fn rooms_do_not_see_each_other() {
     assert_eq!(there.welcome().team, WireTeam::Red);
     bench.run_ticks(1);
     assert_eq!(here.last_snapshot().ships.len(), 1);
+}
+
+#[test]
+fn a_link_that_does_not_join_in_time_is_closed() {
+    let mut bench = Bench::new(Tuning::default());
+    let mut silent = bench.connector.connect();
+    let mut rejected = bench.join("no spaces");
+    let mut playing = bench.join("test");
+
+    // 기한은 5초(100Tick)입니다.
+    bench.run_ticks(99);
+    assert!(
+        !bench
+            .notices
+            .iter()
+            .any(|notice| matches!(notice, Notice::LinkClosed { .. }))
+    );
+    bench.run_ticks(2);
+
+    let closed = |link: &mut LoopbackClient| {
+        let mut last = None;
+        while let Some(event) = link.poll() {
+            last = Some(event);
+        }
+        matches!(last, Some(ClientEvent::Disconnected { .. }))
+    };
+    assert!(closed(&mut silent), "never sent a join");
+    assert!(closed(&mut rejected.link), "its join was rejected");
+    assert!(!closed(&mut playing.link), "joined in time");
+    let closures = bench
+        .notices
+        .iter()
+        .filter(|notice| matches!(notice, Notice::LinkClosed { .. }));
+    assert_eq!(closures.count(), 2);
+}
+
+#[test]
+fn a_snapshot_carries_own_creeps_and_own_gold_but_not_the_far_enemys() {
+    let mut bench = Bench::new(Tuning::default());
+    let mut red = bench.join("test");
+    let _blue = bench.join("test");
+
+    // 기본 수치에서 NPC 배는 40번째 Tick부터 나오고, 60번째 Tick까지 3초의 수입(6골드)이 들어옵니다.
+    bench.run_ticks(60);
+    let snapshot = red.last_snapshot();
+
+    assert!(!snapshot.creeps.is_empty());
+    assert!(
+        snapshot
+            .creeps
+            .iter()
+            .all(|creep| creep.team == WireTeam::Red)
+    );
+    assert_eq!(snapshot.structures.len(), 10, "structures of both teams");
+    let golds: Vec<Option<u32>> = snapshot.ships.iter().map(|ship| ship.gold).collect();
+    assert_eq!(golds, [Some(6)]);
+    assert_eq!(snapshot.outcome, None);
 }

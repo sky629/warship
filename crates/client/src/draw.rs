@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use warship_client_core::{Frame, Phase};
-use warship_protocol::WireTeam;
+use warship_protocol::{WireOutcome, WireStructureKind, WireTeam};
 
 use crate::net::{CurrentFrame, Destination, Net};
 
@@ -20,8 +20,29 @@ const HP_BACK: Color = Color::srgb(0.25, 0.1, 0.1);
 
 /// 배의 몸을 나타내는 원의 반지름(타일)입니다.
 const SHIP_RADIUS: f32 = 0.45;
-/// 타워를 나타내는 정사각형의 한 변의 절반(타일)입니다.
+/// NPC 배의 몸을 나타내는 원의 반지름(타일)입니다.
+const CREEP_RADIUS: f32 = 0.25;
+/// 건물을 나타내는 도형의 중심에서 꼭짓점 쪽 변까지의 거리(타일)입니다.
 const TOWER_HALF: f32 = 0.6;
+const HARBOR_HALF: f32 = 0.9;
+const BASE_HALF: f32 = 1.2;
+const LANE: Color = Color::srgb(0.12, 0.2, 0.26);
+
+/// 중심에서 본 정사각형과 마름모의 꼭짓점입니다. 처음 점으로 돌아와서 닫습니다.
+const SQUARE: [Vec2; 5] = [
+    Vec2::new(-1.0, -1.0),
+    Vec2::new(1.0, -1.0),
+    Vec2::new(1.0, 1.0),
+    Vec2::new(-1.0, 1.0),
+    Vec2::new(-1.0, -1.0),
+];
+const DIAMOND: [Vec2; 5] = [
+    Vec2::new(0.0, -1.0),
+    Vec2::new(1.0, 0.0),
+    Vec2::new(0.0, 1.0),
+    Vec2::new(-1.0, 0.0),
+    Vec2::new(0.0, -1.0),
+];
 
 #[derive(Component)]
 pub struct StatusText;
@@ -81,6 +102,12 @@ pub fn draw_room(
         Vec2::ZERO,
     ];
     gizmos.linestrip_2d(corners, BORDER);
+    for lane in &welcome.lanes {
+        let points = lane
+            .iter()
+            .map(|point| Vec2::new(point.x, point.y) * TILE_PX);
+        gizmos.linestrip_2d(points, LANE);
+    }
     if let Some(point) = destination.0 {
         let (center, arm) = (point * TILE_PX, TILE_PX * 0.3);
         gizmos.line_2d(center - Vec2::X * arm, center + Vec2::X * arm, MINE);
@@ -90,19 +117,26 @@ pub fn draw_room(
 }
 
 fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
-    for tower in &frame.towers {
-        let (center, half) = (px_pos(tower.pos), TOWER_HALF * TILE_PX);
-        let color = team_color(tower.team);
-        let square = [
-            center + Vec2::new(-half, -half),
-            center + Vec2::new(half, -half),
-            center + Vec2::new(half, half),
-            center + Vec2::new(-half, half),
-            center + Vec2::new(-half, -half),
-        ];
-        gizmos.linestrip_2d(square, color);
-        gizmos.circle_2d(center, tower.range * TILE_PX, color.with_alpha(0.15));
-        draw_hp(gizmos, center + Vec2::Y * (half + 6.0), tower.hp);
+    for site in &frame.structures {
+        let center = px_pos(site.pos);
+        let color = team_color(site.team);
+        // 타워는 작은 정사각형, 항구는 마름모, 본진은 큰 정사각형입니다.
+        let (half, corners) = match site.kind {
+            WireStructureKind::Tower => (TOWER_HALF, SQUARE),
+            WireStructureKind::Harbor => (HARBOR_HALF, DIAMOND),
+            WireStructureKind::Base => (BASE_HALF, SQUARE),
+        };
+        let half = half * TILE_PX;
+        gizmos.linestrip_2d(corners.map(|corner| center + corner * half), color);
+        if let Some(range) = site.range {
+            gizmos.circle_2d(center, range * TILE_PX, color.with_alpha(0.15));
+        }
+        draw_hp(gizmos, center + Vec2::Y * (half + 6.0), site.hp);
+    }
+    for creep in &frame.creeps {
+        let (center, radius) = (px_pos(creep.pos), CREEP_RADIUS * TILE_PX);
+        gizmos.circle_2d(center, radius, team_color(creep.team).with_alpha(0.7));
+        draw_hp(gizmos, center + Vec2::Y * (radius + 4.0), creep.hp);
     }
     for ship in &frame.ships {
         let (center, radius) = (px_pos(ship.pos), SHIP_RADIUS * TILE_PX);
@@ -138,15 +172,31 @@ fn draw_hp(gizmos: &mut Gizmos, center: Vec2, fraction: f32) {
     gizmos.line_2d(left, left + half * (2.0 * fraction.clamp(0.0, 1.0)), HP);
 }
 
-/// 접속 상태를 화면 왼쪽 위에 글자로 보여 줍니다.
-pub fn show_status(net: NonSend<Net>, mut text: Single<&mut Text, With<StatusText>>) {
+/// 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과를 화면 왼쪽 위에 글자로 보여 줍니다.
+pub fn show_status(
+    net: NonSend<Net>,
+    frame: Res<CurrentFrame>,
+    mut text: Single<&mut Text, With<StatusText>>,
+) {
     let line = match (net.session.phase(), net.session.welcome()) {
         (Phase::Connecting, _) => "Connecting...".to_string(),
         (Phase::Joining, _) => "Joining...".to_string(),
-        (Phase::Playing, Some(welcome)) => format!(
-            "Room {}   Team {:?}   Right-click: sail",
-            welcome.room, welcome.team
-        ),
+        (Phase::Playing, Some(welcome)) => {
+            let mut line = format!("Room {}   Team {:?}", welcome.room, welcome.team);
+            if let Some(frame) = &frame.0 {
+                line += &format!("   Gold {}", frame.gold);
+                line += &match (frame.outcome, frame.respawn_secs) {
+                    (Some(WireOutcome::Victory(winner)), _) if winner == welcome.team => {
+                        "   VICTORY".to_string()
+                    }
+                    (Some(WireOutcome::Victory(_)), _) => "   DEFEAT".to_string(),
+                    (Some(WireOutcome::Draw), _) => "   DRAW".to_string(),
+                    (None, Some(secs)) => format!("   Sunk: back in {secs:.0}s"),
+                    (None, None) => "   Right-click: sail".to_string(),
+                };
+            }
+            line
+        }
         (Phase::Playing, None) => String::new(),
         (Phase::Ended(reason), _) => format!("Disconnected: {reason}"),
     };

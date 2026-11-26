@@ -1,23 +1,43 @@
-//! 타워입니다. 제자리에서 사거리 안의 보이는 적을 쏘고, HP가 0이 되면 맵에서 사라집니다.
+//! 건물입니다. 타워와 본진은 사거리 안의 보이는 적을 쏘고, 항구는 라인의 NPC 배를 내보냅니다.
+//! HP가 0이 된 건물은 맵에서 사라지고, 본진이 사라진 진영은 집니다.
 
-use crate::ids::{Team, TowerId};
+use crate::ids::{StructureId, Team};
 use crate::math::Vec2;
 use crate::weapon::Target;
 use crate::world::World;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StructureKind {
+    Tower,
+    /// 라인 하나의 NPC 배를 내보내는 건물입니다. 파괴되면 그 진영은 그 라인에 NPC 배를 더 내보내지 못합니다.
+    Harbor,
+    /// 진영마다 하나입니다. 파괴되면 그 진영이 집니다.
+    Base,
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct Tower {
-    pub id: TowerId,
+pub struct Structure {
+    pub id: StructureId,
+    pub kind: StructureKind,
     pub team: Team,
     pub pos: Vec2,
     pub hp: u32,
+    /// 항구가 맡은 라인의 번호입니다. 항구가 아니면 없습니다.
+    pub lane: Option<usize>,
     /// 이 Tick부터 다시 쏠 수 있습니다.
     pub ready_at: u64,
     /// 마지막으로 쏜 표적입니다. 쏠 수 있는데 쏠 적이 없으면 `None`이 됩니다.
     pub target: Option<Target>,
 }
 
-/// HP가 0이 된 타워를 맵에서 지웁니다.
-pub(crate) fn remove_destroyed(world: &mut World) {
-    world.towers.retain(|_, tower| tower.hp > 0);
+/// HP가 0이 된 건물을 맵에서 지우고, 본진을 잃은 진영을 돌려줍니다.
+pub(crate) fn remove_destroyed(world: &mut World) -> Vec<Team> {
+    let fallen = world
+        .structures
+        .values()
+        .filter(|structure| structure.hp == 0 && structure.kind == StructureKind::Base)
+        .map(|structure| structure.team)
+        .collect();
+    world.structures.retain(|_, structure| structure.hp > 0);
+    fallen
 }

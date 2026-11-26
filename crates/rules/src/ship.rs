@@ -17,6 +17,7 @@ pub struct Ship {
     pub pos: Vec2,
     pub hp: u32,
     pub life: Life,
+    pub gold: u32,
     /// 배가 향하는 지점입니다. 없으면 멈춰 있습니다.
     pub destination: Option<Vec2>,
     /// 무기를 다는 칸입니다. 빈 칸은 `None`입니다.
@@ -29,7 +30,10 @@ pub struct Ship {
 pub enum Life {
     Afloat,
     /// HP가 0이 된 배입니다. 움직이지 않고, 쏘지 않고, 표적이 되지 않고, 시야를 주지 않습니다.
-    Sunk,
+    /// `respawn_at` Tick에 시작 자리에 다시 나타납니다.
+    Sunk {
+        respawn_at: u64,
+    },
 }
 
 /// 칸 하나에 달린 무기입니다.
@@ -58,6 +62,7 @@ impl Ship {
             pos,
             hp: tuning.ship.max_hp,
             life: Life::Afloat,
+            gold: 0,
             destination: None,
             mounts,
             last_input_seq: 0,
@@ -66,6 +71,18 @@ impl Ship {
 
     pub fn is_afloat(&self) -> bool {
         self.life == Life::Afloat
+    }
+}
+
+/// 다시 나타날 Tick이 된 배를 최대 HP로 그 진영의 시작 자리에 놓습니다. 목적지는 지워지고, 무기와 골드는 그대로입니다.
+pub(crate) fn respawn(world: &mut World, tuning: &Tuning, tick: u64) {
+    for ship in world.ships.values_mut() {
+        if matches!(ship.life, Life::Sunk { respawn_at } if respawn_at <= tick) {
+            ship.life = Life::Afloat;
+            ship.hp = tuning.ship.max_hp;
+            ship.pos = tuning.map.spawns[ship.team.index()];
+            ship.destination = None;
+        }
     }
 }
 
