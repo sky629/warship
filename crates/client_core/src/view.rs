@@ -194,6 +194,54 @@ impl ShopWindow {
     }
 }
 
+/// 화면의 왼쪽 아래, 글자 HUD의 위에 놓이는 칸 줄의 자리(픽셀)입니다. 칸은 왼쪽부터 차례로 놓입니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MountBar {
+    pub left: f32,
+    pub top: f32,
+    pub slots: usize,
+}
+
+impl MountBar {
+    /// 칸 하나의 너비와 높이입니다.
+    pub const SLOT: (f32, f32) = (120.0, 34.0);
+    /// 칸과 칸 사이의 간격입니다.
+    pub const GAP: f32 = 4.0;
+    /// 창의 왼쪽 가장자리와 칸 줄 사이의 간격입니다.
+    pub const MARGIN: f32 = 10.0;
+    /// 창의 아래쪽 가장자리에서 칸 줄의 위쪽까지의 거리입니다. 그 아래에 글자 HUD가 있습니다.
+    pub const LIFT: f32 = 130.0;
+
+    /// 높이가 `window_height`인 창에서, 칸이 `slots`개인 칸 줄의 자리입니다.
+    pub fn in_window(window_height: f32, slots: usize) -> MountBar {
+        MountBar {
+            left: Self::MARGIN,
+            top: window_height - Self::LIFT,
+            slots,
+        }
+    }
+
+    pub fn width(&self) -> f32 {
+        self.slots as f32 * (Self::SLOT.0 + Self::GAP) - Self::GAP
+    }
+
+    /// `slot`번 칸이 칸 줄의 왼쪽에서 얼마나 떨어져 있는지입니다.
+    pub fn place(&self, slot: usize) -> f32 {
+        slot as f32 * (Self::SLOT.0 + Self::GAP)
+    }
+
+    /// 창의 `cursor` 자리에 칸이 있으면 그 칸의 번호입니다. 칸과 칸 사이의 간격은 칸이 아닙니다.
+    pub fn slot_at(&self, cursor: (f32, f32)) -> Option<usize> {
+        let (x, y) = (cursor.0 - self.left, cursor.1 - self.top);
+        if x < 0.0 || !(0.0..Self::SLOT.1).contains(&y) {
+            return None;
+        }
+        let pitch = Self::SLOT.0 + Self::GAP;
+        let slot = (x / pitch) as usize;
+        (slot < self.slots && x - slot as f32 * pitch < Self::SLOT.0).then_some(slot)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,5 +368,22 @@ mod tests {
             "there is no second column"
         );
         assert!(!shop.covers((470.0, 60.0)));
+    }
+
+    #[test]
+    fn the_mount_row_sits_above_the_text_and_finds_the_slot_under_the_cursor() {
+        let bar = MountBar::in_window(700.0, 3);
+        assert_eq!((bar.left, bar.top, bar.width()), (10.0, 570.0, 368.0));
+        assert_eq!(bar.place(2), 248.0);
+
+        assert_eq!(bar.slot_at((10.0, 570.0)), Some(0));
+        assert_eq!(bar.slot_at((129.0, 603.0)), Some(0));
+        assert_eq!(bar.slot_at((131.0, 580.0)), None, "the gap");
+        assert_eq!(bar.slot_at((134.0, 580.0)), Some(1));
+        assert_eq!(bar.slot_at((377.0, 580.0)), Some(2));
+        assert_eq!(bar.slot_at((400.0, 580.0)), None, "past the last slot");
+        assert_eq!(bar.slot_at((50.0, 604.0)), None);
+        assert_eq!(bar.slot_at((50.0, 569.0)), None);
+        assert_eq!(bar.slot_at((9.0, 580.0)), None);
     }
 }

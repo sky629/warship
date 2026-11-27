@@ -1,4 +1,4 @@
-//! 내 배의 상태를 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이 보여 줍니다.
+//! 내 배의 상태를 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이, 칸의 아이템은 칸 줄(`mounts`)이 보여 줍니다.
 //!
 //! 숫자 키는 상점의 그 번호의 무기를 사고, Alt와 숫자 키는 그 번호의 장비를 삽니다. 무기와 장비는 같은 칸에 달립니다.
 //! Shift와 숫자 키는 그 번호의 칸의 아이템을 팔고, Ctrl과 숫자 키는 그 번호의 칸의 소모품을 씁니다.
@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 use warship_client_core::{MyShip, weapons_for_sale};
-use warship_protocol::{Welcome, WireCommand, WireItem, WireRefusal};
+use warship_protocol::{Welcome, WireCommand, WireRefusal};
 
 use crate::net::{CurrentFrame, Net};
 
@@ -149,37 +149,9 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
     let hull = welcome.hulls.get(usize::from(me.hull));
     let hull_name = hull.map_or("?", |hull| hull.name.as_str());
     let mut lines = format!(
-        "{hull_name}   Level {} (xp {})   Skill points {}\nMounts:",
+        "{hull_name}   Level {} (xp {})   Skill points {}",
         me.level, me.xp, me.skill_points
     );
-    for (slot, item) in me.mounts.iter().enumerate() {
-        let name = match item {
-            None => Some("-"),
-            Some(WireItem::Weapon(weapon)) => {
-                let weapon = welcome.weapons.get(usize::from(*weapon));
-                weapon.map(|weapon| weapon.name.as_str())
-            }
-            Some(WireItem::Gear(gear)) => {
-                let gear = welcome.gear.get(usize::from(*gear));
-                gear.map(|gear| gear.name.as_str())
-            }
-            Some(WireItem::Supply(supply)) => {
-                let supply = welcome.supplies.get(usize::from(*supply));
-                supply.map(|supply| supply.name.as_str())
-            }
-            Some(WireItem::Contract(trade) | WireItem::Cargo(trade)) => {
-                let trade = welcome.trades.get(usize::from(*trade));
-                trade.map(|trade| trade.name.as_str())
-            }
-        };
-        // 계약은 교역항으로, 화물은 본진으로 가져갑니다.
-        let errand = match item {
-            Some(WireItem::Contract(_)) => " (contract: go to its port)",
-            Some(WireItem::Cargo(_)) => " (cargo: bring it to your base)",
-            _ => "",
-        };
-        lines += &format!("  [{}] {}{errand}", slot + 1, name.unwrap_or("?"));
-    }
     lines += "\nSkills:";
     for (&id, (_, key)) in hull_skills(welcome, me).iter().zip(SKILL_KEYS) {
         let index = usize::from(id);
@@ -192,7 +164,7 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
         }
     }
     lines += "\nB: shop   Number: buy weapon   Alt+number: buy gear   Z, X, C, V: combine   F1-F10: hull";
-    lines += "\nShift+number: sell mount   Ctrl+number: use supply   Ctrl+key: learn skill";
+    lines += "\nMount: click to use a supply, right-click to sell   Ctrl+key: learn skill";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
     }

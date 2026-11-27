@@ -14,6 +14,7 @@ mod camera;
 mod draw;
 mod hud;
 mod minimap;
+mod mounts;
 mod net;
 mod shapes;
 mod shop;
@@ -60,6 +61,7 @@ fn main() {
                 start::setup,
                 minimap::setup,
                 shop::setup,
+                mounts::setup,
             ),
         )
         .add_systems(
@@ -72,6 +74,7 @@ fn main() {
                     net::order_moves,
                     hud::order_commands,
                     shop::use_shop,
+                    mounts::use_mounts,
                     net::leave_room,
                     draw::build_scenery,
                     draw::sync_pieces,
@@ -88,6 +91,7 @@ fn main() {
                 start::show_start,
                 minimap::show_minimap,
                 shop::show_shop,
+                mounts::show_mounts,
             )
                 .chain(),
         )

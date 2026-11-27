@@ -12,6 +12,7 @@ use warship_protocol::{ClientEvent, ClientTransport, PlayerName, RoomCode, WireC
 use warship_ws_client::WsClient;
 
 use crate::camera::minimap_under;
+use crate::mounts;
 use crate::shop::{self, ShopOpen};
 use crate::start::{Pending, Start};
 use crate::{Screen, storage};
@@ -263,10 +264,11 @@ pub fn leave_room(
     commands.insert_resource(Closing(notice));
 }
 
-/// 오른쪽 클릭한 수면의 자리나 미니맵의 자리로 배를 보냅니다. 상점 창 위를 누른 클릭은 배를 보내지 않습니다.
+/// 오른쪽 클릭한 수면의 자리나 미니맵의 자리로 배를 보냅니다. 상점 창이나 칸 줄 위를 누른 클릭은 배를 보내지 않습니다.
 pub fn order_moves(
     mouse: Res<ButtonInput<MouseButton>>,
     shop: Res<ShopOpen>,
+    frame: Res<CurrentFrame>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     mut net: NonSendMut<Net>,
@@ -277,6 +279,9 @@ pub fn order_moves(
     }
     let welcome = net.session.welcome();
     if welcome.is_some_and(|welcome| shop::under_cursor(&window, welcome, &shop)) {
+        return;
+    }
+    if mounts::slot_under(&window, frame.0.as_ref()).is_some() {
         return;
     }
     let (camera, camera_transform) = *camera;

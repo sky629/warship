@@ -12,7 +12,7 @@ use warship_protocol::{
 use warship_protocol::{SeatToken, WireMember, WireRecipe, WireSupply, WireTrade};
 use warship_rules::Vec2;
 
-use crate::{Phase, Session, SkillView, shop_list};
+use crate::{MountView, Phase, Session, SkillView, mount_views, shop_list};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -111,6 +111,7 @@ fn ship(id: u32, x: f32) -> WireShip {
                 rank: 0,
                 ready_at: 0,
             }],
+            supply_ready_at: 0,
             last_command_seq: 0,
             refusal: None,
         }),
@@ -369,6 +370,7 @@ fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
                 rank: 1,
                 ready_at: 120,
             }],
+            supply_ready_at: 161,
             last_command_seq: 4,
             refusal: Some(WireRefusal::NoShopInRange),
         }),
@@ -391,6 +393,7 @@ fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
         ready_secs: 19.0 / 20.0,
     };
     assert_eq!(me.skills, [skill]);
+    assert_eq!(me.supply_secs, 3.0, "60 ticks after tick 101");
     assert_eq!(me.refusal, Some(WireRefusal::NoShopInRange));
 }
 
@@ -646,4 +649,66 @@ fn a_slowed_ship_and_a_cloaked_ship_are_marked_in_the_frame() {
     assert_eq!(marks, [false, true]);
     let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.cloaked).collect();
     assert_eq!(marks, [false, true]);
+}
+
+#[test]
+fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
+    let mut welcome = welcome();
+    welcome.supplies.push(WireSupply {
+        name: "kit".to_string(),
+        price: 80,
+        effect: "+200 HP".to_string(),
+    });
+    welcome.trades.push(WireTrade {
+        name: "salt".to_string(),
+        price: 60,
+        reward: 90,
+        port: 0,
+    });
+    let items = [
+        Some(WireItem::Weapon(0)),
+        Some(WireItem::Supply(0)),
+        Some(WireItem::Contract(0)),
+        Some(WireItem::Cargo(0)),
+        None,
+    ];
+    let mounts = items.iter().enumerate().filter_map(|(slot, item)| {
+        Some(WireMount {
+            slot: slot as u8,
+            item: (*item)?,
+            target: None,
+            ready_at: 0,
+        })
+    });
+    let mine = WireShip {
+        hull: 1,
+        mounts: mounts.collect(),
+        ..ship(ME, 10.0)
+    };
+    let mut session = playing();
+    receive(&mut session, 1.00, snapshot(100, vec![mine]));
+    let mut me = session.frame(1.15).unwrap().me.expect("my ship");
+    // 큰 선체의 칸은 4개입니다.
+    assert_eq!(me.mounts.len(), 4);
+
+    let seen = |me: &crate::MyShip| -> Vec<(String, String, bool)> {
+        let views = mount_views(&welcome, me);
+        let parts = |view: MountView| (view.name, view.note, view.usable);
+        views.into_iter().map(parts).collect()
+    };
+    let text = |name: &str, note: &str, usable| (name.to_string(), note.to_string(), usable);
+    assert_eq!(
+        seen(&me),
+        [
+            text("gun", "", false),
+            text("kit", "click: use", true),
+            text("salt", "take to port", false),
+            text("salt", "bring to base", false),
+        ]
+    );
+
+    me.supply_secs = 11.2;
+    me.mounts[2] = None;
+    assert_eq!(seen(&me)[1], text("kit", "wait 12s", true));
+    assert_eq!(seen(&me)[2], text("-", "", false));
 }

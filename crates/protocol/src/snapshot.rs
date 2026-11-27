@@ -57,6 +57,8 @@ pub struct WireOwn {
     pub skill_points: u8,
     /// `Welcome::skills`와 같은 순서입니다.
     pub skills: Vec<WireSkill>,
+    /// 이 Tick부터 소모품을 다시 쓸 수 있습니다.
+    pub supply_ready_at: u64,
     /// 서버가 마지막으로 처리한 이 배의 명령 순서 번호입니다.
     pub last_command_seq: u32,
     /// 그 명령을 거절한 이유입니다. 실행했으면 없습니다.
@@ -278,6 +280,7 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning, tick: u64) -> WireShip 
                     ready_at: skill.ready_at,
                 })
                 .collect(),
+            supply_ready_at: ship.supply_ready_at,
             last_command_seq: ship.last_command_seq,
             refusal: ship.refusal.map(WireRefusal::from),
         }),

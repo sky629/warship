@@ -46,6 +46,8 @@ pub struct MyShip {
     pub mounts: Vec<Option<WireItem>>,
     /// `Welcome::skills`와 같은 순서입니다.
     pub skills: Vec<SkillView>,
+    /// 소모품을 다시 쓸 수 있을 때까지 남은 시간(초)입니다. 쓸 수 있으면 0입니다.
+    pub supply_secs: f32,
     /// 마지막 명령이 거절되었으면 그 이유입니다.
     pub refusal: Option<WireRefusal>,
 }
@@ -291,6 +293,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
                     ready_secs: secs_until(skill.ready_at),
                 })
                 .collect(),
+            supply_secs: secs_until(own.supply_ready_at),
             refusal: own.refusal,
         })
     });
