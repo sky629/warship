@@ -194,7 +194,7 @@ impl ShopWindow {
     }
 }
 
-/// 화면의 왼쪽 아래, 글자 HUD의 위에 놓이는 칸 줄의 자리(픽셀)입니다. 칸은 왼쪽부터 차례로 놓입니다.
+/// 화면의 왼쪽 아래, 내 배 패널의 위에 놓이는 칸 줄의 자리(픽셀)입니다. 칸은 왼쪽부터 차례로 놓입니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MountBar {
     pub left: f32,
@@ -209,8 +209,8 @@ impl MountBar {
     pub const GAP: f32 = 4.0;
     /// 창의 왼쪽 가장자리와 칸 줄 사이의 간격입니다.
     pub const MARGIN: f32 = 10.0;
-    /// 창의 아래쪽 가장자리에서 칸 줄의 위쪽까지의 거리입니다. 그 아래에 글자 HUD가 있습니다.
-    pub const LIFT: f32 = 130.0;
+    /// 창의 아래쪽 가장자리에서 칸 줄의 위쪽까지의 거리입니다. 그 아래에 내 배 패널이 있습니다.
+    pub const LIFT: f32 = 166.0;
 
     /// 높이가 `window_height`인 창에서, 칸이 `slots`개인 칸 줄의 자리입니다.
     pub fn in_window(window_height: f32, slots: usize) -> MountBar {
@@ -371,8 +371,8 @@ mod tests {
     }
 
     #[test]
-    fn the_mount_row_sits_above_the_text_and_finds_the_slot_under_the_cursor() {
-        let bar = MountBar::in_window(700.0, 3);
+    fn the_mount_row_sits_above_the_ship_panel_and_finds_the_slot_under_the_cursor() {
+        let bar = MountBar::in_window(736.0, 3);
         assert_eq!((bar.left, bar.top, bar.width()), (10.0, 570.0, 368.0));
         assert_eq!(bar.place(2), 248.0);
 

@@ -1,4 +1,4 @@
-//! 내 배의 상태를 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이, 칸의 아이템은 칸 줄(`mounts`)이 보여 줍니다.
+//! 화면 위쪽의 상태 막대와 왼쪽 아래의 내 배 패널, 항구의 이름표를 그리고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이, 칸의 아이템은 칸 줄(`mounts`)이 보여 줍니다.
 //!
 //! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Shift와 함께 누르면 스킬 포인트를 넣습니다.
 //! 숫자 키는 그 번호의 칸의 소모품을 씁니다. 사고파는 일은 상점 창과 칸 줄의 클릭으로 합니다.
@@ -6,8 +6,8 @@
 //! 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
-use warship_client_core::MyShip;
-use warship_protocol::{Welcome, WireCommand, WireRefusal};
+use warship_client_core::{MyShip, SkillSlot, hud_view, top_bar};
+use warship_protocol::{Welcome, WireCommand, WireRefusal, WireTeam};
 
 use crate::net::{CurrentFrame, Net};
 
@@ -27,24 +27,105 @@ const SKILL_KEYS: [(KeyCode, char); 4] = [
     (KeyCode::KeyR, 'R'),
 ];
 
+/// 화면 위쪽의 상태 막대입니다.
 #[derive(Component)]
-pub struct HudText;
+pub struct TopRoot;
+
+/// 화면 왼쪽 아래의 내 배 패널입니다.
+#[derive(Component)]
+pub struct PanelRoot;
+
+/// 거절된 명령의 이유를 보여 주는 글자입니다.
+#[derive(Component)]
+pub struct ToastText;
+
+/// 항구의 이름표를 담는 바탕입니다.
+#[derive(Component)]
+pub struct LabelRoot;
+
+const PANEL: Color = Color::srgba(0.03, 0.06, 0.09, 0.85);
+const SLOT: Color = Color::srgba(0.16, 0.2, 0.25, 0.95);
+const DIM: Color = Color::srgb(0.6, 0.65, 0.7);
+const GOLD: Color = Color::srgb(1.0, 0.82, 0.3);
+const GOOD: Color = Color::srgb(0.45, 0.9, 0.5);
+const BAD: Color = Color::srgb(1.0, 0.45, 0.4);
+const HP: Color = Color::srgb(0.25, 0.7, 0.3);
+const HP_BACK: Color = Color::srgb(0.35, 0.1, 0.1);
+const XP: Color = Color::srgb(0.5, 0.45, 0.95);
+const XP_BACK: Color = Color::srgb(0.12, 0.12, 0.2);
+const RED: Color = Color::srgb(0.95, 0.4, 0.35);
+const BLUE: Color = Color::srgb(0.45, 0.65, 1.0);
+/// 내 배 패널의 너비입니다.
+const PANEL_WIDTH: f32 = 404.0;
 
 pub fn setup(mut commands: Commands) {
     commands.spawn((
-        HudText,
-        Text::new(""),
-        TextFont {
-            font_size: FontSize::Px(14.0),
+        TopRoot,
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(0),
+            left: px(0),
+            width: percent(100),
+            height: px(30),
+            padding: UiRect::horizontal(px(12)),
+            column_gap: px(22),
+            align_items: AlignItems::Center,
+            display: Display::None,
             ..default()
         },
+        BackgroundColor(PANEL),
+    ));
+    commands.spawn((
+        PanelRoot,
         Node {
             position_type: PositionType::Absolute,
             bottom: px(10),
             left: px(10),
+            width: px(PANEL_WIDTH),
+            padding: UiRect::all(px(8)),
+            row_gap: px(5),
+            flex_direction: FlexDirection::Column,
+            display: Display::None,
+            ..default()
+        },
+        BackgroundColor(PANEL),
+    ));
+    commands.spawn((
+        ToastText,
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(15.0),
+            ..default()
+        },
+        TextColor(BAD),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(176),
+            left: px(10),
             ..default()
         },
     ));
+    commands.spawn((
+        LabelRoot,
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+    ));
+}
+
+fn words(text: impl Into<String>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text),
+        TextFont {
+            font_size: FontSize::Px(size),
+            ..default()
+        },
+        TextColor(color),
+        TextLayout::default().with_no_wrap(),
+    )
 }
 
 /// 이번 프레임에 눌린 단축키를 명령으로 보냅니다.
@@ -79,52 +160,222 @@ pub fn order_commands(
     }
 }
 
+/// 방 안에서 위쪽 상태 막대(방, 진영, 골드, 지난 시간, 진영별 가라앉힌 배의 수, 방에 있는 사람의 이름)를 그립니다.
+pub fn show_top(
+    net: Option<NonSend<Net>>,
+    frame: Res<CurrentFrame>,
+    root: Single<(Entity, &mut Node), With<TopRoot>>,
+    mut commands: Commands,
+) {
+    let (root, mut node) = root.into_inner();
+    commands.entity(root).despawn_children();
+    let welcome = net.as_ref().and_then(|net| net.session.welcome());
+    let Some((welcome, frame)) = welcome.zip(frame.0.as_ref()) else {
+        node.display = Display::None;
+        return;
+    };
+    node.display = Display::Flex;
+    let bar = top_bar(frame.secs, &frame.scores);
+    let (team, color) = match welcome.team {
+        WireTeam::Red => ("Red team", RED),
+        WireTeam::Blue => ("Blue team", BLUE),
+        WireTeam::Wild => ("Wild", DIM),
+    };
+    let gold = frame.me.as_ref().map_or(0, |me| me.gold);
+    let roster = net.as_ref().map_or(&[][..], |net| net.session.roster());
+    commands.entity(root).with_children(|parent| {
+        parent.spawn(words(format!("Room {}", welcome.room), 14.0, DIM));
+        parent.spawn(words(team, 14.0, color));
+        parent.spawn(words(format!("Gold {gold}"), 16.0, GOLD));
+        parent.spawn(words(bar.clock, 16.0, Color::WHITE));
+        parent.spawn(words(format!("Red {}", bar.red_kills), 16.0, RED));
+        parent.spawn(words(format!("Blue {}", bar.blue_kills), 16.0, BLUE));
+        // 방에 있는 사람의 이름입니다. 접속이 끊긴 사람에는 표시를 붙입니다.
+        let names = roster.iter().map(|member| {
+            let away = if member.connected { "" } else { " (away)" };
+            format!("{}{away}", member.name)
+        });
+        let names = names.collect::<Vec<_>>().join(", ");
+        parent.spawn(words(format!("Captains: {names}"), 13.0, DIM));
+    });
+}
+
+/// 내 배 패널(선체, 레벨, HP 막대, 경험치 막대, 스킬 칸)을 그리고, 거절된 명령의 이유를 그 위에 보여 줍니다.
 pub fn show_hud(
     net: Option<NonSend<Net>>,
     frame: Res<CurrentFrame>,
-    mut text: Single<&mut Text, With<HudText>>,
+    root: Single<(Entity, &mut Node), With<PanelRoot>>,
+    mut toast: Single<&mut Text, With<ToastText>>,
+    mut commands: Commands,
 ) {
+    let (root, mut node) = root.into_inner();
+    commands.entity(root).despawn_children();
     let me = frame.0.as_ref().and_then(|frame| frame.me.as_ref());
     let welcome = net.as_ref().and_then(|net| net.session.welcome());
-    let lines = match (welcome, me) {
-        (Some(welcome), Some(me)) => hud_lines(welcome, me),
-        _ => String::new(),
-    };
-    if text.0 != lines {
-        text.0 = lines;
+    let refusal = me.and_then(|me| me.refusal).map(refusal_text);
+    let refusal = refusal.map_or(String::new(), |why| format!("Refused: {why}"));
+    if toast.0 != refusal {
+        toast.0 = refusal;
     }
+    let Some((welcome, me)) = welcome.zip(me) else {
+        node.display = Display::None;
+        return;
+    };
+    node.display = Display::Flex;
+    let view = hud_view(welcome, me);
+    let bar = |height: f32, share: f32, fill: Color, back: Color| {
+        let frame = Node {
+            width: percent(100),
+            height: px(height),
+            ..default()
+        };
+        let filled = Node {
+            width: percent(share.clamp(0.0, 1.0) * 100.0),
+            height: percent(100),
+            ..default()
+        };
+        (
+            frame,
+            BackgroundColor(back),
+            children![(filled, BackgroundColor(fill))],
+        )
+    };
+    commands.entity(root).with_children(|parent| {
+        let title = Node {
+            column_gap: px(14),
+            align_items: AlignItems::Baseline,
+            ..default()
+        };
+        parent.spawn(title).with_children(|title| {
+            title.spawn(words(view.hull.clone(), 17.0, Color::WHITE));
+            title.spawn(words(format!("Level {}", view.level), 14.0, GOLD));
+            let hp = format!("HP {} / {}", view.hp, view.max_hp);
+            title.spawn(words(hp, 14.0, Color::WHITE));
+            if view.skill_points > 0 {
+                let points = format!("+{} skill (Shift+key)", view.skill_points);
+                title.spawn(words(points, 13.0, GOOD));
+            }
+        });
+        parent.spawn(bar(12.0, view.hp_share(), HP, HP_BACK));
+        parent.spawn(bar(5.0, view.xp_share(), XP, XP_BACK));
+        let row = Node {
+            column_gap: px(4),
+            ..default()
+        };
+        parent.spawn(row).with_children(|row| {
+            for slot in &view.skills {
+                show_skill(row, slot);
+            }
+        });
+    });
+}
+
+/// 스킬 칸 하나입니다. 단축키와 이름, 단계를 나타내는 네모, 남은 쿨다운을 보여 줍니다.
+fn show_skill(row: &mut ChildSpawnerCommands, slot: &SkillSlot) {
+    let cell = Node {
+        width: px(94),
+        height: px(46),
+        padding: UiRect::axes(px(5), px(3)),
+        row_gap: px(3),
+        flex_direction: FlexDirection::Column,
+        overflow: Overflow::clip(),
+        ..default()
+    };
+    let learned = slot.rank > 0;
+    let name = if learned { Color::WHITE } else { DIM };
+    row.spawn((cell, BackgroundColor(SLOT)))
+        .with_children(|cell| {
+            // 쿨다운이 남은 만큼 칸을 아래에서부터 어둡게 덮습니다.
+            if slot.wait > 0.0 {
+                cell.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(0),
+                        bottom: px(0),
+                        width: percent(100),
+                        height: percent(slot.wait * 100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+                ));
+            }
+            let key = if slot.learnable {
+                format!("{} +", slot.key)
+            } else {
+                slot.key.to_string()
+            };
+            let top = Node {
+                column_gap: px(6),
+                justify_content: JustifyContent::SpaceBetween,
+                ..default()
+            };
+            cell.spawn(top).with_children(|top| {
+                let color = if slot.learnable { GOOD } else { GOLD };
+                top.spawn(words(key, 13.0, color));
+                if slot.ready_secs > 0.0 && learned {
+                    let secs = format!("{:.0}s", slot.ready_secs.ceil());
+                    top.spawn(words(secs, 13.0, Color::WHITE));
+                }
+            });
+            cell.spawn(words(slot.name.clone(), 11.0, name));
+            let pips = Node {
+                column_gap: px(3),
+                ..default()
+            };
+            cell.spawn(pips).with_children(|pips| {
+                for step in 0..slot.max_rank {
+                    let color = if step < slot.rank { GOLD } else { XP_BACK };
+                    let pip = Node {
+                        width: px(10),
+                        height: px(4),
+                        ..default()
+                    };
+                    pips.spawn((pip, BackgroundColor(color)));
+                }
+            });
+        });
+}
+
+/// 항구마다 그 위에 이름표를 띄웁니다. 이름은 그 항구의 상점의 이름입니다.
+pub fn show_labels(
+    net: Option<NonSend<Net>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    root: Single<Entity, With<LabelRoot>>,
+    mut commands: Commands,
+) {
+    commands.entity(*root).despawn_children();
+    let Some(welcome) = net.as_ref().and_then(|net| net.session.welcome()) else {
+        return;
+    };
+    let (camera, transform) = camera.into_inner();
+    // 첫 번째 상점은 자기 진영의 본진과 항구이고, 그 뒤가 항구의 순서입니다.
+    let names = welcome.shops.iter().skip(1).map(|shop| shop.name.as_str());
+    commands.entity(*root).with_children(|parent| {
+        for (port, name) in welcome.ports.iter().zip(names) {
+            let above = Vec3::new(port.x, 1.8, -port.y);
+            let Ok(at) = camera.world_to_viewport(transform, above) else {
+                continue;
+            };
+            let label = Node {
+                position_type: PositionType::Absolute,
+                left: px(at.x - name.len() as f32 * 3.6),
+                top: px(at.y - 16.0),
+                padding: UiRect::horizontal(px(4)),
+                ..default()
+            };
+            parent
+                .spawn((label, BackgroundColor(PANEL)))
+                .with_children(|label| {
+                    label.spawn(words(name, 12.0, GOLD));
+                });
+        }
+    });
 }
 
 /// 내 배의 선체가 쓰는 스킬의 번호입니다. 단축키의 순서입니다.
 fn hull_skills<'a>(welcome: &'a Welcome, me: &MyShip) -> &'a [u16] {
     let hull = welcome.hulls.get(usize::from(me.hull));
     hull.map_or(&[], |hull| hull.skills.as_slice())
-}
-
-fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
-    let hull = welcome.hulls.get(usize::from(me.hull));
-    let hull_name = hull.map_or("?", |hull| hull.name.as_str());
-    let mut lines = format!(
-        "{hull_name}   Level {} (xp {})   Skill points {}",
-        me.level, me.xp, me.skill_points
-    );
-    lines += "\nSkills:";
-    for (&id, (_, key)) in hull_skills(welcome, me).iter().zip(SKILL_KEYS) {
-        let index = usize::from(id);
-        let (Some(spec), Some(skill)) = (welcome.skills.get(index), me.skills.get(index)) else {
-            continue;
-        };
-        lines += &format!("  [{key}] {} {}/{}", spec.name, skill.rank, spec.max_rank);
-        if skill.rank > 0 && skill.ready_secs > 0.0 {
-            lines += &format!(" ({:.0}s)", skill.ready_secs.ceil());
-        }
-    }
-    lines += "\nB: shop (click a row to buy)   Shift+key: learn skill   Number: use a supply";
-    lines += "\nMount: click to use a supply, right-click to sell   Tab: scores";
-    if let Some(refusal) = me.refusal {
-        lines += &format!("\nRefused: {}", refusal_text(refusal));
-    }
-    lines
 }
 
 fn refusal_text(refusal: WireRefusal) -> &'static str {

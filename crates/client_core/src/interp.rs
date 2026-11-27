@@ -30,6 +30,8 @@ pub struct Frame {
     pub blasts: Vec<BlastView>,
     /// 방에 있는 모든 배의 점수입니다.
     pub scores: Vec<WireScore>,
+    /// 대전이 시작한 뒤 지난 시간(초)입니다.
+    pub secs: f32,
     /// 이 접속이 조종하는 배의 상태입니다.
     pub me: Option<MyShip>,
     pub outcome: Option<WireOutcome>,
@@ -39,6 +41,8 @@ pub struct Frame {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MyShip {
     pub gold: u32,
+    pub hp: u32,
+    pub max_hp: u32,
     /// 가라앉아 있으면, 다시 나타날 때까지 남은 시간(초)입니다.
     pub respawn_secs: Option<f32>,
     /// `Welcome::hulls`의 자리입니다.
@@ -362,6 +366,8 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         };
         Some(MyShip {
             gold: own.gold,
+            hp: ship.hp,
+            max_hp: ship.max_hp,
             respawn_secs: ship.respawn_at.map(secs_until),
             hull: ship.hull,
             level: ship.level,
@@ -394,6 +400,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         shots,
         blasts,
         scores: next.scores.clone(),
+        secs: tick / welcome.tick_hz.max(1) as f32,
         me,
         outcome: next.outcome,
     }

@@ -221,12 +221,13 @@ pub fn setup(
         StatusText,
         Text::new(""),
         TextFont {
-            font_size: FontSize::Px(16.0),
+            font_size: FontSize::Px(13.0),
             ..default()
         },
+        TextColor(Color::srgb(0.75, 0.8, 0.85)),
         Node {
             position_type: PositionType::Absolute,
-            top: px(10),
+            top: px(36),
             left: px(10),
             ..default()
         },
@@ -610,7 +611,7 @@ pub fn show_scores(
     }
 }
 
-/// 방 안에서 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과, 방에 있는 사람의 이름을 화면 왼쪽 위에 글자로 보여 줍니다.
+/// 접속 상태를 화면 왼쪽 위에 글자로 보여 줍니다. 방 안에서는 조작의 안내(또는 다시 나타날 때까지 남은 시간)입니다.
 pub fn show_status(
     net: Option<NonSend<Net>>,
     frame: Res<CurrentFrame>,
@@ -626,31 +627,13 @@ fn status_line(net: &Net, frame: Option<&Frame>) -> String {
     match (net.session.phase(), net.session.welcome()) {
         (Phase::Connecting, _) => "Connecting...".to_string(),
         (Phase::Joining, _) => "Joining...".to_string(),
-        (Phase::Playing, Some(welcome)) => {
-            let mut line = format!("Room {}   Team {:?}", welcome.room, welcome.team);
-            if let Some(frame) = frame {
-                let me = frame.me.as_ref();
-                line += &format!("   Gold {}", me.map_or(0, |me| me.gold));
-                line += &match (frame.outcome, me.and_then(|me| me.respawn_secs)) {
-                    (Some(WireOutcome::Victory(winner)), _) if winner == welcome.team => {
-                        "   VICTORY".to_string()
-                    }
-                    (Some(WireOutcome::Victory(_)), _) => "   DEFEAT".to_string(),
-                    (Some(WireOutcome::Draw), _) => "   DRAW".to_string(),
-                    (None, Some(secs)) => format!("   Sunk: back in {secs:.0}s"),
-                    (None, None) => {
-                        "   Right-click: sail   Arrows: view   Space: my ship   Esc: leave"
-                            .to_string()
-                    }
-                };
+        (Phase::Playing, Some(_)) => {
+            // 첫째 줄은 조작의 안내이고, 배가 가라앉아 있는 동안에는 다시 나타날 때까지 남은 시간입니다.
+            let respawn = frame.and_then(|frame| frame.me.as_ref()?.respawn_secs);
+            match respawn {
+                Some(secs) => format!("Sunk: back in {secs:.0}s"),
+                None => "Right-click: sail   Arrows: view   Space: my ship   B: shop   1-6: use a supply   Tab: scores   Esc: leave".to_string(),
             }
-            // 둘째 줄은 방에 있는 사람의 이름입니다. 접속이 끊긴 사람에는 표시를 붙입니다.
-            let names = net.session.roster().iter().map(|member| {
-                let away = if member.connected { "" } else { " (away)" };
-                format!("{}{away}", member.name)
-            });
-            line += &format!("\nCaptains: {}", names.collect::<Vec<_>>().join(", "));
-            line
         }
         (Phase::Reconnecting, _) => "Connection lost. Reconnecting...".to_string(),
         (Phase::Playing, None) => String::new(),

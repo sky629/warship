@@ -16,6 +16,7 @@ use warship_protocol::{
 use warship_rules::Vec2;
 
 use crate::{BlastView, MountView, Phase, Session, SkillView, mount_views, score_lines, shop_list};
+use crate::{HudView, SkillSlot, TopBar, hud_view, top_bar};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -43,6 +44,7 @@ fn welcome() -> Welcome {
         ship: ME,
         team: WireTeam::Red,
         tick_hz: 20,
+        level_xp: vec![100, 300],
         map_width: 40.0,
         map_height: 40.0,
         hulls: vec![
@@ -853,4 +855,85 @@ fn a_bomb_flies_in_an_arc_to_the_place_it_was_aimed_at() {
             age: 0.25,
         }]
     );
+}
+
+#[test]
+fn the_ship_panel_shows_hp_the_xp_of_this_level_and_the_skill_slots() {
+    // 2레벨의 배가 경험치 150을 가지고 있습니다. 2레벨은 100에서, 3레벨은 300에서 시작합니다.
+    // 스킬은 2단계 가운데 1단계이고, 쿨다운 5초 가운데 2초가 남았습니다.
+    let mut session = playing();
+    let mut me = ship(ME, 10.0);
+    me.level = 2;
+    let own = me.own.as_mut().unwrap();
+    own.xp = 150;
+    own.skills[0] = WireSkill {
+        rank: 1,
+        ready_at: 60,
+    };
+    receive(&mut session, 1.0, snapshot(20, vec![me]));
+    let frame = session.frame(1.15).unwrap();
+
+    let view = hud_view(session.welcome().unwrap(), frame.me.as_ref().unwrap());
+
+    let slot = SkillSlot {
+        key: 'Q',
+        name: "skill".to_string(),
+        rank: 1,
+        max_rank: 2,
+        ready_secs: 2.0,
+        wait: 0.4,
+        learnable: true,
+    };
+    let expected = HudView {
+        hull: "small".to_string(),
+        level: 2,
+        skill_points: 1,
+        hp: 500,
+        max_hp: 1000,
+        xp: Some((50, 200)),
+        skills: vec![slot],
+    };
+    assert_eq!(view, expected);
+    assert_eq!((view.hp_share(), view.xp_share()), (0.5, 0.25));
+}
+
+#[test]
+fn the_ship_panel_has_a_full_xp_bar_at_the_highest_level() {
+    let mut session = playing();
+    let mut me = ship(ME, 10.0);
+    me.level = 3;
+    me.own.as_mut().unwrap().xp = 900;
+    receive(&mut session, 1.0, snapshot(20, vec![me]));
+    let frame = session.frame(1.15).unwrap();
+
+    let view = hud_view(session.welcome().unwrap(), frame.me.as_ref().unwrap());
+
+    assert_eq!(view.xp, None);
+    assert_eq!(view.xp_share(), 1.0);
+}
+
+#[test]
+fn the_top_bar_shows_the_clock_and_the_kills_of_each_team() {
+    let score = |ship, team, kills| WireScore {
+        ship,
+        team,
+        level: 1,
+        kills,
+        deaths: 0,
+        creep_kills: 0,
+    };
+    let scores = [
+        score(1, WireTeam::Red, 2),
+        score(2, WireTeam::Blue, 5),
+        score(3, WireTeam::Red, 1),
+    ];
+
+    let bar = top_bar(754.9, &scores);
+
+    let expected = TopBar {
+        clock: "12:34".to_string(),
+        red_kills: 3,
+        blue_kills: 5,
+    };
+    assert_eq!(bar, expected);
 }
