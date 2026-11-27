@@ -1,1 +1,221 @@
-//! 빈자리를 채우는 봇입니다. 자기 진영에 보이는 상태만 읽고, 사람과 같은 입력을 만듭니다.
+//! 빈자리를 채우는 봇입니다. 자기 진영에 보이는 상태만 읽고, 사람과 같은 입력(이동 지점과 명령)을 만듭니다.
+//!
+//! 봇은 기억을 가지지 않습니다. `plan`은 지금의 방 상태만 보고 결정하므로, 같은 상태에서는 항상 같은 계획이 나옵니다.
+//!
+//! 봇이 하는 일은 네 가지입니다.
+//! - 스킬 포인트가 있으면 단계가 가장 낮은 스킬에 넣습니다.
+//! - 사고 싶은 것(빈 칸에 달 무기, 칸이 다 찼으면 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
+//! - HP가 적으면 상점으로 돌아가서 수리를 받습니다.
+//! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 라인의 입구에서 기다립니다.
+
+use warship_rules::{
+    Command, HullId, Ship, ShipId, Sim, SkillEffect, SkillId, StructureKind, Target, Team, Tuning,
+    Vec2, WeaponId,
+};
+
+/// HP가 최대 HP의 이 백분율보다 적으면 상점으로 돌아갑니다.
+const RETREAT_PERCENT: u32 = 35;
+/// 상점에 있는 동안 HP가 이 백분율이 될 때까지 떠나지 않습니다.
+const REJOIN_PERCENT: u32 = 90;
+/// HP가 이 백분율보다 적으면 수리 스킬을 씁니다.
+const REPAIR_PERCENT: u32 = 60;
+
+/// 봇이 이번에 하려는 일입니다.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Plan {
+    /// 배가 향할 지점입니다. 없으면 멈춥니다.
+    pub destination: Option<Vec2>,
+    pub commands: Vec<Command>,
+}
+
+/// `id` 배의 계획입니다. 방에 없는 배의 계획은 비어 있습니다.
+pub fn plan(sim: &Sim, id: ShipId) -> Plan {
+    let Some(ship) = sim.ship(id) else {
+        return Plan::default();
+    };
+    let tuning = sim.tuning();
+    let mut commands = Vec::new();
+    if ship.skill_points(tuning) > 0 {
+        let ranks = ship.skills.iter().zip(&tuning.skills).enumerate();
+        let lowest = ranks
+            .filter(|(_, (state, spec))| state.rank < spec.max_rank)
+            .min_by_key(|(_, (state, _))| state.rank);
+        if let Some((index, _)) = lowest {
+            commands.push(Command::Learn(SkillId(index as u16)));
+        }
+    }
+    if !ship.is_afloat() {
+        return Plan {
+            destination: None,
+            commands,
+        };
+    }
+
+    let max_hp = tuning.hull(ship.hull).max_hp;
+    let below = |percent: u32| ship.hp * 100 < max_hp * percent;
+    let docked = sim.at_shop(id);
+    let hurt = below(RETREAT_PERCENT) || (docked && below(REJOIN_PERCENT));
+    let purchase = wish(ship, tuning).filter(|(_, cost)| ship.gold >= *cost);
+    if docked && let Some((command, _)) = purchase {
+        commands.push(command);
+    }
+    for (index, (state, spec)) in ship.skills.iter().zip(&tuning.skills).enumerate() {
+        let useful = match spec.effect {
+            SkillEffect::Repair { .. } => below(REPAIR_PERCENT),
+            SkillEffect::Salvo { radius, .. } => enemy_within(sim, ship, radius),
+            SkillEffect::Sprint { .. } => hurt,
+        };
+        if useful && state.rank > 0 && state.ready_at <= sim.tick() {
+            commands.push(Command::Cast(SkillId(index as u16)));
+        }
+    }
+    let destination = if hurt || purchase.is_some() {
+        nearest_shop(sim, ship)
+    } else {
+        front(sim, ship)
+    };
+    Plan {
+        destination,
+        commands,
+    }
+}
+
+/// 봇이 다음에 사려는 것과 그 값입니다. 빈 칸이 있으면 무기이고, 칸이 다 찼으면 다음 선체입니다. 더 살 것이 없으면 없습니다.
+/// 무기는 달린 무기의 수에 따라 표를 돌아가며 골라서, 여러 종류를 섞어 답니다.
+fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
+    let hull = tuning.hull(ship.hull);
+    let carried = ship.mounts.iter().flatten().count();
+    if carried < hull.mounts && !tuning.weapons.is_empty() {
+        let index = carried % tuning.weapons.len();
+        let weapon = WeaponId(index as u16);
+        return Some((Command::Buy(weapon), tuning.weapons[index].price));
+    }
+    let next = HullId(ship.hull.0 + 1);
+    let spec = tuning.hulls.get(usize::from(next.0))?;
+    let refund = u64::from(hull.price) * u64::from(tuning.shop.refund_percent) / 100;
+    let cost = spec.price.saturating_sub(refund as u32);
+    Some((Command::ChangeHull(next), cost))
+}
+
+/// 배의 진영에 보이는 적의 배나 NPC 배가 `radius` 안에 있는지입니다.
+fn enemy_within(sim: &Sim, ship: &Ship, radius: f32) -> bool {
+    let near = |pos: Vec2| pos.distance(ship.pos) <= radius;
+    let hostile = |team: Team| team.is_hostile_to(ship.team);
+    let ships = sim.ships().any(|other| {
+        hostile(other.team)
+            && other.is_afloat()
+            && near(other.pos)
+            && sim.sees(ship.team, Target::Ship(other.id))
+    });
+    let mut creeps = sim.creeps();
+    ships
+        || creeps.any(|creep| {
+            hostile(creep.team) && near(creep.pos) && sim.sees(ship.team, Target::Creep(creep.id))
+        })
+}
+
+/// 배에서 가장 가까운 상점(자기 진영의 서 있는 본진이나 항구)의 자리입니다.
+fn nearest_shop(sim: &Sim, ship: &Ship) -> Option<Vec2> {
+    let shops = sim
+        .structures()
+        .filter(|site| site.team == ship.team && site.kind != StructureKind::Tower);
+    let nearest = shops.min_by(|a, b| {
+        let (a, b) = (a.pos.distance(ship.pos), b.pos.distance(ship.pos));
+        a.total_cmp(&b)
+    });
+    nearest.map(|site| site.pos)
+}
+
+/// 배가 싸우러 갈 자리입니다. 맡은 라인에서 적의 본진에 가장 가까운 아군 NPC 배의 자리이고,
+/// 아군 NPC 배가 없으면 라인의 입구입니다. 라인이 없는 맵이면 없습니다.
+fn front(sim: &Sim, ship: &Ship) -> Option<Vec2> {
+    let map = &sim.tuning().map;
+    if map.lanes.is_empty() {
+        return None;
+    }
+    let lane = ship.id.0 as usize % map.lanes.len();
+    let entry = map.path_point(ship.team, lane, 0)?;
+    let goal = map.base_of(ship.team.enemy()).unwrap_or(entry);
+    let mine = sim
+        .creeps()
+        .filter(|creep| creep.team == ship.team && creep.lane == lane);
+    let leader = mine.min_by(|a, b| {
+        let (a, b) = (a.pos.distance(goal), b.pos.distance(goal));
+        a.total_cmp(&b)
+    });
+    Some(leader.map_or(entry, |creep| creep.pos))
+}
+
+#[cfg(test)]
+mod tests {
+    use warship_rules::{Outcome, PlayerInput, PlayerInputs, Waypoint};
+
+    use super::*;
+
+    /// 봇이 이 Tick 수마다 한 번 계획을 세웁니다.
+    const THINK_TICKS: u64 = 10;
+
+    /// 기본 수치의 방에 진영마다 배 다섯 척을 넣습니다. 번호가 홀수인 배가 붉은 진영입니다.
+    fn full_room() -> (Sim, Vec<ShipId>) {
+        let mut sim = Sim::new(Tuning::default());
+        let ships = (0..10).map(|_| sim.join().expect("the room has a free seat"));
+        let ships = ships.collect();
+        (sim, ships)
+    }
+
+    /// `bots`의 배를 봇이 조종하면서 대전이 끝나거나 `ticks`가 지날 때까지 진행합니다. 나머지 배는 가만히 있습니다.
+    fn play(sim: &mut Sim, bots: &[ShipId], ticks: u64) {
+        let mut seq = 0;
+        for _ in 0..ticks {
+            let mut inputs = PlayerInputs::new();
+            if sim.tick().is_multiple_of(THINK_TICKS) {
+                for &id in bots {
+                    let plan = plan(sim, id);
+                    seq += 1;
+                    let destination = plan.destination.and_then(|p| Waypoint::new(p.x, p.y));
+                    inputs.insert(id, PlayerInput { seq, destination });
+                    for command in plan.commands {
+                        seq += 1;
+                        sim.command(id, seq, command);
+                    }
+                }
+            }
+            sim.step(&inputs);
+            if sim.outcome().is_some() {
+                return;
+            }
+        }
+    }
+
+    #[test]
+    fn a_team_of_bots_beats_a_team_that_does_nothing() {
+        let (mut sim, ships) = full_room();
+        let red: Vec<ShipId> = ships.iter().copied().step_by(2).collect();
+
+        // 1초는 20Tick이고, 40분 안에 끝나야 합니다.
+        play(&mut sim, &red, 48_000);
+
+        assert_eq!(sim.outcome(), Some(Outcome::Victory(Team::RED)));
+    }
+
+    #[test]
+    fn a_bot_learns_skills_and_spends_its_gold_at_the_shop() {
+        let (mut sim, ships) = full_room();
+
+        play(&mut sim, &ships, 6_000);
+
+        for id in ships {
+            let ship = sim.ship(id).expect("the ship is in the room");
+            let weapons = ship.mounts.iter().flatten().count();
+            assert!(weapons >= 2, "ship {id:?} carries {weapons} weapon(s)");
+            assert_eq!(ship.skill_points(sim.tuning()), 0);
+            assert_eq!(ship.refusal, None, "ship {id:?}");
+        }
+    }
+
+    #[test]
+    fn a_plan_for_a_ship_that_is_not_in_the_room_is_empty() {
+        let (sim, _) = full_room();
+        assert_eq!(plan(&sim, ShipId(99)), Plan::default());
+    }
+}

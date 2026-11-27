@@ -1,4 +1,4 @@
-//! 상점입니다. 자기 진영의 서 있는 본진과 항구 가까이에 떠 있는 배가 무기를 사고팔고 선체를 바꿉니다.
+//! 상점입니다. 자기 진영의 서 있는 본진과 항구 가까이에 떠 있는 배가 무기를 사고팔고 선체를 바꾸고, 수리를 받습니다.
 
 use crate::command::Refusal;
 use crate::ids::{HullId, ShipId, WeaponId};
@@ -6,6 +6,36 @@ use crate::ship::{Mount, Ship};
 use crate::structures::StructureKind;
 use crate::tuning::Tuning;
 use crate::world::World;
+
+/// 배가 자기 진영의 서 있는 본진이나 항구에서 상점 거리 안에 있는지입니다.
+pub(crate) fn at_shop(world: &World, tuning: &Tuning, ship: &Ship) -> bool {
+    world.structures.values().any(|site| {
+        site.kind != StructureKind::Tower
+            && site.hp > 0
+            && site.team == ship.team
+            && site.pos.distance(ship.pos) <= tuning.shop.range
+    })
+}
+
+/// 상점에 떠 있는 배를 1초에 한 번 수리합니다.
+pub(crate) fn repair(world: &mut World, tuning: &Tuning, tick: u64) {
+    if !tick.is_multiple_of(u64::from(tuning.tick_hz)) {
+        return;
+    }
+    let docked = |ship: &&Ship| ship.is_afloat() && at_shop(world, tuning, ship);
+    let docked: Vec<ShipId> = world
+        .ships
+        .values()
+        .filter(docked)
+        .map(|ship| ship.id)
+        .collect();
+    for id in docked {
+        if let Some(ship) = world.ships.get_mut(&id) {
+            let max_hp = tuning.hull(ship.hull).max_hp;
+            ship.hp = (ship.hp + tuning.shop.repair_per_sec).min(max_hp);
+        }
+    }
+}
 
 /// 상점을 쓸 수 있는 배를 돌려줍니다. 가라앉은 배와 상점에서 먼 배는 거절합니다.
 fn customer<'a>(
@@ -17,13 +47,7 @@ fn customer<'a>(
     if !ship.is_afloat() {
         return Err(Refusal::Sunk);
     }
-    let sells_here = world.structures.values().any(|site| {
-        site.kind != StructureKind::Tower
-            && site.hp > 0
-            && site.team == ship.team
-            && site.pos.distance(ship.pos) <= tuning.shop.range
-    });
-    if !sells_here {
+    if !at_shop(world, tuning, ship) {
         return Err(Refusal::NoShopInRange);
     }
     world.ships.get_mut(&id).ok_or(Refusal::Sunk)

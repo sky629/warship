@@ -64,6 +64,8 @@ pub struct ShopTuning {
     pub range: f32,
     /// 무기를 팔거나 선체를 바꿀 때 돌려받는, 가격에 대한 백분율입니다.
     pub refund_percent: u32,
+    /// 상점에 떠 있는 배가 1초마다 회복하는 HP입니다.
+    pub repair_per_sec: u32,
 }
 
 /// 레벨에 관한 수치입니다.
@@ -491,6 +493,7 @@ impl Default for Tuning {
             shop: ShopTuning {
                 range: 5.0,
                 refund_percent: 50,
+                repair_per_sec: 25,
             },
             growth: GrowthTuning {
                 level_xp: vec![100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200],

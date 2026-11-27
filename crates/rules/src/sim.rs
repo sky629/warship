@@ -6,6 +6,7 @@ use crate::economy;
 use crate::ids::{CreepId, ShipId, StructureId, Team};
 use crate::input::PlayerInputs;
 use crate::ship::{self, Ship};
+use crate::shop;
 use crate::structures::{self, Structure};
 use crate::tuning::Tuning;
 use crate::vision::{self, Sight};
@@ -104,7 +105,7 @@ impl Sim {
     /// Tick 하나를 실행합니다. 대전이 끝난 뒤에는 아무 일도 하지 않습니다.
     ///
     /// 가라앉았던 배가 다시 나타나고, 항구가 NPC 배를 내보내고, 배와 NPC 배가 움직이고, 진영별 시야를 정하고,
-    /// 쏠 수 있는 무기가 쏘고, 닿을 때가 된 포탄이 피해를 주고, 보상과 수입을 주고, 사라진 것을 지우고, 승패를 판정합니다.
+    /// 쏠 수 있는 무기가 쏘고, 닿을 때가 된 포탄이 피해를 주고, 보상과 수입을 주고, 상점의 배를 수리하고, 사라진 것을 지우고, 승패를 판정합니다.
     /// 무기는 이번 Tick의 피해가 들어가기 전의 상태를 보고 쏘므로, 같은 Tick에 가라앉는 배도 그 Tick의 사격은 마칩니다.
     pub fn step(&mut self, inputs: &PlayerInputs) {
         if self.outcome.is_some() {
@@ -121,6 +122,7 @@ impl Sim {
         let kills = weapon::land_impacts(world, tuning, self.tick);
         economy::pay_bounties(world, tuning, &kills);
         economy::pay_income(world, tuning, self.tick);
+        shop::repair(world, tuning, self.tick);
         creep::remove_sunk(world);
         self.outcome = match structures::remove_destroyed(world).as_slice() {
             [] => None,
@@ -135,6 +137,12 @@ impl Sim {
         if self.outcome.is_none() {
             command::apply(&mut self.world, &self.tuning, self.tick, ship, seq, command);
         }
+    }
+
+    /// 이 배가 상점(자기 진영의 서 있는 본진이나 항구 가까이)에 있는지입니다. 없는 배는 `false`입니다.
+    pub fn at_shop(&self, ship: ShipId) -> bool {
+        let ship = self.world.ships.get(&ship);
+        ship.is_some_and(|ship| shop::at_shop(&self.world, &self.tuning, ship))
     }
 
     /// 마지막 Tick에 `team`이 이 적을 보았는지입니다. 진영별 스냅샷은 보인 적만 싣습니다.

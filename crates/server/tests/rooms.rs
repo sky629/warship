@@ -9,8 +9,8 @@ use warship_protocol::{
     LoopbackConnector, PROTOCOL_VERSION, RejectReason, ServerLimits, ServerMsg, Snapshot, Welcome,
     WireCommand, WireRefusal, WireTeam, WireVec2, loopback,
 };
-use warship_rules::{Tuning, Vec2};
-use warship_server::{GameServer, Notice};
+use warship_rules::{Command, ShipId, Sim, SkillId, Tuning, Vec2, Waypoint};
+use warship_server::{GameServer, Notice, Orders, Pilot};
 
 struct Bench {
     server: GameServer,
@@ -30,6 +30,13 @@ impl Bench {
             now,
             notices: Vec::new(),
         }
+    }
+
+    /// 빈자리를 `Drifter`가 조종하는 배로 채우는 서버입니다.
+    fn with_bots(tuning: Tuning) -> Bench {
+        let mut bench = Bench::new(tuning);
+        bench.server = bench.server.with_pilot(Box::new(Drifter));
+        bench
     }
 
     /// 접속을 열고 `room`에 입장 요청을 보냅니다.
@@ -95,6 +102,19 @@ impl Player {
             seq,
             destination: Some(WireVec2::new(x, y)),
         }));
+    }
+}
+
+/// 시험용 조종사입니다. 모든 배를 맵의 한가운데로 보내고, 0번 스킬을 배우게 합니다.
+struct Drifter;
+
+impl Pilot for Drifter {
+    fn steer(&mut self, sim: &Sim, _ship: ShipId) -> Orders {
+        let map = &sim.tuning().map;
+        Orders {
+            destination: Waypoint::new(map.width / 2.0, map.height / 2.0),
+            commands: vec![Command::Learn(SkillId(0))],
+        }
     }
 }
 
@@ -397,4 +417,47 @@ fn a_ship_buys_a_weapon_at_its_base_once_it_has_the_gold() {
     assert_eq!(weapons, [0, 0], "the start weapon and the bought one");
     let own = ship.own.expect("my ship");
     assert_eq!((own.gold, own.refusal), (0, None));
+}
+
+#[test]
+fn a_room_with_a_pilot_fills_every_seat_and_the_pilot_steers_the_spare_ships() {
+    let mut bench = Bench::with_bots(Tuning::default());
+    let mut kang = bench.join("test");
+    bench.run_ticks(1);
+    let me = kang.welcome().ship;
+
+    bench.run_ticks(40);
+
+    let ships = kang.last_snapshot().ships;
+    assert_eq!(ships.len(), 5, "my team of five, the far enemy is not seen");
+    for ship in ships {
+        let rank = ship.own.expect("my team").skills[0].rank;
+        if ship.id == me {
+            assert_eq!((ship.x, rank), (7.0, 0), "nobody steers my ship");
+        } else {
+            assert!(ship.x > 7.0, "ship {} sails to the middle", ship.id);
+            assert_eq!(rank, 1);
+        }
+    }
+}
+
+#[test]
+fn a_player_takes_a_spare_seat_and_gives_it_back_on_leaving() {
+    let mut bench = Bench::with_bots(Tuning::default());
+    let mut players: Vec<Player> = (0..10).map(|_| bench.join("test")).collect();
+    bench.run_ticks(1);
+    let teams: Vec<WireTeam> = players.iter_mut().map(|p| p.welcome().team).collect();
+    let reds = teams.iter().filter(|team| **team == WireTeam::Red).count();
+    assert_eq!(reds, 5, "the players are split evenly: {teams:?}");
+
+    let mut late = bench.join("test");
+    bench.run_ticks(1);
+    let reason = RejectReason::RoomFull { capacity: 10 };
+    assert_eq!(late.messages(), [ServerMsg::JoinRejected { reason }]);
+
+    let mut gone = players.remove(0);
+    gone.link.send(&ClientMsg::Leave);
+    bench.run_ticks(2);
+    let team_size = |player: &mut Player| player.last_snapshot().ships.len();
+    assert!(players.iter_mut().all(|player| team_size(player) >= 5));
 }

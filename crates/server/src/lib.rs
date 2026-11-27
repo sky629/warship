@@ -4,9 +4,10 @@
 //! 호출하는 쪽이 접속 방식과 현재 시각을 넘기고 `GameServer::pump`를 반복해서 호출합니다.
 //! 그래서 전용 서버 실행 파일과 테스트가 같은 코드를 실행합니다.
 //!
-//! 읽는 순서: `room`(방 하나), `clock`(Tick 일정), 이 파일.
+//! 읽는 순서: `room`(방 하나), `pilot`(빈자리의 배를 조종하는 쪽), `clock`(Tick 일정), 이 파일.
 
 mod clock;
+mod pilot;
 mod room;
 
 use std::collections::BTreeMap;
@@ -22,6 +23,8 @@ use warship_rules::{ShipId, Tuning};
 
 use clock::TickClock;
 use room::Room;
+
+pub use pilot::{Orders, Pilot};
 
 /// 서버에서 일어난 일 가운데 운영자에게 알릴 것입니다. 라이브러리는 직접 로그를 쓰지 않고, 이 값을 돌려줍니다.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +102,8 @@ pub struct GameServer {
     clock: TickClock,
     events_per_pump: usize,
     join_deadline: Duration,
+    /// 빈자리의 배를 조종하는 쪽입니다. 없으면 방에는 사람의 배만 있습니다.
+    pilot: Option<Box<dyn Pilot>>,
 }
 
 impl GameServer {
@@ -119,7 +124,14 @@ impl GameServer {
             waiting: BTreeMap::new(),
             events_per_pump: limits.events_per_pump,
             join_deadline: limits.join_deadline,
+            pilot: None,
         })
+    }
+
+    /// 방의 빈자리를 `pilot`이 조종하는 배로 채우게 합니다. 방을 만들기 전에 불러야 합니다.
+    pub fn with_pilot(mut self, pilot: Box<dyn Pilot>) -> GameServer {
+        self.pilot = Some(pilot);
+        self
     }
 
     /// 서버를 한 번 진행합니다. 기다리지 않습니다.
@@ -137,7 +149,7 @@ impl GameServer {
         self.close_late_links(now, &mut notices);
         for _ in 0..self.clock.due(now) {
             for room in self.rooms.values_mut() {
-                for (link, snapshot) in room.tick() {
+                for (link, snapshot) in room.tick(self.pilot.as_deref_mut()) {
                     self.transport.send(link, &ServerMsg::Snapshot(snapshot));
                 }
             }
@@ -218,7 +230,7 @@ impl GameServer {
             let code = RoomCode::parse(room).map_err(|_| RejectReason::BadRoomCode)?;
             let room = self.rooms.entry(code.clone()).or_insert_with(|| {
                 created = true;
-                Room::new(self.tuning.clone())
+                Room::new(self.tuning.clone(), self.pilot.is_some())
             });
             let (ship, welcome) = room.enter(link, &code)?;
             Ok((code, ship, welcome, room.members()))

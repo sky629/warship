@@ -166,3 +166,17 @@ fn a_command_with_a_sequence_number_already_handled_is_ignored() {
     assert_eq!(weapons(&s, ship)[..2], [Some(GUN), None]);
     assert_eq!(s.ship(ship).last_command_seq, 5);
 }
+
+#[test]
+fn a_ship_at_a_shop_is_repaired_every_second_up_to_its_hull_hp() {
+    let (mut s, docked) = customer();
+    let away = s.ship_at(Team::RED, 30.0, 30.0);
+    s.set_ship_hp(docked, 985);
+    s.set_ship_hp(away, 985);
+    assert!(s.sim.at_shop(docked) && !s.sim.at_shop(away));
+
+    s.run_ticks(20);
+    assert_eq!((s.ship(docked).hp, s.ship(away).hp), (995, 985));
+    s.run_ticks(20);
+    assert_eq!(s.ship(docked).hp, 1000);
+}
