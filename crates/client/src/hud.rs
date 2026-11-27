@@ -130,7 +130,7 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
 fn refusal_text(refusal: WireRefusal) -> &'static str {
     match refusal {
         WireRefusal::Sunk => "the ship is sunk",
-        WireRefusal::NoShopInRange => "go near your base, a harbor or a trade port",
+        WireRefusal::NoShopInRange => "go near your base, a harbor or a port",
         WireRefusal::UnknownItem => "there is no such item",
         WireRefusal::NotEnoughGold => "not enough gold",
         WireRefusal::NoFreeMount => "every mount is in use",
@@ -147,6 +147,7 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::NoBaseInRange => "go near your base",
         WireRefusal::NotUsable => "only a supply is used",
         WireRefusal::NotATrader => "only a trader hull trades",
+        WireRefusal::NotSoldHere => "this shop does not sell that; see the shop window for where",
         WireRefusal::NoHarbor => "your harbor on that lane is gone",
         WireRefusal::CarryingFreight => "sell the contract or cargo before leaving the trader hull",
     }

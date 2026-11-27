@@ -72,6 +72,8 @@ pub enum Refusal {
     NotATrader,
     /// 교역의 계약이나 화물을 단 채로는 교역선이 아닌 선체로 바꾸지 못합니다.
     CarryingFreight,
+    /// 가까이에 있는 상점이 팔지 않는 것입니다. 다른 상점에서 삽니다.
+    NotSoldHere,
     /// 그 라인에 자기 진영의 서 있는 항구가 없어서 용병이 나올 곳이 없습니다.
     NoHarbor,
 }

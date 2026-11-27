@@ -43,9 +43,9 @@ pub use ship::{Boost, Item, Life, MOUNTS, Mount, Ship, SkillState};
 pub use sim::{Outcome, RoomFull, Sim};
 pub use structures::{Structure, StructureKind};
 pub use tuning::{
-    ARMOR_CAP_PERCENT, CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits,
-    HullSpec, Island, MapSpec, Recipe, ShipTuning, ShopTuning, Shot, SkillEffect, SkillSpec,
-    StructureSite, StructureSpec, StructureTable, SupplyEffect, SupplySpec, TradeSpec, Tuning,
-    Wave, WeaponSpec,
+    ARMOR_CAP_PERCENT, Camp, CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning,
+    HireSpec, Hits, HullSpec, Island, MapSpec, Port, Recipe, ShipTuning, ShopTuning, Shot,
+    SkillEffect, SkillSpec, Stock, StructureSite, StructureSpec, StructureTable, SupplyEffect,
+    SupplySpec, TradeSpec, Tuning, Wave, WeaponSpec,
 };
 pub use weapon::Target;

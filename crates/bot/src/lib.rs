@@ -64,9 +64,9 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     let max_hp = ship.max_hp(tuning);
     let below = |percent: u32| ship.hp * 100 < max_hp * percent;
     let hurt = below(RETREAT_PERCENT) || (sim.at_dock(id) && below(REJOIN_PERCENT));
-    let wish = wish(ship, tuning, rank_in_team(sim, ship), sim.at_shop(id));
+    let wish = wish(ship, tuning, rank_in_team(sim, ship), sim.at_home(id));
     let purchase = wish.filter(|(_, cost)| ship.gold >= *cost);
-    if sim.at_shop(id)
+    if sim.at_home(id)
         && let Some((command, _)) = purchase
     {
         commands.push(command);
@@ -112,7 +112,7 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     }
 }
 
-/// 봇이 다음에 사려는 것과 그 값입니다. 다음 순서로 고릅니다. 더 살 것이 없으면 없습니다.
+/// 봇이 다음에 사려는 것과 그 값입니다. 봇은 자기 진영의 본진과 항구에서만 사므로, 그 상점이 파는 것 가운데에서 다음 순서로 고릅니다. 더 살 것이 없으면 없습니다.
 /// 1. 재료를 모두 단 조합이 있으면 조합합니다.
 /// 2. 칸이 넷 이상인 선체에서 빈 칸이 하나 남았고 소모품이 없으면, 상점에 있을 때 수리하는 소모품을 삽니다.
 /// 3. 빈 칸이 있으면 아이템을 삽니다. 칸 셋마다 둘은 무기, 하나는 장비입니다.
@@ -120,10 +120,13 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
 /// 4. 더 비싼 전투용 선체로 바꿉니다.
 fn wish(ship: &Ship, tuning: &Tuning, rank: usize, at_shop: bool) -> Option<(Command, u32)> {
     let hull = tuning.hull(ship.hull);
+    let stock = &tuning.home_stock;
     let mounted = || ship.mounts.iter().flatten();
     let carried: Vec<WeaponId> = mounted().filter_map(|mount| mount.weapon()).collect();
     let gear = mounted().filter_map(|mount| mount.gear()).count();
-    let ready = tuning.recipes.iter().position(|recipe| {
+    let ready = stock.recipes.iter().map(|id| usize::from(id.0));
+    let ready = ready.clone().find(|index| {
+        let recipe = &tuning.recipes[*index];
         let needed = |part: &WeaponId| recipe.parts.iter().filter(|p| *p == part).count();
         let held = |part: &WeaponId| carried.iter().filter(|w| *w == part).count();
         recipe.parts.iter().all(|part| held(part) >= needed(part))
@@ -132,17 +135,15 @@ fn wish(ship: &Ship, tuning: &Tuning, rank: usize, at_shop: bool) -> Option<(Com
         let recipe = RecipeId(index as u16);
         return Some((Command::Combine(recipe), tuning.recipes[index].price));
     }
-    let for_sale: Vec<usize> = (0..tuning.weapons.len())
-        .filter(|index| tuning.weapons[*index].buyable)
-        .collect();
+    let for_sale: Vec<usize> = stock.weapons.iter().map(|id| usize::from(id.0)).collect();
     let supplies = mounted().filter(|mount| matches!(mount.item, Item::Supply(_)));
     let supplies = supplies.count();
     let free = hull.mounts.saturating_sub(carried.len() + gear + supplies);
     // 칸이 넷 이상인 선체에서는 마지막 빈 칸을 수리하는 소모품에 씁니다.
-    let kit = tuning
-        .supplies
-        .iter()
-        .position(|supply| matches!(supply.effect, SupplyEffect::Repair { .. }));
+    let kit = stock.supplies.iter().map(|id| usize::from(id.0));
+    let kit = kit
+        .clone()
+        .find(|index| matches!(tuning.supplies[*index].effect, SupplyEffect::Repair { .. }));
     let reserved = free == 1 && supplies == 0 && hull.mounts >= KIT_MOUNTS;
     if let Some(index) = kit.filter(|_| reserved && at_shop) {
         return Some((
@@ -153,9 +154,9 @@ fn wish(ship: &Ship, tuning: &Tuning, rank: usize, at_shop: bool) -> Option<(Com
     // 소모품을 사러 상점까지 가지는 않습니다. 그 칸은 다음에 상점에 들를 때까지 비워 둡니다.
     let free = free > 0 && !(reserved && kit.is_some());
     // 무기 둘에 장비 하나의 비율을 넘지 않는 동안에는 장비를 삽니다.
-    let wants_gear = !tuning.gear.is_empty() && gear * 2 < carried.len();
+    let wants_gear = !stock.gear.is_empty() && gear * 2 < carried.len();
     if free && wants_gear {
-        let index = gear % tuning.gear.len();
+        let index = usize::from(stock.gear[gear % stock.gear.len()].0);
         return Some((
             Command::BuyGear(GearId(index as u16)),
             tuning.gear[index].price,
@@ -167,6 +168,9 @@ fn wish(ship: &Ship, tuning: &Tuning, rank: usize, at_shop: bool) -> Option<(Com
         return Some((Command::Buy(weapon), tuning.weapons[index].price));
     }
     // 지금 선체보다 비싼 전투용 선체 가운데 가장 싼 값의 선체로 바꿉니다. 그 값의 선체가 여럿이면 진영 안의 순서에 따라 다른 것을 골라서, 두 진영이 같은 구성이 됩니다.
+    if !stock.hulls {
+        return None;
+    }
     let fits =
         |spec: &&HullSpec| !spec.trader && spec.price > hull.price && spec.mounts >= hull.mounts;
     let price = tuning

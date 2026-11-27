@@ -49,7 +49,7 @@ pub(crate) fn haul(world: &mut World, tuning: &Tuning) {
                 Some(Item::Contract(trade)) => {
                     let port = tuning
                         .trade_of(trade)
-                        .map(|spec| tuning.map.ports[spec.port]);
+                        .map(|spec| tuning.map.ports[spec.port].pos);
                     if port.is_some_and(|port| port.distance(pos) <= tuning.shop.range) {
                         *slot = Some(Mount::new(Item::Cargo(trade)));
                     }

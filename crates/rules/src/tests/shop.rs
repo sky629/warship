@@ -174,8 +174,8 @@ fn a_ship_at_its_base_is_repaired_every_second_up_to_its_hull_hp_but_not_at_a_ha
     let docked = s.ship_at(Team::RED, 31.0, 30.0);
     s.set_ship_hp(docked, 985);
     s.set_ship_hp(at_harbor, 985);
-    assert!(s.sim.at_shop(at_harbor) && !s.sim.at_dock(at_harbor));
-    assert!(s.sim.at_shop(docked) && s.sim.at_dock(docked));
+    assert!(s.sim.at_home(at_harbor) && !s.sim.at_dock(at_harbor));
+    assert!(s.sim.at_home(docked) && s.sim.at_dock(docked));
 
     // 1초에 최대 HP 1000의 1%를 회복합니다.
     s.run_ticks(20);

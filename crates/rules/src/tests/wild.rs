@@ -1,10 +1,10 @@
 //! 중립 요소를 확인합니다. 중립 몬스터는 자리를 지키면서 두 진영 모두와 싸우고, 가라앉으면 정해진 시간 뒤에 다시 나옵니다.
-//! 교역항은 어느 진영의 배나 쓰는 상점입니다. 테스트의 교역항은 (30, 10)에 있습니다.
+//! 교역항은 어느 진영의 배나 쓰는 상점이고, 상점마다 파는 것이 다릅니다. 테스트의 교역항은 (30, 10)에 있고 `GUN`과 용병만 팝니다. 파는 일은 어느 상점에서나 합니다.
 //! 용병은 100골드에 0번 NPC 배 두 척이고, 고른 라인의 자기 진영 항구에서 나옵니다.
 //! 라인은 (5, 10)에서 (35, 10)까지 하나입니다.
 //! 중립 몬스터의 자리는 (20, 20)이고, 몬스터는 0번 NPC 배(HP 100, 보상 20)입니다. 수입은 없습니다.
 
-use super::support::{GUN, Scenario};
+use super::support::{GUN, LONG_GUN, Scenario};
 use crate::command::{Command, Refusal};
 use crate::ids::Team;
 use crate::math::Vec2;
@@ -60,7 +60,7 @@ fn a_sunk_monster_pays_its_bounty_and_comes_back_after_a_while() {
 }
 
 #[test]
-fn a_ship_of_either_team_buys_at_a_trade_port() {
+fn a_ship_of_either_team_buys_what_a_trade_port_sells() {
     for team in Team::ALL {
         let mut s = camp(1000);
         let near = s.ship_at(team, 31.0, 10.0);
@@ -73,6 +73,12 @@ fn a_ship_of_either_team_buys_at_a_trade_port() {
             s.command(far, Command::Buy(GUN)),
             Some(Refusal::NoShopInRange)
         );
+        // 교역항은 `GUN`만 팝니다. 다른 무기는 본진에서 삽니다.
+        assert_eq!(
+            s.command(near, Command::Buy(LONG_GUN)),
+            Some(Refusal::NotSoldHere)
+        );
+        assert_eq!(s.command(near, Command::Sell { slot: 0 }), None);
     }
 }
 

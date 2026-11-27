@@ -1,6 +1,7 @@
 //! 입장할 때 한 번 보내는, 접속 중에 바뀌지 않는 정보입니다.
 
 use serde::{Deserialize, Serialize};
+use warship_rules::Stock;
 use warship_rules::{
     GearEffect, HullSpec, ShipId, Shot, Sim, StructureKind, StructureSpec, SupplyEffect, WeaponSpec,
 };
@@ -33,6 +34,8 @@ pub struct Welcome {
     pub trades: Vec<WireTrade>,
     /// 상점에서 고용하는 용병입니다.
     pub hire: WireHire,
+    /// 상점마다 파는 것입니다. 첫 번째는 자기 진영의 본진과 항구이고, 그 뒤는 `ports`의 순서입니다.
+    pub shops: Vec<WireShop>,
     /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서이고, 선체마다 이 가운데 일부를 씁니다.
     pub skills: Vec<WireSkillSpec>,
     pub tower: WireStructureSpec,
@@ -44,7 +47,7 @@ pub struct Welcome {
     pub lanes: Vec<Vec<WireVec2>>,
     /// 배가 지나가지 못하는 섬입니다.
     pub islands: Vec<WireIsland>,
-    /// 교역항의 자리입니다.
+    /// 어느 진영의 것도 아닌 항구의 자리입니다.
     pub ports: Vec<WireVec2>,
 }
 
@@ -101,6 +104,34 @@ pub struct WireSupply {
     pub name: String,
     pub price: u32,
     pub effect: String,
+}
+
+/// 상점 하나가 파는 것입니다. 번호는 `Welcome`의 무기, 장비, 소모품, 조합 목록의 자리입니다.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireShop {
+    pub name: String,
+    pub weapons: Vec<u16>,
+    pub gear: Vec<u16>,
+    pub supplies: Vec<u16>,
+    pub recipes: Vec<u16>,
+    /// 선체를 바꾸어 주는지입니다.
+    pub hulls: bool,
+    /// 용병을 고용해 주는지입니다.
+    pub hire: bool,
+}
+
+impl WireShop {
+    fn new(name: &str, stock: &Stock) -> WireShop {
+        WireShop {
+            name: name.to_string(),
+            weapons: stock.weapons.iter().map(|id| id.0).collect(),
+            gear: stock.gear.iter().map(|id| id.0).collect(),
+            supplies: stock.supplies.iter().map(|id| id.0).collect(),
+            recipes: stock.recipes.iter().map(|id| id.0).collect(),
+            hulls: stock.hulls,
+            hire: stock.hire,
+        }
+    }
 }
 
 /// 용병의 고용입니다. `creep`은 `Welcome::creeps`의 자리이고, 그 NPC 배 `count`척이 고른 라인의 항구에서 나옵니다.
@@ -331,11 +362,20 @@ impl Welcome {
                 creep: tuning.hire.creep as u16,
                 count: tuning.hire.count,
             },
+            shops: std::iter::once(WireShop::new("Base and harbors", &tuning.home_stock))
+                .chain(
+                    tuning
+                        .map
+                        .ports
+                        .iter()
+                        .map(|port| WireShop::new(port.name, &port.stock)),
+                )
+                .collect(),
             ports: tuning
                 .map
                 .ports
                 .iter()
-                .map(|port| WireVec2::new(port.x, port.y))
+                .map(|port| WireVec2::new(port.pos.x, port.pos.y))
                 .collect(),
             tower: structure(StructureKind::Tower),
             harbor: structure(StructureKind::Harbor),

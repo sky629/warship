@@ -2,20 +2,54 @@
 
 use crate::command::Refusal;
 use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, SupplyId, WeaponId};
-use crate::math::Vec2;
 use crate::ship::{Boost, Item, Mount, Ship};
 use crate::structures::StructureKind;
 use crate::trade;
-use crate::tuning::{SupplyEffect, Tuning};
+use crate::tuning::{Stock, SupplyEffect, Tuning};
 use crate::world::World;
 
-/// 배가 상점 거리 안에 있는지입니다. 자기 진영의 서 있는 본진과 항구, 그리고 어느 진영의 배나 쓰는 교역항이 상점입니다.
-pub(crate) fn at_shop(world: &World, tuning: &Tuning, ship: &Ship) -> bool {
-    let near = |pos: Vec2| pos.distance(ship.pos) <= tuning.shop.range;
-    let own = world.structures.values().any(|site| {
-        site.kind != StructureKind::Tower && site.hp > 0 && site.team == ship.team && near(site.pos)
-    });
-    own || tuning.map.ports.iter().any(|port| near(*port))
+/// 상점에서 사는 것 하나입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ware {
+    Weapon(WeaponId),
+    Gear(GearId),
+    Supply(SupplyId),
+    Recipe(RecipeId),
+    Hull,
+    Hire,
+}
+
+impl Stock {
+    fn sells(&self, ware: Ware) -> bool {
+        match ware {
+            Ware::Weapon(id) => self.weapons.contains(&id),
+            Ware::Gear(id) => self.gear.contains(&id),
+            Ware::Supply(id) => self.supplies.contains(&id),
+            Ware::Recipe(id) => self.recipes.contains(&id),
+            Ware::Hull => self.hulls,
+            Ware::Hire => self.hire,
+        }
+    }
+}
+
+/// 배가 자기 진영의 서 있는 본진이나 항구에서 상점 거리 안에 있는지입니다.
+pub(crate) fn at_home(world: &World, tuning: &Tuning, ship: &Ship) -> bool {
+    world.structures.values().any(|site| {
+        site.kind != StructureKind::Tower
+            && site.hp > 0
+            && site.team == ship.team
+            && site.pos.distance(ship.pos) <= tuning.shop.range
+    })
+}
+
+/// 배가 상점 거리 안에 있는 상점들이 파는 것입니다. 자기 진영의 서 있는 본진과 항구, 그리고 어느 진영의 것도 아닌 항구가 상점입니다.
+fn stocks_near<'a>(world: &World, tuning: &'a Tuning, ship: &Ship) -> Vec<&'a Stock> {
+    let home = at_home(world, tuning, ship).then_some(&tuning.home_stock);
+    let ports = tuning.map.ports.iter();
+    let ports = ports.filter(|port| port.pos.distance(ship.pos) <= tuning.shop.range);
+    home.into_iter()
+        .chain(ports.map(|port| &port.stock))
+        .collect()
 }
 
 /// 배가 자기 진영의 서 있는 본진에서 상점 거리 안에 있는지입니다. 여기에 떠 있는 배가 수리를 받습니다.
@@ -60,8 +94,24 @@ pub(crate) fn customer<'a>(
     if !ship.is_afloat() {
         return Err(Refusal::Sunk);
     }
-    if !at_shop(world, tuning, ship) {
+    if stocks_near(world, tuning, ship).is_empty() {
         return Err(Refusal::NoShopInRange);
+    }
+    world.ships.get_mut(&id).ok_or(Refusal::Sunk)
+}
+
+/// `ware`를 살 수 있는 배를 돌려줍니다. 상점을 쓸 수 없는 배와, 가까이에 있는 상점이 `ware`를 팔지 않는 배는 거절합니다.
+fn buyer<'a>(
+    world: &'a mut World,
+    tuning: &Tuning,
+    id: ShipId,
+    ware: Ware,
+) -> Result<&'a mut Ship, Refusal> {
+    customer(world, tuning, id)?;
+    let ship = world.ships.get(&id).ok_or(Refusal::Sunk)?;
+    let stocks = stocks_near(world, tuning, ship);
+    if !stocks.iter().any(|stock| stock.sells(ware)) {
+        return Err(Refusal::NotSoldHere);
     }
     world.ships.get_mut(&id).ok_or(Refusal::Sunk)
 }
@@ -81,7 +131,7 @@ pub(crate) fn buy(
     if !spec.buyable {
         return Err(Refusal::NotForSale);
     }
-    let ship = customer(world, tuning, id)?;
+    let ship = buyer(world, tuning, id, Ware::Weapon(weapon))?;
     mount_bought(ship, tuning, Item::Weapon(weapon), spec.price)
 }
 
@@ -93,7 +143,7 @@ pub(crate) fn buy_gear(
     gear: GearId,
 ) -> Result<(), Refusal> {
     let spec = tuning.gear_of(gear).ok_or(Refusal::UnknownItem)?;
-    let ship = customer(world, tuning, id)?;
+    let ship = buyer(world, tuning, id, Ware::Gear(gear))?;
     let before = ship.max_hp(tuning);
     mount_bought(ship, tuning, Item::Gear(gear), spec.price)?;
     keep_hp_share(ship, tuning, before);
@@ -121,7 +171,7 @@ pub(crate) fn buy_supply(
     supply: SupplyId,
 ) -> Result<(), Refusal> {
     let spec = tuning.supply_of(supply).ok_or(Refusal::UnknownItem)?;
-    let ship = customer(world, tuning, id)?;
+    let ship = buyer(world, tuning, id, Ware::Supply(supply))?;
     mount_bought(ship, tuning, Item::Supply(supply), spec.price)
 }
 
@@ -209,9 +259,10 @@ pub(crate) fn combine(
     id: ShipId,
     recipe: RecipeId,
 ) -> Result<(), Refusal> {
-    let ship = customer(world, tuning, id)?;
-    let recipe = tuning.recipes.get(usize::from(recipe.0));
-    let recipe = recipe.ok_or(Refusal::UnknownItem)?;
+    let spec = tuning.recipes.get(usize::from(recipe.0));
+    let spec = spec.ok_or(Refusal::UnknownItem)?;
+    let ship = buyer(world, tuning, id, Ware::Recipe(recipe))?;
+    let recipe = spec;
     // 재료마다 아직 고르지 않은 칸 가운데 그 무기가 달린 칸을 고릅니다.
     let mut slots: Vec<usize> = Vec::new();
     for part in &recipe.parts {
@@ -243,7 +294,7 @@ pub(crate) fn change_hull(
     id: ShipId,
     hull: HullId,
 ) -> Result<(), Refusal> {
-    let ship = customer(world, tuning, id)?;
+    let ship = buyer(world, tuning, id, Ware::Hull)?;
     let new = tuning.hulls.get(usize::from(hull.0));
     let new = new.ok_or(Refusal::UnknownItem)?;
     if hull == ship.hull {
@@ -283,7 +334,7 @@ pub(crate) fn hire(
     if lane >= tuning.map.lanes.len() {
         return Err(Refusal::UnknownItem);
     }
-    let team = customer(world, tuning, id)?.team;
+    let team = buyer(world, tuning, id, Ware::Hire)?.team;
     let harbor = world.structures.values().any(|site| {
         site.kind == StructureKind::Harbor
             && site.hp > 0

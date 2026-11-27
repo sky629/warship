@@ -1,7 +1,7 @@
 //! 상점 창에 보여 줄 줄과, 줄에 커서를 올리면 보여 줄 설명입니다. 묶음마다 제목 줄이 있습니다.
 //! 첫 열은 무기, 장비, 소모품, 조합이고, 둘째 열은 선체와 교역입니다.
 
-use warship_protocol::{Welcome, WireCommand, WireShot};
+use warship_protocol::{Welcome, WireCommand, WireShop, WireShot};
 
 /// 상점 창의 줄 하나입니다.
 #[derive(Clone, Debug, PartialEq)]
@@ -33,14 +33,6 @@ impl ShopRow {
             cost,
         }
     }
-}
-
-/// 상점이 파는 무기의 번호입니다. 무기 표의 순서이고, 조합으로만 얻는 무기는 건너뜁니다.
-fn weapons_for_sale(welcome: &Welcome) -> impl Iterator<Item = u16> + '_ {
-    let weapons = welcome.weapons.iter().enumerate();
-    weapons
-        .filter(|(_, weapon)| weapon.buyable)
-        .map(|(index, _)| index as u16)
 }
 
 /// 상점 창의 목록입니다.
@@ -86,71 +78,106 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             )
         })
     };
-    let mut rows = vec![ShopRow::heading("Weapons")];
-    for weapon in weapons_for_sale(welcome) {
-        let price = welcome.weapons[usize::from(weapon)].price;
-        let label = format!("{}  {price}g", weapon_name(weapon));
-        rows.push(ShopRow::item(
-            label,
-            weapon_detail(weapon),
-            WireCommand::Buy { weapon },
-            Some(price),
-        ));
-    }
-    rows.push(ShopRow::heading("Gear"));
-    for (index, gear) in welcome.gear.iter().enumerate() {
-        let (name, price, effect) = (&gear.name, gear.price, &gear.effect);
-        let label = format!("{name}  {price}g  ({effect})");
-        let order = WireCommand::BuyGear { gear: index as u16 };
-        rows.push(ShopRow::item(label, String::new(), order, Some(price)));
-    }
-    rows.push(ShopRow::heading("Supplies (one use)"));
-    for (index, supply) in welcome.supplies.iter().enumerate() {
-        let (name, price, effect) = (&supply.name, supply.price, &supply.effect);
-        let label = format!("{name}  {price}g  ({effect})");
-        let order = WireCommand::BuySupply {
-            supply: index as u16,
-        };
-        rows.push(ShopRow::item(label, String::new(), order, Some(price)));
-    }
-    rows.push(ShopRow::heading("Combine"));
-    for (index, recipe) in welcome.recipes.iter().enumerate() {
-        let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
-        let (result, parts) = (weapon_name(recipe.result), parts.join(" + "));
-        let label = format!("{result} = {parts} + {}g", recipe.price);
-        let order = WireCommand::Combine {
-            recipe: index as u16,
-        };
-        let detail = weapon_detail(recipe.result);
-        rows.push(ShopRow::item(label, detail, order, Some(recipe.price)));
-    }
-    let second_column = rows.len();
-    rows.push(ShopRow::heading("Hulls"));
-    for (index, hull) in welcome.hulls.iter().enumerate() {
-        let traits = match hull.traits.as_str() {
-            "" => String::new(),
-            traits => format!(", {traits}"),
-        };
-        let label = format!(
-            "{}  {}g  ({} HP, {} mounts{traits})",
-            hull.name, hull.price, hull.max_hp, hull.mounts
-        );
-        let order = WireCommand::ChangeHull { hull: index as u16 };
-        let skills = hull.skills.iter().map(|skill| {
-            let skill = welcome.skills.get(usize::from(*skill));
-            skill.map_or("?", |skill| skill.name.as_str())
-        });
-        let detail = format!("skills: {}", skills.collect::<Vec<_>>().join(", "));
-        rows.push(ShopRow::item(label, detail, order, None));
+    let hired = welcome.creeps.get(usize::from(welcome.hire.creep));
+    let hired = hired.map_or("?", |creep| creep.name.as_str());
+    // 상점마다 그 상점이 파는 것을 무기, 장비, 소모품, 조합, 선체, 용병의 순서로 놓습니다.
+    let stock_rows = |shop: &WireShop, rows: &mut Vec<ShopRow>| {
+        rows.push(ShopRow::heading(&shop.name));
+        for &weapon in &shop.weapons {
+            let price = welcome.weapons.get(usize::from(weapon));
+            let price = price.map_or(0, |weapon| weapon.price);
+            let label = format!("{}  {price}g", weapon_name(weapon));
+            let order = WireCommand::Buy { weapon };
+            rows.push(ShopRow::item(
+                label,
+                weapon_detail(weapon),
+                order,
+                Some(price),
+            ));
+        }
+        for &index in &shop.gear {
+            let Some(gear) = welcome.gear.get(usize::from(index)) else {
+                continue;
+            };
+            let (name, price, effect) = (&gear.name, gear.price, &gear.effect);
+            let label = format!("{name}  {price}g  ({effect})");
+            let order = WireCommand::BuyGear { gear: index };
+            rows.push(ShopRow::item(label, String::new(), order, Some(price)));
+        }
+        for &index in &shop.supplies {
+            let Some(supply) = welcome.supplies.get(usize::from(index)) else {
+                continue;
+            };
+            let (name, price, effect) = (&supply.name, supply.price, &supply.effect);
+            let label = format!("{name}  {price}g  ({effect}, one use)");
+            let order = WireCommand::BuySupply { supply: index };
+            rows.push(ShopRow::item(label, String::new(), order, Some(price)));
+        }
+        for &index in &shop.recipes {
+            let Some(recipe) = welcome.recipes.get(usize::from(index)) else {
+                continue;
+            };
+            let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
+            let (result, parts) = (weapon_name(recipe.result), parts.join(" + "));
+            let label = format!("{result} = {parts} + {}g", recipe.price);
+            let order = WireCommand::Combine { recipe: index };
+            let detail = weapon_detail(recipe.result);
+            rows.push(ShopRow::item(label, detail, order, Some(recipe.price)));
+        }
+        let hulls = welcome.hulls.iter().enumerate();
+        for (index, hull) in hulls.filter(|_| shop.hulls) {
+            let traits = match hull.traits.as_str() {
+                "" => String::new(),
+                traits => format!(", {traits}"),
+            };
+            let label = format!(
+                "{}  {}g  ({} HP, {} mounts{traits})",
+                hull.name, hull.price, hull.max_hp, hull.mounts
+            );
+            let order = WireCommand::ChangeHull { hull: index as u16 };
+            let skills = hull.skills.iter().map(|skill| {
+                let skill = welcome.skills.get(usize::from(*skill));
+                skill.map_or("?", |skill| skill.name.as_str())
+            });
+            let detail = format!("skills: {}", skills.collect::<Vec<_>>().join(", "));
+            rows.push(ShopRow::item(label, detail, order, None));
+        }
+        let lanes = welcome.lanes.iter().enumerate();
+        for (index, lane) in lanes.filter(|_| shop.hire) {
+            // 라인의 이름은 맵에서 라인이 있는 자리(북쪽, 가운데, 남쪽)입니다.
+            let y = lane.iter().map(|point| point.y).sum::<f32>() / lane.len().max(1) as f32;
+            let place = match y / welcome.map_height {
+                share if share > 2.0 / 3.0 => "North",
+                share if share < 1.0 / 3.0 => "South",
+                _ => "Middle",
+            };
+            let label = format!(
+                "Hire for the {place} lane  {}g  ({} x {hired})",
+                welcome.hire.price, welcome.hire.count
+            );
+            let order = WireCommand::Hire { lane: index as u8 };
+            let detail = "the creeps come out of your harbor on that lane".to_string();
+            rows.push(ShopRow::item(
+                label,
+                detail,
+                order,
+                Some(welcome.hire.price),
+            ));
+        }
+    };
+    // 첫째 열은 자기 진영의 상점과 교역이고, 둘째 열은 어느 진영의 것도 아닌 항구입니다.
+    let mut rows = Vec::new();
+    let mut shops = welcome.shops.iter();
+    if let Some(home) = shops.next() {
+        stock_rows(home, &mut rows);
     }
     rows.push(ShopRow::heading("Trade (a trader hull at your base)"));
     for (index, trade) in welcome.trades.iter().enumerate() {
+        let port = welcome.shops.get(usize::from(trade.port) + 1);
+        let port = port.map_or("?", |port| port.name.as_str());
         let label = format!(
-            "{}  {}g  (port {}, pays {}g)",
-            trade.name,
-            trade.price,
-            trade.port + 1,
-            trade.reward
+            "{}  {}g  ({port}, pays {}g)",
+            trade.name, trade.price, trade.reward
         );
         let order = WireCommand::Contract {
             trade: index as u16,
@@ -162,29 +189,9 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             Some(trade.price),
         ));
     }
-    let hired = welcome.creeps.get(usize::from(welcome.hire.creep));
-    let hired = hired.map_or("?", |creep| creep.name.as_str());
-    rows.push(ShopRow::heading("Hire (creeps join a lane)"));
-    for (index, lane) in welcome.lanes.iter().enumerate() {
-        // 라인의 이름은 맵에서 라인이 있는 자리(북쪽, 가운데, 남쪽)입니다.
-        let y = lane.iter().map(|point| point.y).sum::<f32>() / lane.len().max(1) as f32;
-        let place = match y / welcome.map_height {
-            share if share > 2.0 / 3.0 => "North",
-            share if share < 1.0 / 3.0 => "South",
-            _ => "Middle",
-        };
-        let label = format!(
-            "{place} lane  {}g  ({} x {hired})",
-            welcome.hire.price, welcome.hire.count
-        );
-        let order = WireCommand::Hire { lane: index as u8 };
-        let detail = "the creeps come out of your harbor on that lane".to_string();
-        rows.push(ShopRow::item(
-            label,
-            detail,
-            order,
-            Some(welcome.hire.price),
-        ));
+    let second_column = rows.len();
+    for shop in shops {
+        stock_rows(shop, &mut rows);
     }
     ShopList {
         rows,

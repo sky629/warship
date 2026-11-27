@@ -12,12 +12,12 @@ use crate::math::Vec2;
 use crate::ship::{Item, Mount, Ship};
 use crate::sim::Sim;
 use crate::structures::{Structure, StructureKind};
-use crate::tuning::HireSpec;
 use crate::tuning::{
     CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits, HullSpec, MapSpec, Recipe,
     ShipTuning, ShopTuning, Shot, SkillEffect, SkillSpec, StructureSpec, StructureTable,
     SupplyEffect, SupplySpec, TradeSpec, Tuning, WeaponSpec,
 };
+use crate::tuning::{HireSpec, Port, Stock};
 
 /// 사거리 5, 피해 10, 쿨다운 10Tick이고 배와 건물을 쏘는 포입니다. 포탄은 한 Tick에 1타일을 납니다.
 pub(crate) const GUN: WeaponId = WeaponId(0);
@@ -271,7 +271,17 @@ fn open_sea_tuning() -> Tuning {
         }),
         bounty,
     };
+    // 본진과 항구는 표에 있는 것을 모두 팔고, 교역항은 `GUN`과 용병만 팝니다.
+    let everything = Stock {
+        weapons: [GUN, LONG_GUN, SCATTER_GUN, BOMB, FIRE_GUN].to_vec(),
+        gear: [PLANKING, SAILS, CREW, PLATING].to_vec(),
+        supplies: [KIT, SPARE_SAILS, SANDBAGS].to_vec(),
+        recipes: vec![TWIN_GUNS],
+        hulls: true,
+        hire: true,
+    };
     Tuning {
+        home_stock: everything,
         tick_hz: 20,
         team_size: 5,
         ship: ShipTuning {
@@ -420,7 +430,15 @@ fn open_sea_tuning() -> Tuning {
             lanes: Vec::new(),
             structures: Vec::new(),
             islands: Vec::new(),
-            ports: vec![Vec2::new(30.0, 10.0)],
+            ports: vec![Port {
+                name: "port",
+                pos: Vec2::new(30.0, 10.0),
+                stock: Stock {
+                    weapons: vec![GUN],
+                    hire: true,
+                    ..Stock::default()
+                },
+            }],
             camps: Vec::new(),
         },
     }

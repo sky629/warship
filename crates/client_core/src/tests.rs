@@ -10,7 +10,7 @@ use warship_protocol::{
     WireWeapon,
 };
 use warship_protocol::{
-    SeatToken, WireHire, WireMember, WireRecipe, WireShot, WireSupply, WireTrade,
+    SeatToken, WireHire, WireMember, WireRecipe, WireShop, WireShot, WireSupply, WireTrade,
 };
 use warship_rules::Vec2;
 
@@ -90,6 +90,7 @@ fn welcome() -> Welcome {
             creep: 0,
             count: 2,
         },
+        shops: Vec::new(),
         ports: Vec::new(),
     }
 }
@@ -517,7 +518,7 @@ fn a_session_sends_the_remembered_token_with_its_first_join_and_leaves_once() {
 }
 
 #[test]
-fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
+fn the_shop_lists_what_each_shop_sells_under_its_name() {
     let mut welcome = welcome();
     welcome.weapons.push(WireWeapon {
         name: "twin".to_string(),
@@ -556,56 +557,79 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
     // 맵의 높이가 40이므로, y가 30인 라인은 북쪽 라인입니다.
     let lane = vec![WireVec2::new(5.0, 30.0), WireVec2::new(35.0, 30.0)];
     welcome.lanes.push(lane);
+    let nothing = WireShop {
+        name: String::new(),
+        weapons: Vec::new(),
+        gear: Vec::new(),
+        supplies: Vec::new(),
+        recipes: Vec::new(),
+        hulls: false,
+        hire: false,
+    };
+    welcome.shops = vec![
+        WireShop {
+            name: "Base and harbors".to_string(),
+            weapons: vec![0, 2],
+            gear: vec![0],
+            supplies: vec![0],
+            recipes: vec![0],
+            hulls: true,
+            ..nothing.clone()
+        },
+        WireShop {
+            name: "north port".to_string(),
+            hire: true,
+            ..nothing.clone()
+        },
+        WireShop {
+            name: "south port".to_string(),
+            ..nothing
+        },
+    ];
 
     let list = shop_list(&welcome);
-    // 둘째 열은 선체에서 시작합니다.
-    assert_eq!(list.columns(), [9, 7]);
+    // 첫째 열은 자기 진영의 상점과 교역이고, 둘째 열은 항구입니다.
+    assert_eq!(list.columns(), [10, 3]);
     let rows = list.rows;
 
+    let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        [
+            "Base and harbors",
+            "  gun  100g",
+            "  mortar  400g",
+            "  planks  200g  (+250 HP)",
+            "  kit  80g  (+200 HP, one use)",
+            "  twin = gun + gun + 150g",
+            "  small  0g  (1000 HP, 2 mounts)",
+            "  big  400g  (2000 HP, 4 mounts, trader, -15% damage)",
+            "Trade (a trader hull at your base)",
+            "  salt  60g  (south port, pays 90g)",
+            "north port",
+            "  Hire for the North lane  220g  (2 x creep)",
+            "south port",
+        ]
+    );
     // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
+    let gun = "damage 10, range 5, reload 0.5s";
     let details: Vec<&str> = rows.iter().map(|row| row.detail.as_str()).collect();
     assert_eq!(
         details,
         [
             "",
-            "damage 10, range 5, reload 0.5s",
-            "damage 10, range 5, reload 0.5s",
+            gun,
+            gun,
             "",
             "",
-            "",
-            "",
-            "",
-            "damage 10, range 5, reload 0.5s",
-            "",
+            gun,
             "skills: skill",
             "skills: skill",
             "",
             "",
             "",
             "the creeps come out of your harbor on that lane",
-        ]
-    );
-
-    let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
-    assert_eq!(
-        labels,
-        [
-            "Weapons",
-            "  gun  100g",
-            "  mortar  400g",
-            "Gear",
-            "  planks  200g  (+250 HP)",
-            "Supplies (one use)",
-            "  kit  80g  (+200 HP)",
-            "Combine",
-            "  twin = gun + gun + 150g",
-            "Hulls",
-            "  small  0g  (1000 HP, 2 mounts)",
-            "  big  400g  (2000 HP, 4 mounts, trader, -15% damage)",
-            "Trade (a trader hull at your base)",
-            "  salt  60g  (port 2, pays 90g)",
-            "Hire (creeps join a lane)",
-            "  North lane  220g  (2 x creep)",
+            "",
         ]
     );
     let orders: Vec<Option<WireCommand>> = rows.iter().map(|row| row.order).collect();
@@ -615,19 +639,16 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             None,
             Some(WireCommand::Buy { weapon: 0 }),
             Some(WireCommand::Buy { weapon: 2 }),
-            None,
             Some(WireCommand::BuyGear { gear: 0 }),
-            None,
             Some(WireCommand::BuySupply { supply: 0 }),
-            None,
             Some(WireCommand::Combine { recipe: 0 }),
-            None,
             Some(WireCommand::ChangeHull { hull: 0 }),
             Some(WireCommand::ChangeHull { hull: 1 }),
             None,
             Some(WireCommand::Contract { trade: 0 }),
             None,
             Some(WireCommand::Hire { lane: 0 }),
+            None,
         ]
     );
     let costs: Vec<Option<u32>> = rows.iter().map(|row| row.cost).collect();
@@ -637,19 +658,16 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             None,
             Some(100),
             Some(400),
-            None,
             Some(200),
-            None,
             Some(80),
-            None,
             Some(150),
-            None,
             None,
             None,
             None,
             Some(60),
             None,
             Some(220),
+            None,
         ]
     );
 }

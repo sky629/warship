@@ -38,6 +38,6 @@ pub use snapshot::{
 };
 pub use transport::{ClientEvent, ClientTransport, LinkId, PeerKey, ServerEvent, ServerTransport};
 pub use welcome::{
-    Welcome, WireCreepSpec, WireGear, WireHire, WireHull, WireIsland, WireRecipe, WireShot,
-    WireSkillSpec, WireStructureSpec, WireSupply, WireTrade, WireWeapon,
+    Welcome, WireCreepSpec, WireGear, WireHire, WireHull, WireIsland, WireRecipe, WireShop,
+    WireShot, WireSkillSpec, WireStructureSpec, WireSupply, WireTrade, WireWeapon,
 };

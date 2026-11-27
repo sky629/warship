@@ -155,10 +155,10 @@ impl Sim {
         }
     }
 
-    /// 이 배가 상점(자기 진영의 서 있는 본진이나 항구 가까이)에 있는지입니다. 없는 배는 `false`입니다.
-    pub fn at_shop(&self, ship: ShipId) -> bool {
+    /// 이 배가 자기 진영의 상점(서 있는 본진이나 항구 가까이)에 있는지입니다. 없는 배는 `false`입니다.
+    pub fn at_home(&self, ship: ShipId) -> bool {
         let ship = self.world.ships.get(&ship);
-        ship.is_some_and(|ship| shop::at_shop(&self.world, &self.tuning, ship))
+        ship.is_some_and(|ship| shop::at_home(&self.world, &self.tuning, ship))
     }
 
     /// 이 배가 수리를 받는 자리(자기 진영의 서 있는 본진 가까이)에 있는지입니다. 없는 배는 `false`입니다.

@@ -142,7 +142,7 @@ fn trade_run(trade: TradeId) {
     let tuning = Tuning::default();
     let per_minute = 60 * u64::from(tuning.tick_hz);
     let spec = tuning.trades[usize::from(trade.0)].clone();
-    let port = tuning.map.ports[spec.port];
+    let port = tuning.map.ports[spec.port].pos;
     let trader = tuning.hulls.iter().position(|hull| hull.trader);
     let Some(trader) = trader.map(|index| HullId(index as u16)) else {
         return;

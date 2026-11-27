@@ -1,6 +1,6 @@
 //! 기본 수치가 검사를 통과하는지와, 규칙의 전제를 어기는 수치가 거절되는지 확인합니다.
 
-use crate::ids::{SkillId, WeaponId};
+use crate::ids::{GearId, SkillId, WeaponId};
 use crate::math::Vec2;
 use crate::sim::Sim;
 use crate::tuning::{GearEffect, Shot, SkillEffect, SupplyEffect, Tuning};
@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 51] = [
+    let broken: [fn(&mut Tuning); 53] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -82,8 +82,8 @@ fn tunings_that_break_the_rules_are_refused() {
         // 없는 교역항의 교역, 값보다 보상이 크지 않은 교역, 맵 밖의 교역항, 섬 위의 교역항입니다.
         |t| t.trades[0].port = 9,
         |t| t.trades[0].reward = t.trades[0].price,
-        |t| t.map.ports[0] = Vec2::new(97.0, 24.0),
-        |t| t.map.ports[0] = Vec2::new(48.0, 42.0),
+        |t| t.map.ports[0].pos = Vec2::new(97.0, 24.0),
+        |t| t.map.ports[0].pos = Vec2::new(48.0, 42.0),
         // 없는 NPC 배의 자리, 다시 나오는 시간이 없는 자리, 섬 위의 자리입니다.
         |t| t.map.camps[0].creep = 9,
         |t| t.map.camps[0].respawn_ticks = 0,
@@ -92,6 +92,9 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.hire.creep = 9,
         |t| t.hire.count = 0,
         |t| t.hire.price = 0,
+        // 조합으로만 얻는 무기를 파는 상점, 없는 장비를 파는 상점입니다.
+        |t| t.home_stock.weapons.push(WeaponId(5)),
+        |t| t.map.ports[2].stock.gear.push(GearId(9)),
         // 범위가 없는 폭탄과, 이어지는 시간이 없는 화염입니다.
         |t| t.weapons[4].shot = Shot::Bomb { radius: 0.0 },
         |t| {
