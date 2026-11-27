@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 42] = [
+    let broken: [fn(&mut Tuning); 43] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -84,6 +84,8 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.trades[0].reward = t.trades[0].price,
         |t| t.map.ports[0] = Vec2::new(65.0, 24.0),
         |t| t.map.ports[0] = Vec2::new(32.0, 24.0),
+        // 이어지는 시간이 없는 은신입니다.
+        |t| t.skills[7].effect = SkillEffect::Cloak { ticks_per_rank: 0 },
         // 받는 피해를 100%보다 많이 줄이는 소모품입니다.
         |t| {
             t.supplies[2].effect = SupplyEffect::Brace {

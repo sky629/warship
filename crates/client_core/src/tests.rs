@@ -102,6 +102,7 @@ fn ship(id: u32, x: f32) -> WireShip {
         level: 1,
         respawn_at: None,
         slowed: false,
+        cloaked: false,
         own: (id == ME).then(|| WireOwn {
             gold: 70,
             xp: 0,
@@ -626,10 +627,11 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
 }
 
 #[test]
-fn a_slowed_ship_is_marked_in_the_frame() {
+fn a_slowed_ship_and_a_cloaked_ship_are_marked_in_the_frame() {
     let mut session = playing();
     let slowed = WireShip {
         slowed: true,
+        cloaked: true,
         ..ship(ENEMY, 12.0)
     };
     receive(
@@ -641,5 +643,7 @@ fn a_slowed_ship_is_marked_in_the_frame() {
     let frame = session.frame(1.15).unwrap();
 
     let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.slowed).collect();
+    assert_eq!(marks, [false, true]);
+    let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.cloaked).collect();
     assert_eq!(marks, [false, true]);
 }

@@ -76,7 +76,7 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
             SkillEffect::Salvo { radius, .. } | SkillEffect::Snare { radius, .. } => {
                 enemy_within(sim, ship, radius)
             }
-            SkillEffect::Sprint { .. } => hurt,
+            SkillEffect::Sprint { .. } | SkillEffect::Cloak { .. } => hurt,
             SkillEffect::Reload => enemy_within(sim, ship, reach(ship, tuning)),
         };
         if useful && state.rank > 0 && state.ready_at <= sim.tick() {

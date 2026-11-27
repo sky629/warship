@@ -69,6 +69,8 @@ pub struct ShipView {
     pub sunk: bool,
     /// 적의 감속 스킬의 효과를 받고 있는지입니다.
     pub slowed: bool,
+    /// 은신하고 있는지입니다.
+    pub cloaked: bool,
     /// 이 접속이 조종하는 배입니다.
     pub mine: bool,
     /// 달린 무기의 사거리입니다. 같은 사거리는 한 번만 있습니다.
@@ -219,6 +221,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             hp: ship.hp as f32 / ship.max_hp.max(1) as f32,
             sunk: ship.respawn_at.is_some(),
             slowed: ship.slowed,
+            cloaked: ship.cloaked,
             mine: ship.id == welcome.ship,
             ranges,
         });

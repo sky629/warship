@@ -138,8 +138,16 @@ pub(crate) fn cast(
                 mount.ready_at = tick;
             }
         }
-        SkillEffect::Salvo { .. } | SkillEffect::Rally { .. } | SkillEffect::Snare { .. } => {}
+        SkillEffect::Cloak { .. }
+        | SkillEffect::Salvo { .. }
+        | SkillEffect::Rally { .. }
+        | SkillEffect::Snare { .. } => {}
     }
+    // 은신은 다른 스킬을 쓰면 끝납니다.
+    ship.cloaked_until = match spec.effect {
+        SkillEffect::Cloak { ticks_per_rank } => tick + u64::from(ticks_per_rank * rank),
+        _ => 0,
+    };
     ship.skills[index].ready_at = tick + u64::from(spec.cooldown_ticks);
     Ok(())
 }

@@ -440,7 +440,7 @@ fn a_command_is_handled_once_and_its_result_comes_back_in_the_snapshot() {
     let ranks: Vec<u8> = own.skills.iter().map(|skill| skill.rank).collect();
     assert_eq!(
         ranks,
-        [1, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
         "the repeated number is ignored"
     );
     assert_eq!((own.skill_points, own.last_command_seq), (0, 1));

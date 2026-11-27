@@ -65,7 +65,7 @@ fn learning_a_skill_spends_a_point_up_to_the_highest_rank() {
     );
 
     let ranks: Vec<u8> = s.ship(ship).skills.iter().map(|skill| skill.rank).collect();
-    assert_eq!(ranks, [2, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(ranks, [2, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(s.ship(ship).skill_points(s.sim.tuning()), 1);
 }
 

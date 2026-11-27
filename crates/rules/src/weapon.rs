@@ -107,6 +107,10 @@ pub(crate) fn fire_all(world: &mut World, sight: &Sight, tuning: &Tuning, tick: 
                     mount.target = target;
                     mount.ready_at = ready_at;
                 }
+                // 포를 쏜 배는 은신이 풀립니다.
+                if let Some(ship) = world.ships.get_mut(&id).filter(|_| target.is_some()) {
+                    ship.cloaked_until = 0;
+                }
                 Some(id)
             }
             Shooter::Creep(id) => {

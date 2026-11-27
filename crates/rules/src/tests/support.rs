@@ -43,6 +43,7 @@ pub(crate) const RELOAD: SkillId = SkillId(3);
 pub(crate) const BRACE: SkillId = SkillId(4);
 pub(crate) const RALLY: SkillId = SkillId(5);
 pub(crate) const SNARE: SkillId = SkillId(6);
+pub(crate) const CLOAK: SkillId = SkillId(7);
 
 pub(crate) struct Scenario {
     pub sim: Sim,
@@ -68,6 +69,7 @@ impl Scenario {
     /// 2번(`SPRINT`)은 20Tick 동안 단계마다 속도 50% 증가, 3번(`RELOAD`)은 모든 무기의 쿨다운 제거,
     /// 4번(`BRACE`)은 20Tick 동안 단계마다 받는 피해 40% 감소, 5번(`RALLY`)은 4타일 안의 같은 진영의 배가 단계마다 HP 60 회복,
     /// 6번(`SNARE`)은 4타일 안의 적의 배가 20Tick 동안 단계마다 속도 40% 감소입니다.
+    /// 7번(`CLOAK`)은 단계마다 40Tick 동안 은신입니다.
     /// 0번 선체는 모든 스킬을 쓰고 교역을 합니다. 1번 선체는 `REPAIR`, `SALVO`, `RELOAD`, `BRACE`만 쓰고 교역을 하지 못합니다.
     pub fn open_sea() -> Scenario {
         Scenario::with_tuning(|_| {})
@@ -277,7 +279,7 @@ fn open_sea_tuning() -> Tuning {
                     0,
                     1000,
                     2,
-                    &[REPAIR, SALVO, SPRINT, RELOAD, BRACE, RALLY, SNARE],
+                    &[REPAIR, SALVO, SPRINT, RELOAD, BRACE, RALLY, SNARE, CLOAK],
                 )
             },
             hull("big hull", 400, 2000, 4, &[REPAIR, SALVO, RELOAD, BRACE]),
@@ -316,6 +318,7 @@ fn open_sea_tuning() -> Tuning {
                 radius: 4.0,
                 ticks: 20,
             }),
+            skill(SkillEffect::Cloak { ticks_per_rank: 40 }),
         ],
         gear: vec![
             gear(GearEffect::Planking { max_hp: 300 }),

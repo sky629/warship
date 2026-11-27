@@ -45,20 +45,31 @@ fn vision_of(world: &World, tuning: &Tuning, watcher: Target) -> f32 {
 }
 
 /// 적은 아군의 떠 있는 배, NPC 배, 서 있는 건물 가운데 하나의 시야 거리 안에 있으면 보입니다.
-pub(crate) fn look(world: &World, tuning: &Tuning) -> Sight {
+/// 은신한 배는 건물의 시야 거리 안에 있을 때만 보입니다.
+pub(crate) fn look(world: &World, tuning: &Tuning, tick: u64) -> Sight {
     let mut seen = [Vec::new(), Vec::new()];
     for team in Team::ALL {
-        let eyes: Vec<(Vec2, f32)> = world
+        // 시야를 주는 개체의 자리, 시야 거리, 은신한 배도 보는지입니다.
+        let eyes: Vec<(Vec2, f32, bool)> = world
             .targets()
             .filter(|(_, owner, _)| *owner == team)
-            .map(|(watcher, _, pos)| (pos, vision_of(world, tuning, watcher)))
+            .map(|(watcher, _, pos)| {
+                let detects = matches!(watcher, Target::Structure(_));
+                (pos, vision_of(world, tuning, watcher), detects)
+            })
             .collect();
+        let cloaked = |target: Target| match target {
+            Target::Ship(id) => world.ships.get(&id).is_some_and(|ship| ship.cloaked(tick)),
+            _ => false,
+        };
         seen[team.index()] = world
             .targets()
             .filter(|(_, owner, _)| owner.is_hostile_to(team))
-            .filter(|(_, _, pos)| {
-                eyes.iter()
-                    .any(|(eye, vision)| eye.distance(*pos) <= *vision)
+            .filter(|(target, _, pos)| {
+                let hidden = cloaked(*target);
+                eyes.iter().any(|(eye, vision, detects)| {
+                    (*detects || !hidden) && eye.distance(*pos) <= *vision
+                })
             })
             .map(|(target, _, pos)| (target, pos))
             .collect();

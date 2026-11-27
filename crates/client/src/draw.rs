@@ -19,6 +19,8 @@ pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
 const WATER: Color = Color::srgb(0.07, 0.22, 0.32);
 const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
 const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
+/// 은신한 배의 둘레에 그리는 원의 색입니다.
+const CLOAKED: Color = Color::srgb(0.7, 0.5, 1.0);
 /// 감속된 배의 둘레에 그리는 원의 색입니다.
 const SLOWED: Color = Color::srgb(0.4, 0.9, 0.9);
 const BORDER: Color = Color::srgb(0.35, 0.55, 0.65);
@@ -451,6 +453,9 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
         }
         if ship.slowed {
             flat_circle(gizmos, center, 0.5, SLOWED);
+        }
+        if ship.cloaked {
+            flat_circle(gizmos, center, 0.65, CLOAKED);
         }
         draw_hp(gizmos, center + Vec3::Y * 0.8, ship.hp);
     }

@@ -118,7 +118,7 @@ impl Sim {
         creep::spawn(world, tuning, self.tick, &mut self.next_creep);
         ship::move_ships(world, inputs, tuning, self.tick);
         creep::move_creeps(world, &self.sight, tuning);
-        self.sight = vision::look(world, tuning);
+        self.sight = vision::look(world, tuning, self.tick);
         weapon::fire_all(world, &self.sight, tuning, self.tick);
         let kills = weapon::land_impacts(world, tuning, self.tick);
         economy::pay_bounties(world, tuning, &kills);

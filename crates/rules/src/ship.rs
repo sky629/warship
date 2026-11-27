@@ -31,6 +31,8 @@ pub struct Ship {
     pub brace: Option<Boost>,
     /// 적의 스킬이 속도를 줄이는 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
     pub snare: Option<Boost>,
+    /// 이 Tick까지 은신합니다. 은신하지 않은 배는 0입니다.
+    pub cloaked_until: u64,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
     pub route: Vec<Vec2>,
     /// 아이템을 다는 칸입니다. 무기와 장비가 같은 칸을 나누어 씁니다. 빈 칸은 `None`입니다.
@@ -150,6 +152,7 @@ impl Ship {
             sprint: None,
             brace: None,
             snare: None,
+            cloaked_until: 0,
             route: Vec::new(),
             mounts,
             last_input_seq: 0,
@@ -222,6 +225,11 @@ impl Ship {
         let armor = hull + plating.sum::<u32>() + Boost::percent_at(self.brace, tick);
         let kept = 100 - armor.min(ARMOR_CAP_PERCENT);
         (u64::from(amount) * u64::from(kept) / 100) as u32
+    }
+
+    /// `tick`에 은신하고 있는지입니다. 은신한 배는 적의 배와 NPC 배에게 보이지 않습니다.
+    pub fn cloaked(&self, tick: u64) -> bool {
+        self.is_afloat() && tick <= self.cloaked_until
     }
 
     /// `tick`에 적의 감속 스킬의 효과를 받고 있는지입니다.

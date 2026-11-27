@@ -120,6 +120,9 @@ pub enum SkillEffect {
     Brace { percent_per_rank: u32, ticks: u32 },
     /// 자기 배와 `radius` 안의 같은 진영의 배의 HP를 최대 HP까지 회복합니다.
     Rally { hp_per_rank: u32, radius: f32 },
+    /// 자기 배가 적의 배와 NPC 배에게 보이지 않게 됩니다. 적의 건물에게는 보입니다.
+    /// 무기를 쏘거나 다른 스킬을 쓰면 끝납니다.
+    Cloak { ticks_per_rank: u32 },
     /// `ticks` 동안 `radius` 안의 적의 배의 속도를 백분율만큼 줄입니다.
     Snare {
         percent_per_rank: u32,
@@ -484,13 +487,14 @@ impl Tuning {
                 SkillEffect::Brace {
                     percent_per_rank, ..
                 } => percent_per_rank * u32::from(skill.max_rank) <= 100,
+                SkillEffect::Cloak { ticks_per_rank } => ticks_per_rank > 0,
                 SkillEffect::Repair { .. } | SkillEffect::Sprint { .. } | SkillEffect::Reload => {
                     true
                 }
             };
             if skill.cooldown_ticks == 0 || skill.max_rank == 0 || !effect_fits {
                 return Err(format!(
-                    "skill {}: cooldown_ticks, max_rank and radius must be positive, a brace takes at most 100 percent, and a snare less than 100 percent",
+                    "skill {}: cooldown_ticks, max_rank and radius must be positive, a cloak must last, a brace takes at most 100 percent, and a snare less than 100 percent",
                     skill.name
                 ));
             }
@@ -689,7 +693,7 @@ impl Default for Tuning {
             trader: false,
         };
         // 스킬 표의 자리입니다.
-        let (patch, grape, sail, broadside, iron, rally, chain) = (0, 1, 2, 3, 4, 5, 6);
+        let (patch, grape, sail, broadside, iron, rally, chain, night) = (0, 1, 2, 3, 4, 5, 6, 7);
         let skill = |name, cooldown_ticks, effect| SkillSpec {
             name,
             cooldown_ticks,
@@ -731,7 +735,7 @@ impl Default for Tuning {
                     ..hull("Lugger", 150, 220, 4.6, 4, &[sail])
                 },
                 hull("Brig", 500, 650, 3.8, 4, &[patch, grape, sail]),
-                hull("Corvette", 500, 480, 4.6, 4, &[grape, sail, chain]),
+                hull("Corvette", 500, 480, 4.6, 4, &[grape, sail, chain, night]),
                 hull("Frigate", 1100, 950, 3.6, 5, &[patch, grape, broadside]),
                 HullSpec {
                     repair_per_sec: 4,
@@ -852,6 +856,7 @@ impl Default for Tuning {
                         ticks: 60,
                     },
                 ),
+                skill("Night Run", 900, SkillEffect::Cloak { ticks_per_rank: 80 }),
             ],
             shop: ShopTuning {
                 range: 5.0,
