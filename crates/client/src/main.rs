@@ -19,6 +19,7 @@ mod net;
 mod scores;
 mod shapes;
 mod shop;
+mod sound;
 mod start;
 mod storage;
 mod ui;
@@ -55,6 +56,7 @@ fn main() {
         .init_resource::<camera::Rig>()
         .init_resource::<net::LeavePrompt>()
         .init_resource::<shop::ShopOpen>()
+        .init_resource::<sound::Heard>()
         .add_systems(
             Startup,
             (
@@ -95,6 +97,8 @@ fn main() {
                 draw::show_status,
                 draw::show_prompt,
                 scores::show_scores,
+                sound::play_sounds,
+                sound::play_music,
                 hud::show_top,
                 hud::show_hud,
                 hud::show_labels.after(camera::steer_camera),

@@ -37,6 +37,30 @@ Rules for every model:
 
 A missing model is drawn with the built-in shape.
 
+## Sounds and music
+
+Ogg Vorbis files.
+
+| File | Played when |
+|---|---|
+| `sounds/fire_shell.ogg` | a plain shell is fired |
+| `sounds/fire_scatter.ogg` | a scatter shot is fired |
+| `sounds/fire_bomb.ogg` | a bomb is fired |
+| `sounds/fire_flame.ogg` | a fire shot is fired |
+| `sounds/blast.ogg` | a scatter shot or a bomb bursts |
+| `sounds/sink.ogg` | a ship sinks |
+| `sounds/wreck.ogg` | a structure is destroyed |
+| `sounds/buy.ogg` | you spend gold |
+| `sounds/refuse.ogg` | the server refuses your order |
+| `sounds/level_up.ogg` | your ship gains a level |
+| `sounds/victory.ogg`, `sounds/defeat.ogg` | the match ends |
+| `music/start.ogg` | the start screen (loops) |
+| `music/battle.ogg` | in a room (loops) |
+
+Sounds with a place (firing, bursts, sinking, wrecks) are quieter the farther they are from the middle of the view, and silent beyond 28 tiles. At most 6 new sounds start in one frame. Music plays at 45% of the volume of the sounds.
+
+A browser starts sound only after the first click or key press on the page.
+
 ## Panels and font
 
 | File | Use |

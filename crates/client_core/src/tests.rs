@@ -20,6 +20,7 @@ use crate::{
     score_table, shop_tabs, shops_near,
 };
 use crate::{HudView, ScoreRow, ScoreTeam, SkillSlot, TopBar, hud_view, top_bar};
+use crate::{Sound, SoundEvent, Volley, sound_events};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -949,6 +950,11 @@ fn a_bomb_flies_in_an_arc_to_the_place_it_was_aimed_at() {
     assert_eq!(
         frame.blasts,
         [BlastView {
+            volley: Volley {
+                shooter: WireTarget::Ship(ME),
+                slot: 0,
+                fired: 20,
+            },
             pos: Vec2::new(14.0, 10.0),
             team: armed.team,
             radius: 2.0,
@@ -1037,4 +1043,68 @@ fn the_top_bar_shows_the_clock_and_the_kills_of_each_team() {
         blue_kills: 5,
     };
     assert_eq!(bar, expected);
+}
+
+#[test]
+fn the_sounds_between_two_frames_are_the_things_that_happened() {
+    // 내 배는 20번째 Tick에 포를 쏘았습니다. 앞 프레임은 쏘기 전이고, 뒤 프레임은 포탄이 날아가는 중입니다.
+    // 그사이에 적의 배가 가라앉았고, 내 배는 골드를 썼고, 레벨이 올랐고, 다음 명령은 거절되었습니다.
+    let welcome = welcome();
+    let mount = |ready_at| WireMount {
+        slot: 0,
+        item: WireItem::Weapon(0),
+        target: Some(WireTarget::Ship(ENEMY)),
+        aim: None,
+        ready_at,
+    };
+    let before = WireShip {
+        mounts: vec![mount(10)],
+        ..ship(ME, 10.0)
+    };
+    let mut after = WireShip {
+        mounts: vec![mount(30)],
+        level: 2,
+        ..ship(ME, 10.0)
+    };
+    let own = after.own.as_mut().unwrap();
+    own.gold = 20;
+    own.last_command_seq = 1;
+    own.refusal = Some(WireRefusal::NotEnoughGold);
+    let sunk = WireShip {
+        hp: 0,
+        respawn_at: Some(200),
+        ..ship(ENEMY, 14.0)
+    };
+    let frame_of = |ships: Vec<WireShip>, tick| {
+        let mut session = playing();
+        receive(&mut session, 1.00, snapshot(tick, ships.clone()));
+        receive(&mut session, 1.05, snapshot(tick + 1, ships));
+        session.frame(1.15).unwrap()
+    };
+    let prev = frame_of(vec![before, ship(ENEMY, 14.0)], 18);
+    let next = frame_of(vec![after, sunk], 21);
+
+    let events = sound_events(&welcome, &prev, &next);
+
+    let sounds: Vec<Sound> = events.iter().map(|event| event.sound).collect();
+    assert_eq!(
+        sounds,
+        [
+            Sound::FireShell,
+            Sound::Sink,
+            Sound::Buy,
+            Sound::Refuse,
+            Sound::LevelUp
+        ]
+    );
+    assert_eq!(events[1].at, Some(Vec2::new(14.0, 10.0)));
+    assert_eq!(events[2].at, None, "my own purchase has no place");
+    // 같은 프레임 사이에는 새로 일어난 일이 없습니다.
+    assert_eq!(sound_events(&welcome, &next, &next), []);
+    assert_eq!(Sound::LevelUp.path(), "sounds/level_up.ogg");
+    let event = SoundEvent {
+        sound: Sound::Blast,
+        at: None,
+    };
+    assert_eq!(event.sound.path(), "sounds/blast.ogg");
 }

@@ -17,6 +17,29 @@
     />
     <!-- 에셋 폴더를 그대로 배포 폴더에 복사합니다. 클라이언트가 실행 중에 여기서 아이콘과 글꼴을 불러옵니다. -->
     <link data-trunk rel="copy-dir" href="assets" />
+    <!-- 브라우저는 사용자가 페이지를 누르기 전에 만든 소리 장치를 멈춰 둡니다.
+         게임은 시작할 때 소리 장치를 만들므로, 처음 누르거나 키를 칠 때 멈춰 있는 장치를 다시 켭니다. -->
+    <script>
+      (function () {
+        const Real = window.AudioContext || window.webkitAudioContext;
+        if (!Real) return;
+        const contexts = [];
+        window.AudioContext = new Proxy(Real, {
+          construct(target, args) {
+            const context = new target(...args);
+            contexts.push(context);
+            return context;
+          },
+        });
+        const resume = () => {
+          for (const context of contexts) {
+            if (context.state === "suspended") context.resume();
+          }
+        };
+        window.addEventListener("pointerdown", resume, true);
+        window.addEventListener("keydown", resume, true);
+      })();
+    </script>
     <style>
       html, body { margin: 0; height: 100%; background: #0d1b26; overflow: hidden; }
       #bevy { display: block; width: 100%; height: 100%; }

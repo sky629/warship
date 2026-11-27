@@ -56,6 +56,8 @@ pub struct MyShip {
     pub skills: Vec<SkillView>,
     /// 소모품을 다시 쓸 수 있을 때까지 남은 시간(초)입니다. 쓸 수 있으면 0입니다.
     pub supply_secs: f32,
+    /// 서버가 마지막으로 처리한 명령의 순서 번호입니다.
+    pub command_seq: u32,
     /// 마지막 명령이 거절되었으면 그 이유입니다.
     pub refusal: Option<WireRefusal>,
 }
@@ -114,8 +116,19 @@ pub struct StructureView {
     pub range: Option<f32>,
 }
 
+/// 포탄 한 발이 누구의 어느 칸에서 언제 나왔는지입니다. 같은 포탄을 프레임 사이에서 알아보는 데 씁니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Volley {
+    pub shooter: WireTarget,
+    /// 배의 칸의 번호입니다. NPC 배와 건물은 0입니다.
+    pub slot: u8,
+    /// 쏜 Tick입니다.
+    pub fired: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShotView {
+    pub volley: Volley,
     pub pos: Vec2,
     pub team: WireTeam,
     /// 포탄의 종류입니다. 화면이 종류마다 다르게 그립니다.
@@ -129,6 +142,7 @@ pub struct ShotView {
 /// 산탄이나 폭탄이 터진 범위입니다. 터진 뒤 잠깐 동안 보입니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BlastView {
+    pub volley: Volley,
     pub pos: Vec2,
     pub team: WireTeam,
     pub radius: f32,
@@ -227,7 +241,9 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
     };
     // 무기가 마지막으로 쏜 포탄이 아직 날아가고 있으면 그 포탄입니다.
     // 폭탄은 쏠 때 표적이 있던 자리(`aim`)로 포물선을 그리며 날아가고, 나머지는 표적을 따라갑니다.
-    let shot = |from: Vec2,
+    let shot = |shooter: WireTarget,
+                slot: u8,
+                from: Vec2,
                 team: WireTeam,
                 weapon: &WireWeapon,
                 target: Option<WireTarget>,
@@ -238,7 +254,13 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             Some(aim) => Vec2::new(aim.x, aim.y),
             None => position_of(target?)?,
         };
-        let fired = ready_at.checked_sub(u64::from(weapon.cooldown_ticks))? as f32;
+        let fired = ready_at.checked_sub(u64::from(weapon.cooldown_ticks))?;
+        let volley = Volley {
+            shooter,
+            slot,
+            fired,
+        };
+        let fired = fired as f32;
         let per_tick = weapon.shot_speed / welcome.tick_hz as f32;
         let flight = (from.distance(to) / per_tick).ceil().max(1.0);
         let progress = (tick - fired) / flight;
@@ -249,6 +271,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         };
         if (0.0..1.0).contains(&progress) {
             return Some(Seen::Shot(ShotView {
+                volley,
                 pos: lerp(from, to, progress),
                 team,
                 kind: weapon.shot,
@@ -262,6 +285,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         };
         let age = (tick - fired - flight) / BLAST_TICKS;
         (0.0..1.0).contains(&age).then_some(Seen::Blast(BlastView {
+            volley,
             pos: to,
             team,
             radius,
@@ -284,6 +308,8 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
                 ranges.push(weapon.range);
             }
             seen.extend(shot(
+                WireTarget::Ship(ship.id),
+                mount.slot,
                 pos,
                 ship.team,
                 weapon,
@@ -314,6 +340,8 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         let pos = creep_pos(creep.id).unwrap_or(Vec2::new(creep.x, creep.y));
         let weapon = &spec.weapon;
         seen.extend(shot(
+            WireTarget::Creep(creep.id),
+            0,
             pos,
             creep.team,
             weapon,
@@ -341,6 +369,8 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         let spec = welcome.structure(site.kind);
         if let Some(weapon) = &spec.weapon {
             seen.extend(shot(
+                WireTarget::Structure(site.id),
+                0,
                 pos,
                 site.team,
                 weapon,
@@ -386,6 +416,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
                 })
                 .collect(),
             supply_secs: secs_until(own.supply_ready_at),
+            command_seq: own.last_command_seq,
             refusal: own.refusal,
         })
     });
