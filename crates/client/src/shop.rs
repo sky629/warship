@@ -1,6 +1,6 @@
 //! 상점 창입니다. B 키로 열고 닫고, 줄을 왼쪽 클릭하면 그 줄의 명령을 보냅니다.
 //!
-//! 창은 화면의 왼쪽 위에 있고 목록은 두 열입니다. 줄의 자리는 `ShopWindow`가 정합니다. 그리는 자리와 클릭을 찾는 자리가 같은 계산을 씁니다.
+//! 창은 화면의 왼쪽 위에 있고 목록은 두 열입니다. 창이 좁으면 한 열입니다. 줄의 자리는 `ShopWindow`가 정합니다. 그리는 자리와 클릭을 찾는 자리가 같은 계산을 씁니다.
 //! 맨 아래의 줄은 커서 아래의 줄을 설명합니다(무기의 사거리와 다시 쏘는 시간, 선체의 스킬).
 //! 조건은 서버가 검사하고, 거절한 이유는 HUD에 나옵니다.
 
@@ -38,18 +38,22 @@ pub fn setup(mut commands: Commands) {
     ));
 }
 
-/// 상점 창이 열려 있으면 그 목록과 자리입니다.
-fn open_shop(welcome: &Welcome, open: &ShopOpen) -> Option<(ShopList, ShopWindow)> {
+/// 상점 창이 열려 있으면 그 목록과 이 창에서의 자리입니다.
+fn open_shop(
+    window: &Window,
+    welcome: &Welcome,
+    open: &ShopOpen,
+) -> Option<(ShopList, ShopWindow)> {
     open.0.then(|| {
         let list = shop_list(welcome);
-        let shop = ShopWindow::with_columns(list.columns());
+        let shop = ShopWindow::in_window(window.width(), list.columns());
         (list, shop)
     })
 }
 
 /// 커서가 열려 있는 상점 창 위에 있는지입니다.
 pub fn under_cursor(window: &Window, welcome: &Welcome, open: &ShopOpen) -> bool {
-    let shop = open_shop(welcome, open).map(|(_, shop)| shop);
+    let shop = open_shop(window, welcome, open).map(|(_, shop)| shop);
     let cursor = window.cursor_position();
     shop.zip(cursor)
         .is_some_and(|(shop, cursor)| shop.covers((cursor.x, cursor.y)))
@@ -72,7 +76,7 @@ pub fn use_shop(
     let shop = net
         .session
         .welcome()
-        .and_then(|welcome| open_shop(welcome, &open));
+        .and_then(|welcome| open_shop(&window, welcome, &open));
     let (Some((list, shop)), Some(cursor)) = (shop, window.cursor_position()) else {
         return;
     };
@@ -95,7 +99,7 @@ pub fn show_shop(
     let (root, mut node) = root.into_inner();
     commands.entity(root).despawn_children();
     let welcome = net.as_ref().and_then(|net| net.session.welcome());
-    let Some((list, shop)) = welcome.and_then(|welcome| open_shop(welcome, &open)) else {
+    let Some((list, shop)) = welcome.and_then(|welcome| open_shop(&window, welcome, &open)) else {
         node.display = Display::None;
         return;
     };

@@ -130,17 +130,27 @@ impl ShopWindow {
     /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 줄 두 줄을 가리지 않습니다.
     pub const TOP: f32 = 60.0;
 
-    /// 열마다 줄이 `columns`개인 상점 창의 자리입니다.
-    pub fn with_columns(columns: [usize; 2]) -> ShopWindow {
+    /// 너비가 `window_width`인 창에서, 열마다 줄이 `columns`개인 상점 창의 자리입니다.
+    /// 창이 두 열을 놓기에 좁으면 둘째 열의 줄을 첫 열의 아래에 이어서 한 열로 놓습니다.
+    pub fn in_window(window_width: f32, columns: [usize; 2]) -> ShopWindow {
+        let fits = window_width >= Self::COLUMN * 2.0 + Self::MARGIN * 2.0;
         ShopWindow {
             left: Self::MARGIN,
             top: Self::TOP,
-            columns,
+            columns: if fits {
+                columns
+            } else {
+                [columns[0] + columns[1], 0]
+            },
         }
     }
 
     pub fn width(&self) -> f32 {
-        Self::COLUMN * 2.0
+        if self.columns[1] == 0 {
+            Self::COLUMN
+        } else {
+            Self::COLUMN * 2.0
+        }
     }
 
     /// 긴 열의 줄의 수입니다.
@@ -269,7 +279,7 @@ mod tests {
 
     #[test]
     fn the_shop_window_has_two_columns_and_finds_the_row_under_the_cursor() {
-        let shop = ShopWindow::with_columns([5, 3]);
+        let shop = ShopWindow::in_window(1000.0, [5, 3]);
         assert_eq!((shop.left, shop.top), (10.0, 60.0));
         // 긴 열의 다섯 줄과 설명 줄입니다.
         assert_eq!((shop.width(), shop.height()), (920.0, 108.0));
@@ -292,5 +302,23 @@ mod tests {
         assert!(!shop.covers((200.0, 168.0)));
         assert!(!shop.covers((930.0, 100.0)));
         assert!(!shop.covers((9.0, 100.0)));
+    }
+
+    #[test]
+    fn a_narrow_window_gets_the_shop_in_one_column() {
+        assert_eq!(ShopWindow::in_window(940.0, [5, 3]).columns, [5, 3]);
+
+        let shop = ShopWindow::in_window(939.0, [5, 3]);
+        assert_eq!(shop.columns, [8, 0]);
+        // 여덟 줄과 설명 줄입니다.
+        assert_eq!((shop.width(), shop.height()), (460.0, 162.0));
+        assert_eq!(shop.place(6), (0.0, 108.0));
+        assert_eq!(shop.row_at((200.0, 60.0 + 7.0 * 18.0)), Some(7));
+        assert_eq!(
+            shop.row_at((470.0, 60.0)),
+            None,
+            "there is no second column"
+        );
+        assert!(!shop.covers((470.0, 60.0)));
     }
 }
