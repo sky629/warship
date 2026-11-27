@@ -9,7 +9,7 @@ use warship_protocol::{
     WireStructure, WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2,
     WireWeapon,
 };
-use warship_protocol::{SeatToken, WireMember, WireRecipe, WireSupply, WireTrade};
+use warship_protocol::{SeatToken, WireMember, WireRecipe, WireShot, WireSupply, WireTrade};
 use warship_rules::Vec2;
 
 use crate::{MountView, Phase, Session, SkillView, mount_views, shop_list};
@@ -28,6 +28,7 @@ fn welcome() -> Welcome {
         range: 5.0,
         cooldown_ticks: 10,
         shot_speed: 20.0,
+        shot: WireShot::Shell,
     };
     let armed = WireStructureSpec {
         max_hp: 1000,
@@ -257,6 +258,7 @@ fn a_shell_is_drawn_between_the_gun_and_its_target_while_it_flies() {
             slot: 0,
             item: WireItem::Weapon(0),
             target: Some(WireTarget::Ship(ENEMY)),
+            aim: None,
             ready_at: 30,
         };
         WireShip {
@@ -275,6 +277,8 @@ fn a_shell_is_drawn_between_the_gun_and_its_target_while_it_flies() {
     assert_eq!(flying.shots.len(), 1);
     assert!((flying.shots[0].pos.x - 12.0).abs() < 1e-3);
     assert_eq!(flying.shots[0].team, WireTeam::Red);
+    assert_eq!(flying.shots[0].kind, WireShot::Shell);
+    assert_eq!(flying.shots[0].lift, 0.5, "a shell flies level");
     assert_eq!(flying.ships[0].ranges, [5.0]);
 
     // 25번째 Tick에는 포탄이 이미 닿았습니다.
@@ -355,6 +359,7 @@ fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
         slot: 1,
         item: WireItem::Weapon(0),
         target: None,
+        aim: None,
         ready_at: 0,
     };
     let mine = WireShip {
@@ -677,6 +682,7 @@ fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
             slot: slot as u8,
             item: (*item)?,
             target: None,
+            aim: None,
             ready_at: 0,
         })
     });
@@ -711,4 +717,47 @@ fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
     me.mounts[2] = None;
     assert_eq!(seen(&me)[1], text("kit", "wait 12s", true));
     assert_eq!(seen(&me)[2], text("-", "", false));
+}
+
+#[test]
+fn a_bomb_flies_in_an_arc_to_the_place_it_was_aimed_at() {
+    // 폭탄(무기 1번)은 20번째 Tick에 (14, 10)을 겨누고 쏘았습니다. 표적은 그 뒤에 (18, 10)으로 갔습니다.
+    let mut welcome = welcome();
+    welcome.weapons.push(WireWeapon {
+        name: "bomb".to_string(),
+        damage: 60,
+        shot: WireShot::Bomb { radius: 2.0 },
+        ..welcome.weapons[0].clone()
+    });
+    let mount = WireMount {
+        slot: 0,
+        item: WireItem::Weapon(1),
+        target: Some(WireTarget::Ship(ENEMY)),
+        aim: Some(WireVec2::new(14.0, 10.0)),
+        ready_at: 30,
+    };
+    let armed = WireShip {
+        mounts: vec![mount],
+        ..ship(ME, 10.0)
+    };
+    let room = |tick| snapshot(tick, vec![armed.clone(), ship(ENEMY, 18.0)]);
+    let mut session = Session::new(Some("test"), "KANG", None);
+    session.handle(ClientEvent::Connected, 0.0);
+    session.handle(
+        ClientEvent::Message(ServerMsg::Welcome(Box::new(welcome))),
+        0.0,
+    );
+    receive(&mut session, 1.00, room(21));
+    receive(&mut session, 1.05, room(22));
+
+    // 22번째 Tick에 폭탄은 4타일의 한가운데, 포물선의 가장 높은 곳에 있습니다.
+    let frame = session.frame(1.15).unwrap();
+    let bomb = frame.shots[0];
+    assert!(
+        (bomb.pos.x - 12.0).abs() < 1e-3,
+        "it flies to the aim, not the ship"
+    );
+    assert_eq!(bomb.kind, WireShot::Bomb { radius: 2.0 });
+    assert!((bomb.lift - 3.0).abs() < 1e-3);
+    assert_eq!(bomb.size, 2.1, "a heavy shot is drawn larger");
 }

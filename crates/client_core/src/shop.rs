@@ -1,7 +1,7 @@
 //! 상점 창에 보여 줄 줄과, 줄에 커서를 올리면 보여 줄 설명입니다. 묶음마다 제목 줄이 있습니다.
 //! 첫 열은 무기, 장비, 소모품, 조합이고, 둘째 열은 선체와 교역입니다.
 
-use warship_protocol::{Welcome, WireCommand};
+use warship_protocol::{Welcome, WireCommand, WireShot};
 
 /// 상점 창의 줄 하나입니다.
 #[derive(Clone, Debug, PartialEq)]
@@ -64,13 +64,24 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
         let weapon = welcome.weapons.get(usize::from(id));
         weapon.map_or("?", |weapon| weapon.name.as_str())
     };
-    // 무기의 피해, 사거리, 다시 쏘기까지의 시간입니다.
+    // 무기의 피해, 사거리, 다시 쏘기까지의 시간, 공격 방식입니다.
     let weapon_detail = |id: u16| {
         let weapon = welcome.weapons.get(usize::from(id));
         weapon.map_or(String::new(), |weapon| {
             let reload = weapon.cooldown_ticks as f32 / welcome.tick_hz.max(1) as f32;
+            let shot = match weapon.shot {
+                WireShot::Shell => String::new(),
+                WireShot::Scatter { radius } => format!(", scatters {radius} around the target"),
+                WireShot::Bomb { radius } => {
+                    format!(", bomb {radius} wide, lands where the target was")
+                }
+                WireShot::Fire {
+                    damage_per_sec,
+                    secs,
+                } => format!(", burns {damage_per_sec} a second for {secs}s"),
+            };
             format!(
-                "damage {}, range {}, reload {reload}s",
+                "damage {}, range {}, reload {reload}s{shot}",
                 weapon.damage, weapon.range
             )
         })

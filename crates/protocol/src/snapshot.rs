@@ -7,7 +7,7 @@ use warship_rules::{
     Creep, Item, Life, Outcome, Refusal, Ship, Sim, Structure, StructureKind, Target, Team, Tuning,
 };
 
-use crate::messages::WireTeam;
+use crate::messages::{WireTeam, WireVec2};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -148,13 +148,15 @@ impl WireItem {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WireMount {
     /// 아이템이 달린 칸의 번호입니다(0부터).
     pub slot: u8,
     pub item: WireItem,
     /// 무기가 마지막으로 쏜 표적입니다.
     pub target: Option<WireTarget>,
+    /// 마지막으로 쏠 때 표적이 있던 자리입니다. 폭탄은 이 자리에 떨어집니다.
+    pub aim: Option<WireVec2>,
     /// 이 Tick부터 다시 쏠 수 있습니다. 표적이 있으면 마지막 사격은 이 값에서 쿨다운을 뺀 Tick에 있었습니다.
     pub ready_at: u64,
 }
@@ -250,6 +252,7 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning, tick: u64) -> WireShip 
                 Item::Cargo(trade) => WireItem::Cargo(trade.0),
             },
             target: mount.target.map(wire_target),
+            aim: mount.aim.map(|aim| WireVec2::new(aim.x, aim.y)),
             ready_at: mount.ready_at,
         })
     });

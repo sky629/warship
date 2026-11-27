@@ -8,8 +8,8 @@
 use std::collections::VecDeque;
 
 use warship_protocol::{
-    Snapshot, Welcome, WireItem, WireOutcome, WireRefusal, WireStructureKind, WireTarget, WireTeam,
-    WireWeapon,
+    Snapshot, Welcome, WireItem, WireOutcome, WireRefusal, WireShot, WireStructureKind, WireTarget,
+    WireTeam, WireVec2, WireWeapon,
 };
 use warship_rules::Vec2;
 
@@ -104,7 +104,18 @@ pub struct StructureView {
 pub struct ShotView {
     pub pos: Vec2,
     pub team: WireTeam,
+    /// 포탄의 종류입니다. 화면이 종류마다 다르게 그립니다.
+    pub kind: WireShot,
+    /// 수면 위의 높이입니다. 폭탄은 포물선을 그리며 날아갑니다.
+    pub lift: f32,
+    /// 포탄의 크기의 배율입니다. 피해가 큰 무기의 포탄이 큽니다.
+    pub size: f32,
 }
+
+/// 폭탄이 가장 높이 올라가는 높이입니다.
+const BOMB_ARC: f32 = 2.5;
+/// 포탄이 날아가는 높이입니다.
+const SHOT_HEIGHT: f32 = 0.5;
 
 /// 받은 스냅샷과 받은 시각(초)입니다. 오래된 것이 앞입니다.
 #[derive(Default)]
@@ -182,16 +193,35 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             Some(Vec2::new(site.x, site.y))
         }
     };
-    // 무기가 마지막으로 쏜 포탄이 아직 날아가고 있으면 그 위치입니다.
-    let shot = |from: Vec2, weapon: &WireWeapon, target: Option<WireTarget>, ready_at: u64| {
-        let to = position_of(target?)?;
+    // 무기가 마지막으로 쏜 포탄이 아직 날아가고 있으면 그 포탄입니다.
+    // 폭탄은 쏠 때 표적이 있던 자리(`aim`)로 포물선을 그리며 날아가고, 나머지는 표적을 따라갑니다.
+    let shot = |from: Vec2,
+                team: WireTeam,
+                weapon: &WireWeapon,
+                target: Option<WireTarget>,
+                aim: Option<WireVec2>,
+                ready_at: u64| {
+        let falls = matches!(weapon.shot, WireShot::Bomb { .. });
+        let to = match aim.filter(|_| falls) {
+            Some(aim) => Vec2::new(aim.x, aim.y),
+            None => position_of(target?)?,
+        };
         let fired = ready_at.checked_sub(u64::from(weapon.cooldown_ticks))? as f32;
         let per_tick = weapon.shot_speed / welcome.tick_hz as f32;
         let flight = (from.distance(to) / per_tick).ceil().max(1.0);
         let progress = (tick - fired) / flight;
-        (0.0..1.0)
-            .contains(&progress)
-            .then(|| lerp(from, to, progress))
+        let arc = if falls {
+            (progress * std::f32::consts::PI).sin() * BOMB_ARC
+        } else {
+            0.0
+        };
+        (0.0..1.0).contains(&progress).then(|| ShotView {
+            pos: lerp(from, to, progress),
+            team,
+            kind: weapon.shot,
+            lift: SHOT_HEIGHT + arc,
+            size: (0.6 + weapon.damage as f32 / 40.0).min(2.5),
+        })
     };
 
     let mut shots = Vec::new();
@@ -208,12 +238,14 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             if !ranges.contains(&weapon.range) {
                 ranges.push(weapon.range);
             }
-            if let Some(pos) = shot(pos, weapon, mount.target, mount.ready_at) {
-                shots.push(ShotView {
-                    pos,
-                    team: ship.team,
-                });
-            }
+            shots.extend(shot(
+                pos,
+                ship.team,
+                weapon,
+                mount.target,
+                mount.aim,
+                mount.ready_at,
+            ));
         }
         ships.push(ShipView {
             id: ship.id,
@@ -234,12 +266,15 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             continue;
         };
         let pos = creep_pos(creep.id).unwrap_or(Vec2::new(creep.x, creep.y));
-        if let Some(pos) = shot(pos, &spec.weapon, creep.target, creep.ready_at) {
-            shots.push(ShotView {
-                pos,
-                team: creep.team,
-            });
-        }
+        let weapon = &spec.weapon;
+        shots.extend(shot(
+            pos,
+            creep.team,
+            weapon,
+            creep.target,
+            None,
+            creep.ready_at,
+        ));
         creeps.push(CreepView {
             id: creep.id,
             team: creep.team,
@@ -251,13 +286,15 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
     for site in &next.structures {
         let pos = Vec2::new(site.x, site.y);
         let spec = welcome.structure(site.kind);
-        if let Some(weapon) = &spec.weapon
-            && let Some(pos) = shot(pos, weapon, site.target, site.ready_at)
-        {
-            shots.push(ShotView {
+        if let Some(weapon) = &spec.weapon {
+            shots.extend(shot(
                 pos,
-                team: site.team,
-            });
+                site.team,
+                weapon,
+                site.target,
+                None,
+                site.ready_at,
+            ));
         }
         structures.push(StructureView {
             id: site.id,

@@ -14,8 +14,8 @@ use crate::sim::Sim;
 use crate::structures::{Structure, StructureKind};
 use crate::tuning::{
     CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits, HullSpec, MapSpec, Recipe,
-    ShipTuning, ShopTuning, SkillEffect, SkillSpec, StructureSpec, StructureTable, SupplyEffect,
-    SupplySpec, TradeSpec, Tuning, WeaponSpec,
+    ShipTuning, ShopTuning, Shot, SkillEffect, SkillSpec, StructureSpec, StructureTable,
+    SupplyEffect, SupplySpec, TradeSpec, Tuning, WeaponSpec,
 };
 
 /// 사거리 5, 피해 10, 쿨다운 10Tick이고 배와 건물을 쏘는 포입니다. 포탄은 한 Tick에 1타일을 납니다.
@@ -24,6 +24,12 @@ pub(crate) const GUN: WeaponId = WeaponId(0);
 pub(crate) const LONG_GUN: WeaponId = WeaponId(1);
 /// `GUN` 두 개와 50골드로 조합하는 포입니다. 피해가 30이고 상점에서 팔지 않습니다.
 pub(crate) const BIG_GUN: WeaponId = WeaponId(2);
+/// 표적의 둘레 2타일 안의 적을 함께 맞히는 포입니다.
+pub(crate) const SCATTER_GUN: WeaponId = WeaponId(3);
+/// 쏠 때 표적이 있던 자리로 1초에 5타일을 날아가서, 그 자리의 둘레 2타일 안의 적을 맞히는 폭탄입니다.
+pub(crate) const BOMB: WeaponId = WeaponId(4);
+/// 맞힌 뒤 2초 동안 1초마다 피해 5를 더 주는 포입니다. 쿨다운이 200Tick입니다.
+pub(crate) const FIRE_GUN: WeaponId = WeaponId(5);
 pub(crate) const TWIN_GUNS: RecipeId = RecipeId(0);
 pub(crate) const PLANKING: GearId = GearId(0);
 pub(crate) const SAILS: GearId = GearId(1);
@@ -210,6 +216,7 @@ fn gun(name: &'static str, range: f32, hits: Hits) -> WeaponSpec {
         cooldown_ticks: 10,
         shot_speed: 20.0,
         hits,
+        shot: Shot::Shell,
         price: 100,
         buyable: true,
     }
@@ -292,6 +299,23 @@ fn open_sea_tuning() -> Tuning {
                 price: 250,
                 buyable: false,
                 ..gun("big gun", 5.0, Hits::ShipsAndStructures)
+            },
+            WeaponSpec {
+                shot: Shot::Scatter { radius: 2.0 },
+                ..gun("scatter gun", 5.0, Hits::ShipsAndStructures)
+            },
+            WeaponSpec {
+                shot: Shot::Bomb { radius: 2.0 },
+                shot_speed: 5.0,
+                ..gun("bomb", 5.0, Hits::ShipsAndStructures)
+            },
+            WeaponSpec {
+                shot: Shot::Fire {
+                    damage_per_sec: 5,
+                    secs: 2,
+                },
+                cooldown_ticks: 200,
+                ..gun("fire gun", 5.0, Hits::ShipsAndStructures)
             },
         ],
         skills: vec![

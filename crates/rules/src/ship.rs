@@ -109,6 +109,8 @@ pub struct Mount {
     pub ready_at: u64,
     /// 무기가 마지막으로 쏜 표적입니다. 쏠 수 있는데 쏠 적이 없으면 `None`이 됩니다.
     pub target: Option<Target>,
+    /// 마지막으로 쏠 때 표적이 있던 자리입니다. 폭탄은 이 자리에 떨어집니다.
+    pub aim: Option<Vec2>,
 }
 
 impl Mount {
@@ -118,6 +120,7 @@ impl Mount {
             item,
             ready_at: 0,
             target: None,
+            aim: None,
         }
     }
 

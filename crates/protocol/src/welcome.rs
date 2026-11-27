@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use warship_rules::{
-    GearEffect, HullSpec, ShipId, Sim, StructureKind, StructureSpec, SupplyEffect, WeaponSpec,
+    GearEffect, HullSpec, ShipId, Shot, Sim, StructureKind, StructureSpec, SupplyEffect, WeaponSpec,
 };
 
 use crate::messages::{WireTeam, WireVec2};
@@ -129,6 +129,37 @@ pub struct WireWeapon {
     pub range: f32,
     pub cooldown_ticks: u32,
     pub shot_speed: f32,
+    pub shot: WireShot,
+}
+
+/// 포탄이 날아가서 피해를 주는 방식입니다. 화면은 이 방식에 따라 포탄을 다르게 그립니다.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum WireShot {
+    /// 표적 하나를 맞히는 포탄입니다.
+    Shell,
+    /// 표적과 그 둘레 `radius` 안의 적을 맞히는 산탄입니다.
+    Scatter { radius: f32 },
+    /// 쏠 때 표적이 있던 자리에 떨어져서 그 둘레 `radius` 안의 적을 맞히는 폭탄입니다.
+    Bomb { radius: f32 },
+    /// 맞힌 뒤 `secs`초 동안 1초마다 `damage_per_sec`의 피해를 더 주는 불입니다.
+    Fire { damage_per_sec: u32, secs: u32 },
+}
+
+impl From<Shot> for WireShot {
+    fn from(shot: Shot) -> WireShot {
+        match shot {
+            Shot::Shell => WireShot::Shell,
+            Shot::Scatter { radius } => WireShot::Scatter { radius },
+            Shot::Bomb { radius } => WireShot::Bomb { radius },
+            Shot::Fire {
+                damage_per_sec,
+                secs,
+            } => WireShot::Fire {
+                damage_per_sec,
+                secs,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -193,6 +224,7 @@ fn wire_weapon(spec: &WeaponSpec) -> WireWeapon {
         range: spec.range,
         cooldown_ticks: spec.cooldown_ticks,
         shot_speed: spec.shot_speed,
+        shot: spec.shot.into(),
     }
 }
 

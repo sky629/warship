@@ -78,6 +78,7 @@ pub(crate) fn cast(
             target,
             damage: damage_per_rank * rank,
             by: Some(id),
+            blast: None,
         }));
     }
     // 범위 안의 다른 배에 주는 효과입니다. 아군 수리는 자기 배도 받습니다.

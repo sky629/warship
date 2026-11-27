@@ -9,7 +9,7 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 use warship_client_core::{Frame, Phase};
-use warship_protocol::{WireOutcome, WireStructureKind, WireTeam};
+use warship_protocol::{WireOutcome, WireShot, WireStructureKind, WireTeam};
 
 use crate::camera::{CAMERA_OFFSET, Rig};
 use crate::net::{CurrentFrame, Destination, LeavePrompt, Net};
@@ -20,6 +20,13 @@ pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
 const WATER: Color = Color::srgb(0.07, 0.22, 0.32);
 const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
 const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
+const FIRE: Color = Color::srgb(1.0, 0.45, 0.05);
+/// 산탄의 알이 포탄의 자리에서 떨어져 있는 거리입니다.
+const SCATTER: [Vec3; 3] = [
+    Vec3::new(0.18, 0.0, 0.0),
+    Vec3::new(-0.1, 0.0, 0.16),
+    Vec3::new(-0.1, 0.0, -0.16),
+];
 /// 은신한 배의 둘레에 그리는 원의 색입니다.
 const CLOAKED: Color = Color::srgb(0.7, 0.5, 1.0);
 /// 감속된 배의 둘레에 그리는 원의 색입니다.
@@ -98,6 +105,8 @@ pub struct Look {
     sea: Handle<StandardMaterial>,
     /// 어느 진영의 것도 아닌 교역항의 재질입니다.
     neutral: Handle<StandardMaterial>,
+    /// 불을 붙이는 포탄의 재질입니다.
+    fire: Handle<StandardMaterial>,
 }
 
 impl Look {
@@ -151,6 +160,7 @@ pub fn setup(
         land: matte(ISLAND),
         sea: matte(WATER),
         neutral: matte(PORT),
+        fire: matte(FIRE),
         // 모양의 바닥이 높이 0입니다. NPC 배는 배의 모양을 작게 줄인 것입니다.
         ships: [1, 2, 3].map(|masts| meshes.add(shapes::ship(masts))),
         creep: meshes.add(shapes::ship(1).scaled_by(Vec3::splat(0.55))),
@@ -293,6 +303,11 @@ pub fn sync_pieces(
                 let ratio = ship.and_then(|ship| Some(hp(ship.hull)? / hp(0)?));
                 ratio.map_or(1.0, f32::sqrt)
             }
+            // 포탄은 피해가 큰 무기일수록 크고, 산탄의 알은 작습니다.
+            Piece::Shot(id) => frame.shots.get(id / SCATTER.len()).map_or(1.0, |shot| {
+                let pellet = matches!(shot.kind, WireShot::Scatter { .. });
+                shot.size * if pellet { 0.5 } else { 1.0 }
+            }),
             _ => 1.0,
         };
         wanted.push(Wanted {
@@ -344,14 +359,21 @@ pub fn sync_pieces(
         want(Piece::Ship(ship.id), &look.ships[masts], material, at, true);
     }
     for (index, shot) in frame.shots.iter().enumerate() {
-        let at = on_water(shot.pos) + Vec3::Y * 0.5;
-        want(
-            Piece::Shot(index),
-            &look.shot,
-            look.team(shot.team),
-            at,
-            false,
-        );
+        let at = on_water(shot.pos) + Vec3::Y * shot.lift;
+        // 불은 주황색이고, 나머지 포탄은 쏜 진영의 색입니다.
+        let material = match shot.kind {
+            WireShot::Fire { .. } => look.fire.clone(),
+            _ => look.team(shot.team),
+        };
+        // 산탄은 작은 알 여러 개가 함께 날아갑니다.
+        let pellets: &[Vec3] = match shot.kind {
+            WireShot::Scatter { .. } => &SCATTER,
+            _ => &[Vec3::ZERO],
+        };
+        for (pellet, offset) in pellets.iter().enumerate() {
+            let piece = Piece::Shot(index * SCATTER.len() + pellet);
+            want(piece, &look.shot, material.clone(), at + *offset, false);
+        }
     }
 
     let mut seen = Vec::with_capacity(wanted.len());

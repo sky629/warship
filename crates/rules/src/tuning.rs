@@ -212,10 +212,25 @@ pub struct WeaponSpec {
     /// 포탄이 1초에 날아가는 거리입니다. 피해는 포탄이 표적까지 날아가는 시간이 지난 뒤에 들어갑니다.
     pub shot_speed: f32,
     pub hits: Hits,
+    /// 포탄이 날아가서 피해를 주는 방식입니다.
+    pub shot: Shot,
     /// 무기의 값입니다. 상점에서 사는 가격이고, 팔 때 이 값의 일부를 돌려받습니다. 건물과 NPC 배의 포에서는 쓰지 않습니다.
     pub price: u32,
     /// 상점에서 바로 살 수 있는지입니다. 조합으로만 얻는 무기는 거짓입니다.
     pub buyable: bool,
+}
+
+/// 포탄이 날아가서 피해를 주는 방식입니다. 범위 안의 적 가운데 무기가 쏠 수 있는 종류(`Hits`)만 피해를 받습니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Shot {
+    /// 표적을 따라가서 그 표적만 맞힙니다.
+    Shell,
+    /// 표적을 따라가서, 닿을 때 표적과 그 둘레 `radius` 안의 적을 모두 맞힙니다.
+    Scatter { radius: f32 },
+    /// 쏠 때 표적이 있던 자리로 날아가서, 닿을 때 그 자리의 둘레 `radius` 안의 적을 모두 맞힙니다. 그 자리를 벗어난 표적은 맞지 않습니다.
+    Bomb { radius: f32 },
+    /// 표적을 따라가서 맞히고, 그 뒤 `secs`초 동안 1초마다 `damage_per_sec`의 피해를 더 줍니다.
+    Fire { damage_per_sec: u32, secs: u32 },
 }
 
 /// 무기가 쏠 수 있는 표적의 종류입니다. 배에는 플레이어의 배와 NPC 배가 모두 들어갑니다.
@@ -384,6 +399,16 @@ impl WeaponSpec {
         }
         if !is_positive(self.shot_speed) {
             return Err(format!("weapon {name}: shot_speed must be positive"));
+        }
+        let shot_fits = match self.shot {
+            Shot::Shell => true,
+            Shot::Scatter { radius } | Shot::Bomb { radius } => is_positive(radius),
+            Shot::Fire { secs, .. } => secs > 0,
+        };
+        if !shot_fits {
+            return Err(format!(
+                "weapon {name}: a blast needs a positive radius and a fire must last"
+            ));
         }
         Ok(())
     }
@@ -650,9 +675,11 @@ impl Default for Tuning {
             cooldown_ticks,
             shot_speed,
             hits,
+            shot: Shot::Shell,
             price: 0,
             buyable: false,
         };
+        let with = |shot, weapon: WeaponSpec| WeaponSpec { shot, ..weapon };
         // 상점에서 파는 무기와, 조합으로만 얻는 무기입니다. 조합한 무기의 값은 재료의 값과 조합 값의 합입니다.
         let sold = |price, weapon: WeaponSpec| WeaponSpec {
             price,
@@ -770,12 +797,48 @@ impl Default for Tuning {
                 sold(100, gun("Deck Gun", 20, 5.5, 30, 14.0, both)),
                 sold(150, gun("Swivel Gun", 4, 3.5, 3, 18.0, both)),
                 sold(300, gun("Long Nine", 30, 12.0, 25, 12.0, Hits::ShipsOnly)),
-                sold(250, gun("Carronade", 45, 3.5, 40, 14.0, both)),
-                sold(400, gun("Mortar", 50, 9.0, 60, 7.0, both)),
+                // 카로네이드는 가까운 적에게 산탄을 쏘고, 박격포는 느린 폭탄을 멀리 쏩니다.
+                sold(
+                    250,
+                    with(
+                        Shot::Scatter { radius: 1.5 },
+                        gun("Carronade", 45, 3.5, 40, 14.0, both),
+                    ),
+                ),
+                sold(
+                    400,
+                    with(
+                        Shot::Bomb { radius: 2.0 },
+                        gun("Mortar", 50, 9.0, 60, 7.0, both),
+                    ),
+                ),
                 made(350, gun("Twin Deck Guns", 48, 5.5, 30, 14.0, both)),
                 made(500, gun("Chain Gun", 6, 4.0, 2, 18.0, both)),
-                made(600, gun("Heavy Carronade", 80, 4.0, 36, 14.0, both)),
-                made(1100, gun("Siege Mortar", 90, 11.0, 55, 8.0, both)),
+                made(
+                    600,
+                    with(
+                        Shot::Scatter { radius: 2.0 },
+                        gun("Heavy Carronade", 80, 4.0, 36, 14.0, both),
+                    ),
+                ),
+                made(
+                    1100,
+                    with(
+                        Shot::Bomb { radius: 2.5 },
+                        gun("Siege Mortar", 90, 11.0, 55, 8.0, both),
+                    ),
+                ),
+                // 맞은 배에 불이 붙어서 5초 동안 피해를 더 줍니다. 조합의 번호가 바뀌지 않게 표의 끝에 둡니다.
+                sold(
+                    350,
+                    with(
+                        Shot::Fire {
+                            damage_per_sec: 6,
+                            secs: 5,
+                        },
+                        gun("Fire Pot", 15, 5.0, 50, 10.0, Hits::ShipsOnly),
+                    ),
+                ),
             ],
             recipes: vec![
                 recipe([0, 0], 5, 150),

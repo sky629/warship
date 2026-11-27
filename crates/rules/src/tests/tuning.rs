@@ -3,7 +3,7 @@
 use crate::ids::{SkillId, WeaponId};
 use crate::math::Vec2;
 use crate::sim::Sim;
-use crate::tuning::{GearEffect, SkillEffect, SupplyEffect, Tuning};
+use crate::tuning::{GearEffect, Shot, SkillEffect, SupplyEffect, Tuning};
 
 #[test]
 fn the_default_tuning_is_valid_and_starts_a_room() {
@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 43] = [
+    let broken: [fn(&mut Tuning); 45] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -84,6 +84,14 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.trades[0].reward = t.trades[0].price,
         |t| t.map.ports[0] = Vec2::new(97.0, 24.0),
         |t| t.map.ports[0] = Vec2::new(48.0, 42.0),
+        // 범위가 없는 폭탄과, 이어지는 시간이 없는 화염입니다.
+        |t| t.weapons[4].shot = Shot::Bomb { radius: 0.0 },
+        |t| {
+            t.weapons[0].shot = Shot::Fire {
+                damage_per_sec: 5,
+                secs: 0,
+            }
+        },
         // 이어지는 시간이 없는 은신입니다.
         |t| t.skills[7].effect = SkillEffect::Cloak { ticks_per_rank: 0 },
         // 받는 피해를 100%보다 많이 줄이는 소모품입니다.
