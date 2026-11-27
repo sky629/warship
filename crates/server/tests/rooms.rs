@@ -420,7 +420,7 @@ fn a_snapshot_carries_own_creeps_and_own_gold_but_not_the_far_enemys() {
             .iter()
             .all(|creep| creep.team == WireTeam::Red)
     );
-    assert_eq!(snapshot.structures.len(), 10, "structures of both teams");
+    assert_eq!(snapshot.structures.len(), 14, "structures of both teams");
     let own = snapshot.ships.iter().map(|ship| ship.own.as_ref());
     let golds: Vec<Option<u32>> = own.map(|own| own.map(|own| own.gold)).collect();
     assert_eq!(golds, [Some(6)]);
@@ -489,9 +489,9 @@ fn a_room_with_a_pilot_fills_every_seat_and_the_pilot_steers_the_spare_ships() {
     for ship in ships {
         let rank = ship.own.expect("my team").skills[0].rank;
         if ship.id == me {
-            assert_eq!((ship.x, rank), (7.0, 0), "nobody steers my ship");
+            assert_eq!((ship.x, rank), (9.0, 0), "nobody steers my ship");
         } else {
-            assert!(ship.x > 7.0, "ship {} sails to the middle", ship.id);
+            assert!(ship.x > 9.0, "ship {} sails to the middle", ship.id);
             assert_eq!(rank, 1);
         }
     }
@@ -661,7 +661,7 @@ fn the_pilot_steers_the_ship_of_a_lost_link_and_keeps_it_when_the_seat_ends() {
         let ship = snapshot.ships.into_iter().find(|ship| ship.id == old.ship);
         ship.map(|ship| ship.x)
     };
-    let start = if old.team == WireTeam::Red { 7.0 } else { 57.0 };
+    let start = if old.team == WireTeam::Red { 9.0 } else { 87.0 };
     let sailed = x_of(mate.last_snapshot());
     assert!(sailed.is_some_and(|x| x != start), "the pilot sails it");
 
@@ -669,7 +669,7 @@ fn the_pilot_steers_the_ship_of_a_lost_link_and_keeps_it_when_the_seat_ends() {
     let mut back = bench.join_with(Some("test"), "KANG", Some(old.token));
     bench.run_ticks(1);
     assert_eq!(back.welcome().ship, old.ship);
-    back.sail_to(1, start, 24.0);
+    back.sail_to(1, start, 32.0);
     bench.run_ticks(200);
     assert_eq!(x_of(back.last_snapshot()), Some(start));
 

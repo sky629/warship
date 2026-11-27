@@ -11,8 +11,8 @@ fn the_default_tuning_is_valid_and_starts_a_room() {
     assert_eq!(tuning.validate(), Ok(()));
 
     let sim = Sim::new(tuning);
-    // 진영마다 본진 하나, 라인 둘에 항구와 타워가 하나씩입니다.
-    assert_eq!(sim.structures().count(), 10);
+    // 진영마다 본진 하나, 라인 셋에 항구와 타워가 하나씩입니다.
+    assert_eq!(sim.structures().count(), 14);
 }
 
 #[test]
@@ -21,7 +21,7 @@ fn a_new_ship_carries_the_start_weapons() {
     let id = sim.add_ship(crate::ids::Team::BLUE);
 
     let ship = sim.ship(id).unwrap();
-    assert_eq!(ship.pos, Vec2::new(57.0, 24.0));
+    assert_eq!(ship.pos, Vec2::new(87.0, 32.0));
     assert_eq!(ship.hp, 400);
     assert_eq!(ship.mounts[0].unwrap().weapon(), Some(WeaponId(0)));
     assert!(ship.mounts[1].is_none());
@@ -76,14 +76,14 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.map.islands[0].radius = 0.0,
         // 맵의 가장자리에 붙은 섬, 다른 섬에 붙은 섬, 시작 자리를 덮은 섬, 라인을 막은 섬입니다.
         |t| t.map.islands[0].center = Vec2::new(5.5, 24.0),
-        |t| t.map.islands[1].center = Vec2::new(24.5, 24.0),
-        |t| t.map.islands[1].center = Vec2::new(9.0, 22.0),
-        |t| t.map.islands[1].center = Vec2::new(30.0, 34.0),
+        |t| t.map.islands[1].center = Vec2::new(40.0, 42.0),
+        |t| t.map.islands[1].center = Vec2::new(9.0, 30.0),
+        |t| t.map.islands[1].center = Vec2::new(32.0, 50.0),
         // 없는 교역항의 교역, 값보다 보상이 크지 않은 교역, 맵 밖의 교역항, 섬 위의 교역항입니다.
         |t| t.trades[0].port = 9,
         |t| t.trades[0].reward = t.trades[0].price,
-        |t| t.map.ports[0] = Vec2::new(65.0, 24.0),
-        |t| t.map.ports[0] = Vec2::new(32.0, 24.0),
+        |t| t.map.ports[0] = Vec2::new(97.0, 24.0),
+        |t| t.map.ports[0] = Vec2::new(48.0, 42.0),
         // 이어지는 시간이 없는 은신입니다.
         |t| t.skills[7].effect = SkillEffect::Cloak { ticks_per_rank: 0 },
         // 받는 피해를 100%보다 많이 줄이는 소모품입니다.

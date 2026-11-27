@@ -640,8 +640,8 @@ impl MapSpec {
 }
 
 impl Default for Tuning {
-    /// 64 x 48 맵입니다. 두 진영의 본진이 동서 끝에 있고, 북쪽과 남쪽에 라인이 하나씩 있습니다.
-    /// 라인마다 진영별로 항구 하나와 타워 하나가 있습니다. 두 라인 사이에 섬 셋이 있고, 라인의 바깥쪽 한가운데에 섬이 하나씩 있습니다.
+    /// 96 x 64 맵입니다. 두 진영의 본진이 동서 끝에 있고, 북쪽과 가운데와 남쪽에 라인이 하나씩 있습니다.
+    /// 라인마다 진영별로 항구 하나와 타워 하나가 있습니다. 라인과 라인 사이에 섬이 셋씩 있고, 바깥쪽 라인의 바깥 한가운데에 섬과 교역항이 하나씩 있습니다.
     fn default() -> Tuning {
         let gun = |name, damage, range, cooldown_ticks, shot_speed, hits| WeaponSpec {
             name,
@@ -703,10 +703,11 @@ impl Default for Tuning {
             effect,
         };
         let both = Hits::ShipsAndStructures;
-        let (north, south) = (36.0, 12.0);
+        // 라인의 남북 자리입니다. 북쪽, 가운데, 남쪽의 순서입니다.
+        let lanes = [52.0, 32.0, 12.0];
         let mut structures = Vec::new();
         for (team, base_x, harbor_x, tower_x) in
-            [(Team::RED, 4.0, 10.0, 22.0), (Team::BLUE, 60.0, 54.0, 42.0)]
+            [(Team::RED, 5.0, 14.0, 30.0), (Team::BLUE, 91.0, 82.0, 66.0)]
         {
             let site = |kind, x, y, lane| StructureSite {
                 kind,
@@ -714,8 +715,8 @@ impl Default for Tuning {
                 pos: Vec2::new(x, y),
                 lane,
             };
-            structures.push(site(StructureKind::Base, base_x, 24.0, None));
-            for (lane, y) in [north, south].into_iter().enumerate() {
+            structures.push(site(StructureKind::Base, base_x, 32.0, None));
+            for (lane, y) in lanes.into_iter().enumerate() {
                 structures.push(site(StructureKind::Harbor, harbor_x, y, Some(lane)));
                 structures.push(site(StructureKind::Tower, tower_x, y, None));
             }
@@ -798,11 +799,12 @@ impl Default for Tuning {
                 ),
             ],
             trades: vec![
-                // 교역선 한 척이 1분에 남기는 이익이 전투하는 배의 보상(1분에 약 65골드)과 비슷하거나 조금 많게 맞춘 값입니다.
-                trade("Timber", 60, 75, 0),
-                trade("Salt", 60, 75, 1),
-                trade("Spice", 300, 325, 0),
-                trade("Silk", 300, 325, 1),
+                // 교역선 한 척이 1분에 남기는 이익이 전투하는 배의 보상(1분에 약 75골드)과 비슷하거나 조금 많게 맞춘 값입니다.
+                // 한 바퀴에 약 20초가 걸립니다.
+                trade("Timber", 60, 95, 0),
+                trade("Salt", 60, 95, 1),
+                trade("Spice", 300, 350, 0),
+                trade("Silk", 300, 350, 1),
             ],
             gear: vec![
                 gear("Oak Planking", 200, GearEffect::Planking { max_hp: 250 }),
@@ -926,20 +928,24 @@ impl Default for Tuning {
             ],
             economy: EconomyTuning { income_per_sec: 2 },
             map: MapSpec {
-                width: 64.0,
-                height: 48.0,
-                spawns: [Vec2::new(7.0, 24.0), Vec2::new(57.0, 24.0)],
-                lanes: [north, south]
+                width: 96.0,
+                height: 64.0,
+                spawns: [Vec2::new(9.0, 32.0), Vec2::new(87.0, 32.0)],
+                lanes: lanes
                     .into_iter()
-                    .map(|y| vec![Vec2::new(12.0, y), Vec2::new(52.0, y)])
+                    .map(|y| vec![Vec2::new(16.0, y), Vec2::new(80.0, y)])
                     .collect(),
                 structures,
+                // 라인과 라인 사이에 섬이 셋씩 있고, 바깥쪽 라인의 바깥 한가운데에 섬이 하나씩 있습니다.
                 islands: [
-                    (32.0, 24.0, 5.0),
-                    (20.0, 24.0, 3.0),
-                    (44.0, 24.0, 3.0),
-                    (32.0, 43.5, 2.5),
-                    (32.0, 4.5, 2.5),
+                    (48.0, 42.0, 5.0),
+                    (32.0, 42.0, 3.5),
+                    (64.0, 42.0, 3.5),
+                    (48.0, 22.0, 5.0),
+                    (32.0, 22.0, 3.5),
+                    (64.0, 22.0, 3.5),
+                    (48.0, 59.5, 2.5),
+                    (48.0, 4.5, 2.5),
                 ]
                 .into_iter()
                 .map(|(x, y, radius)| Island {
@@ -947,8 +953,8 @@ impl Default for Tuning {
                     radius,
                 })
                 .collect(),
-                // 두 진영의 본진에서 같은 거리에 있는, 가운데 섬의 북쪽과 남쪽입니다.
-                ports: vec![Vec2::new(32.0, 31.5), Vec2::new(32.0, 16.5)],
+                // 두 진영의 본진에서 같은 거리에 있는, 바깥쪽 섬의 안쪽입니다. 바깥쪽 라인보다 더 바깥입니다.
+                ports: vec![Vec2::new(48.0, 56.0), Vec2::new(48.0, 8.0)],
             },
         }
     }

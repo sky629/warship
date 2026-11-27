@@ -117,11 +117,11 @@ fn ships_cross_the_default_map_without_touching_an_island() {
     s.sim = Sim::new(tuning);
     let red = s.sim.add_ship(Team::RED);
     let blue = s.sim.add_ship(Team::BLUE);
-    // 두 배는 서로의 시작 자리로 갑니다. 그 사이에 섬 셋이 한 줄로 있습니다.
-    s.sail_to(red, 57.0, 24.0);
-    s.sail_to(blue, 7.0, 24.0);
+    // 두 배는 맵의 반대쪽으로 비스듬히 갑니다. 곧은 길은 라인 사이의 가운데 섬을 지납니다.
+    s.sail_to(red, 87.0, 46.0);
+    s.sail_to(blue, 9.0, 18.0);
 
-    for _ in 0..400 {
+    for _ in 0..600 {
         s.run_ticks(1);
         for ship in [red, blue] {
             let pos = s.ship(ship).pos;
@@ -131,6 +131,6 @@ fn ships_cross_the_default_map_without_touching_an_island() {
         }
     }
 
-    assert_eq!(s.ship(red).pos, Vec2::new(57.0, 24.0));
-    assert_eq!(s.ship(blue).pos, Vec2::new(7.0, 24.0));
+    assert_eq!(s.ship(red).pos, Vec2::new(87.0, 46.0));
+    assert_eq!(s.ship(blue).pos, Vec2::new(9.0, 18.0));
 }

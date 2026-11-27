@@ -71,7 +71,7 @@ pub struct Minimap {
 
 impl Minimap {
     /// 타일 하나의 한 변의 길이(픽셀)입니다.
-    pub const PX_PER_TILE: f32 = 3.0;
+    pub const PX_PER_TILE: f32 = 2.0;
     /// 창의 오른쪽과 아래쪽 가장자리에서 떨어진 거리(픽셀)입니다.
     pub const MARGIN: f32 = 10.0;
 
@@ -303,13 +303,13 @@ mod tests {
     #[test]
     fn the_minimap_sits_in_the_lower_right_corner_with_north_at_its_top() {
         let minimap = Minimap::in_window((1000.0, 700.0), MAP);
-        assert_eq!(minimap.size(), (192.0, 144.0));
-        assert_eq!((minimap.left, minimap.top), (798.0, 546.0));
+        assert_eq!(minimap.size(), (128.0, 96.0));
+        assert_eq!((minimap.left, minimap.top), (862.0, 594.0));
 
         // 미니맵의 왼쪽 위는 맵의 북서쪽 끝이고, 오른쪽 아래는 남동쪽 끝입니다.
-        assert_eq!(minimap.tile_at((798.0, 546.0)), Some(Vec2::new(0.0, 48.0)));
+        assert_eq!(minimap.tile_at((862.0, 594.0)), Some(Vec2::new(0.0, 48.0)));
         assert_eq!(minimap.tile_at((990.0, 690.0)), Some(Vec2::new(64.0, 0.0)));
-        assert_eq!(minimap.tile_at((797.0, 600.0)), None);
+        assert_eq!(minimap.tile_at((861.0, 600.0)), None);
         assert_eq!(minimap.tile_at((900.0, 691.0)), None);
     }
 
@@ -320,7 +320,7 @@ mod tests {
 
         let (x, y) = minimap.dot(tile);
 
-        assert_eq!((x, y), (60.0, 36.0));
+        assert_eq!((x, y), (40.0, 24.0));
         let cursor = (minimap.left + x, minimap.top + y);
         assert_eq!(minimap.tile_at(cursor), Some(tile));
     }

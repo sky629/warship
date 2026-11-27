@@ -334,9 +334,9 @@ mod tests {
                 .count()
         };
 
-        // 10분이면 칸이 넷인 선체를 가진 봇이 있습니다. 소모품을 가진 봇의 수는 사고 쓰는 것에 따라 바뀝니다.
+        // 20분이면 칸이 넷인 선체를 가진 봇이 있습니다. 소모품을 가진 봇의 수는 사고 쓰는 것에 따라 바뀝니다.
         let mut seen = Vec::new();
-        for _ in 0..12 {
+        for _ in 0..24 {
             play(&mut sim, &ships, 1_000);
             seen.push(kits(&sim));
         }
@@ -352,14 +352,14 @@ mod tests {
         // 첫 NPC 배가 나와서 두 진영이 라인의 가운데에서 만날 때까지 진행합니다.
         play(&mut sim, &ships, 300);
 
-        let middle = sim.tuning().map.height / 2.0;
+        // 라인은 북쪽(y 52), 가운데(y 32), 남쪽(y 12)입니다. 배 다섯 척은 둘, 둘, 하나로 나뉩니다.
         for team in Team::ALL {
-            let mine = sim.ships().filter(|ship| ship.team == team);
-            let north = mine.filter(|ship| ship.pos.y > middle).count();
-            assert!(
-                (2..=3).contains(&north),
-                "{team:?}: {north} of 5 in the north"
-            );
+            let near = |lane: f32| {
+                let mine = sim.ships().filter(|ship| ship.team == team);
+                mine.filter(|ship| (ship.pos.y - lane).abs() < 6.0).count()
+            };
+            let split = [near(52.0), near(32.0), near(12.0)];
+            assert_eq!(split, [2, 2, 1], "{team:?}");
         }
     }
 
