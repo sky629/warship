@@ -1,7 +1,7 @@
 //! 내 배의 상태를 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이 보여 줍니다.
 //!
 //! 숫자 키는 상점의 그 번호의 무기를 사고, Alt와 숫자 키는 그 번호의 장비를 삽니다. 무기와 장비는 같은 칸에 달립니다.
-//! Shift와 숫자 키는 그 번호의 칸의 아이템을 팝니다.
+//! Shift와 숫자 키는 그 번호의 칸의 아이템을 팔고, Ctrl과 숫자 키는 그 번호의 칸의 소모품을 씁니다.
 //! Z, X, C, V는 조합 표의 차례대로 무기를 조합합니다. F1부터의 키는 선체를 바꿉니다.
 //! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Ctrl과 함께 누르면 스킬 포인트를 넣습니다. 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
@@ -83,10 +83,11 @@ pub fn order_commands(
             continue;
         }
         let slot = index as u8;
-        let order = match (shift, alt) {
-            (true, _) => Some(WireCommand::Sell { slot }),
-            (false, true) => Some(WireCommand::BuyGear { gear: index as u16 }),
-            (false, false) => for_sale
+        let order = match (shift, ctrl, alt) {
+            (true, _, _) => Some(WireCommand::Sell { slot }),
+            (false, true, _) => Some(WireCommand::Use { slot }),
+            (false, false, true) => Some(WireCommand::BuyGear { gear: index as u16 }),
+            (false, false, false) => for_sale
                 .get(index)
                 .map(|&weapon| WireCommand::Buy { weapon }),
         };
@@ -162,6 +163,10 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
                 let gear = welcome.gear.get(usize::from(*gear));
                 gear.map(|gear| gear.name.as_str())
             }
+            Some(WireItem::Supply(supply)) => {
+                let supply = welcome.supplies.get(usize::from(*supply));
+                supply.map(|supply| supply.name.as_str())
+            }
             Some(WireItem::Contract(trade) | WireItem::Cargo(trade)) => {
                 let trade = welcome.trades.get(usize::from(*trade));
                 trade.map(|trade| trade.name.as_str())
@@ -187,7 +192,7 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
         }
     }
     lines += "\nB: shop   Number: buy weapon   Alt+number: buy gear   Z, X, C, V: combine   F1-F10: hull";
-    lines += "\nShift+number: sell mount   Ctrl+key: learn skill";
+    lines += "\nShift+number: sell mount   Ctrl+number: use supply   Ctrl+key: learn skill";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
     }
@@ -212,6 +217,7 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::NotForSale => "that weapon is made by combining, not sold",
         WireRefusal::MissingParts => "mount every part of the recipe first",
         WireRefusal::NoBaseInRange => "go near your base",
+        WireRefusal::NotUsable => "only a supply is used",
         WireRefusal::NotATrader => "only a trader hull trades",
         WireRefusal::CarryingFreight => "sell the contract or cargo before leaving the trader hull",
     }

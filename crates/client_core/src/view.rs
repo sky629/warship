@@ -110,16 +110,19 @@ impl Minimap {
     }
 }
 
-/// 창의 왼쪽 위에 놓이는 상점 창의 자리(픽셀)입니다. 줄의 높이가 모두 같아서, 커서의 자리로 줄을 찾습니다.
+/// 창의 왼쪽 위에 놓이는 상점 창의 자리(픽셀)입니다. 목록은 두 열이고, 그 아래에 커서 아래의 줄을 설명하는 줄이 하나 있습니다.
+/// 줄의 높이와 열의 너비가 모두 같아서, 커서의 자리로 줄을 찾습니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShopWindow {
     pub left: f32,
     pub top: f32,
-    pub rows: usize,
+    /// 열마다 있는 줄의 수입니다. 줄의 번호는 첫 열의 위에서부터 세고, 둘째 열이 이어집니다.
+    pub columns: [usize; 2],
 }
 
 impl ShopWindow {
-    pub const WIDTH: f32 = 500.0;
+    /// 열 하나의 너비입니다.
+    pub const COLUMN: f32 = 460.0;
     /// 줄 하나의 높이입니다.
     pub const ROW: f32 = 18.0;
     /// 창의 왼쪽 가장자리와 상점 창 사이의 간격입니다.
@@ -127,24 +130,57 @@ impl ShopWindow {
     /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 줄 두 줄을 가리지 않습니다.
     pub const TOP: f32 = 60.0;
 
-    /// 줄이 `rows`개인 상점 창의 자리입니다.
-    pub fn with_rows(rows: usize) -> ShopWindow {
+    /// 열마다 줄이 `columns`개인 상점 창의 자리입니다.
+    pub fn with_columns(columns: [usize; 2]) -> ShopWindow {
         ShopWindow {
             left: Self::MARGIN,
             top: Self::TOP,
-            rows,
+            columns,
         }
     }
 
-    pub fn height(&self) -> f32 {
-        self.rows as f32 * Self::ROW
+    pub fn width(&self) -> f32 {
+        Self::COLUMN * 2.0
     }
 
-    /// 창의 `cursor` 자리가 상점 창 위이면, 그 자리에 있는 줄의 번호입니다.
-    pub fn row_at(&self, cursor: (f32, f32)) -> Option<usize> {
+    /// 긴 열의 줄의 수입니다.
+    fn lines(&self) -> usize {
+        self.columns[0].max(self.columns[1])
+    }
+
+    /// 목록과 설명 줄을 합한 높이입니다.
+    pub fn height(&self) -> f32 {
+        (self.lines() + 1) as f32 * Self::ROW
+    }
+
+    /// `index`번 줄이 상점 창의 왼쪽 위에서 얼마나 떨어져 있는지입니다.
+    pub fn place(&self, index: usize) -> (f32, f32) {
+        let (column, line) = match index.checked_sub(self.columns[0]) {
+            None => (0, index),
+            Some(line) => (1, line),
+        };
+        (column as f32 * Self::COLUMN, line as f32 * Self::ROW)
+    }
+
+    /// 설명 줄이 상점 창의 왼쪽 위에서 얼마나 떨어져 있는지입니다.
+    pub fn footer(&self) -> (f32, f32) {
+        (0.0, self.lines() as f32 * Self::ROW)
+    }
+
+    /// 창의 `cursor` 자리가 상점 창(설명 줄을 포함) 위인지입니다.
+    pub fn covers(&self, cursor: (f32, f32)) -> bool {
         let (x, y) = (cursor.0 - self.left, cursor.1 - self.top);
-        let inside = (0.0..Self::WIDTH).contains(&x) && (0.0..self.height()).contains(&y);
-        inside.then(|| (y / Self::ROW) as usize)
+        (0.0..self.width()).contains(&x) && (0.0..self.height()).contains(&y)
+    }
+
+    /// 창의 `cursor` 자리에 목록의 줄이 있으면 그 줄의 번호입니다.
+    pub fn row_at(&self, cursor: (f32, f32)) -> Option<usize> {
+        if !self.covers(cursor) {
+            return None;
+        }
+        let column = usize::from(cursor.0 - self.left >= Self::COLUMN);
+        let line = ((cursor.1 - self.top) / Self::ROW) as usize;
+        (line < self.columns[column]).then(|| column * self.columns[0] + line)
     }
 }
 
@@ -232,17 +268,29 @@ mod tests {
     }
 
     #[test]
-    fn the_shop_window_sits_in_the_upper_left_corner_and_finds_the_row_under_the_cursor() {
-        let shop = ShopWindow::with_rows(5);
-        assert_eq!((shop.left, shop.top, shop.height()), (10.0, 60.0, 90.0));
+    fn the_shop_window_has_two_columns_and_finds_the_row_under_the_cursor() {
+        let shop = ShopWindow::with_columns([5, 3]);
+        assert_eq!((shop.left, shop.top), (10.0, 60.0));
+        // 긴 열의 다섯 줄과 설명 줄입니다.
+        assert_eq!((shop.width(), shop.height()), (920.0, 108.0));
+        assert_eq!(shop.place(0), (0.0, 0.0));
+        assert_eq!(shop.place(6), (460.0, 18.0));
+        assert_eq!(shop.footer(), (0.0, 90.0));
 
         assert_eq!(shop.row_at((10.0, 60.0)), Some(0));
-        assert_eq!(shop.row_at((509.0, 77.0)), Some(0));
+        assert_eq!(shop.row_at((469.0, 77.0)), Some(0));
         assert_eq!(shop.row_at((200.0, 78.0)), Some(1));
         assert_eq!(shop.row_at((200.0, 149.0)), Some(4));
-        assert_eq!(shop.row_at((200.0, 150.0)), None, "below the last row");
-        assert_eq!(shop.row_at((9.0, 100.0)), None);
-        assert_eq!(shop.row_at((510.0, 100.0)), None);
+        assert_eq!(shop.row_at((470.0, 60.0)), Some(5), "the second column");
+        assert_eq!(shop.row_at((700.0, 113.0)), Some(7));
+        assert_eq!(shop.row_at((700.0, 114.0)), None, "the short column ends");
+        assert_eq!(shop.row_at((200.0, 150.0)), None, "the detail line");
         assert_eq!(shop.row_at((200.0, 59.0)), None, "the status lines");
+
+        assert!(shop.covers((200.0, 160.0)));
+        assert!(shop.covers((700.0, 120.0)));
+        assert!(!shop.covers((200.0, 168.0)));
+        assert!(!shop.covers((930.0, 100.0)));
+        assert!(!shop.covers((9.0, 100.0)));
     }
 }

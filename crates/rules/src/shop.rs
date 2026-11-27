@@ -1,11 +1,11 @@
 //! 상점입니다. 자기 진영의 서 있는 본진과 항구 가까이에 떠 있는 배가 무기와 장비를 사고팔고, 무기를 조합하고, 선체를 바꿉니다. 본진 가까이에서는 수리를 받습니다.
 
 use crate::command::Refusal;
-use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, WeaponId};
-use crate::ship::{Item, Mount, Ship};
+use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, SupplyId, WeaponId};
+use crate::ship::{Boost, Item, Mount, Ship};
 use crate::structures::StructureKind;
 use crate::trade;
-use crate::tuning::Tuning;
+use crate::tuning::{SupplyEffect, Tuning};
 use crate::world::World;
 
 /// 배가 자기 진영의 서 있는 본진이나 항구에서 상점 거리 안에 있는지입니다.
@@ -113,6 +113,49 @@ fn keep_hp_share(ship: &mut Ship, tuning: &Tuning, before: u32) {
     };
 }
 
+/// 소모품을 사서 첫 빈 칸에 답니다.
+pub(crate) fn buy_supply(
+    world: &mut World,
+    tuning: &Tuning,
+    id: ShipId,
+    supply: SupplyId,
+) -> Result<(), Refusal> {
+    let spec = tuning.supply_of(supply).ok_or(Refusal::UnknownItem)?;
+    let ship = customer(world, tuning, id)?;
+    mount_bought(ship, tuning, Item::Supply(supply), spec.price)
+}
+
+/// 칸의 소모품을 씁니다. 효과를 내고 칸을 비웁니다. 떠 있는 배는 어디에서나 씁니다.
+pub(crate) fn use_supply(
+    world: &mut World,
+    tuning: &Tuning,
+    tick: u64,
+    id: ShipId,
+    slot: usize,
+) -> Result<(), Refusal> {
+    let ship = world.ships.get_mut(&id).ok_or(Refusal::Sunk)?;
+    if !ship.is_afloat() {
+        return Err(Refusal::Sunk);
+    }
+    let mount = ship.mounts.get(slot).copied().flatten();
+    let mount = mount.ok_or(Refusal::EmptyMount)?;
+    let Item::Supply(supply) = mount.item else {
+        return Err(Refusal::NotUsable);
+    };
+    let spec = tuning.supply_of(supply).ok_or(Refusal::UnknownItem)?;
+    let lasting = |percent: u32, ticks: u32| Boost {
+        until: tick + u64::from(ticks),
+        percent,
+    };
+    match spec.effect {
+        SupplyEffect::Repair { hp } => ship.hp = (ship.hp + hp).min(ship.max_hp(tuning)),
+        SupplyEffect::Sprint { percent, ticks } => ship.sprint = Some(lasting(percent, ticks)),
+        SupplyEffect::Brace { percent, ticks } => ship.brace = Some(lasting(percent, ticks)),
+    }
+    ship.mounts[slot] = None;
+    Ok(())
+}
+
 /// 값을 내고 아이템을 선체의 첫 빈 칸에 답니다. 빈 칸이 없거나 골드가 모자라면 거절합니다.
 pub(crate) fn mount_bought(
     ship: &mut Ship,
@@ -145,6 +188,7 @@ pub(crate) fn sell(
     let price = match mount.item {
         Item::Weapon(weapon) => tuning.weapons[usize::from(weapon.0)].price,
         Item::Gear(gear) => tuning.gear_of(gear).map_or(0, |gear| gear.price),
+        Item::Supply(supply) => tuning.supply_of(supply).map_or(0, |supply| supply.price),
         Item::Contract(trade) | Item::Cargo(trade) => {
             tuning.trade_of(trade).map_or(0, |trade| trade.price)
         }

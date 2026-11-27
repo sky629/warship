@@ -3,7 +3,7 @@
 //! 거리의 단위는 타일이고, 시간의 단위는 수치마다 적혀 있습니다(초 또는 Tick).
 //! 기본 수치(`Tuning::default`)는 프로토타입용 값이고, 배와 무기의 이름과 맵의 배치는 이 게임에서 새로 지은 것입니다.
 
-use crate::ids::{GearId, HullId, SkillId, Team, TradeId, WeaponId};
+use crate::ids::{GearId, HullId, SkillId, SupplyId, Team, TradeId, WeaponId};
 use crate::math::Vec2;
 use crate::nav;
 use crate::ship::MOUNTS;
@@ -26,6 +26,8 @@ pub struct Tuning {
     pub gear: Vec<GearSpec>,
     /// 조합 표입니다. 재료 무기를 모두 단 배가 값을 내면 재료가 결과 무기 하나로 바뀝니다.
     pub recipes: Vec<Recipe>,
+    /// 소모품 표입니다. `SupplyId`가 이 표의 행 번호입니다. 상점이 이 소모품을 모두 팝니다.
+    pub supplies: Vec<SupplySpec>,
     /// 교역 표입니다. `TradeId`가 이 표의 행 번호입니다. 본진이 이 교역의 계약을 모두 팝니다.
     pub trades: Vec<TradeSpec>,
     pub shop: ShopTuning,
@@ -158,6 +160,25 @@ pub struct Recipe {
     pub result: WeaponId,
     /// 조합할 때 내는 골드입니다.
     pub price: u32,
+}
+
+/// 소모품 한 종류의 수치입니다. 소모품은 칸 하나를 차지하고, 한 번 쓰면 사라집니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SupplySpec {
+    pub name: &'static str,
+    pub price: u32,
+    pub effect: SupplyEffect,
+}
+
+/// 소모품을 쓸 때 자기 배에 일어나는 일입니다. 속도와 피해 감소의 효과는 같은 종류의 스킬 효과를 대신합니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SupplyEffect {
+    /// HP를 최대 HP까지 회복합니다.
+    Repair { hp: u32 },
+    /// `ticks` 동안 속도를 백분율만큼 올립니다.
+    Sprint { percent: u32, ticks: u32 },
+    /// `ticks` 동안 받는 피해를 백분율만큼 줄입니다.
+    Brace { percent: u32, ticks: u32 },
 }
 
 /// 교역 하나입니다. 본진에서 계약을 사고, 교역항에서 화물을 싣고, 본진에 돌아오면 보상을 받습니다.
@@ -297,6 +318,11 @@ impl Tuning {
         &self.hulls[usize::from(id.0)]
     }
 
+    /// 소모품 표에 있는 번호이면 그 소모품입니다.
+    pub fn supply_of(&self, id: SupplyId) -> Option<&SupplySpec> {
+        self.supplies.get(usize::from(id.0))
+    }
+
     /// 교역 표에 있는 번호이면 그 교역입니다.
     pub fn trade_of(&self, id: TradeId) -> Option<&TradeSpec> {
         self.trades.get(usize::from(id.0))
@@ -403,6 +429,14 @@ impl Tuning {
                     "a recipe needs two or more parts, and its parts and result must be weapons of the table"
                         .to_string(),
                 );
+            }
+        }
+        for supply in &self.supplies {
+            if matches!(supply.effect, SupplyEffect::Brace { percent, .. } if percent > 100) {
+                return Err(format!(
+                    "supply {}: a brace takes at most 100 percent",
+                    supply.name
+                ));
             }
         }
         for trade in &self.trades {
@@ -625,6 +659,11 @@ impl Default for Tuning {
             result: WeaponId(result),
             price,
         };
+        let supply = |name, price, effect| SupplySpec {
+            name,
+            price,
+            effect,
+        };
         let trade = |name, price, reward, port| TradeSpec {
             name,
             price,
@@ -731,6 +770,25 @@ impl Default for Tuning {
                 recipe([1, 1], 6, 200),
                 recipe([3, 0], 7, 250),
                 recipe([4, 2], 8, 400),
+            ],
+            supplies: vec![
+                supply("Repair Kit", 80, SupplyEffect::Repair { hp: 200 }),
+                supply(
+                    "Spare Canvas",
+                    60,
+                    SupplyEffect::Sprint {
+                        percent: 30,
+                        ticks: 100,
+                    },
+                ),
+                supply(
+                    "Sandbags",
+                    70,
+                    SupplyEffect::Brace {
+                        percent: 30,
+                        ticks: 120,
+                    },
+                ),
             ],
             trades: vec![
                 // 교역선 한 척이 1분에 남기는 이익이 전투하는 배의 보상(1분에 약 65골드)과 비슷하거나 조금 많게 맞춘 값입니다.

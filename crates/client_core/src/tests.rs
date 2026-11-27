@@ -9,10 +9,10 @@ use warship_protocol::{
     WireStructure, WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2,
     WireWeapon,
 };
-use warship_protocol::{SeatToken, WireMember, WireRecipe, WireTrade};
+use warship_protocol::{SeatToken, WireMember, WireRecipe, WireSupply, WireTrade};
 use warship_rules::Vec2;
 
-use crate::{Phase, Session, SkillView, shop_rows};
+use crate::{Phase, Session, SkillView, shop_list};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -24,6 +24,7 @@ fn welcome() -> Welcome {
         name: "gun".to_string(),
         price: 100,
         buyable: true,
+        damage: 10,
         range: 5.0,
         cooldown_ticks: 10,
         shot_speed: 20.0,
@@ -79,6 +80,7 @@ fn welcome() -> Welcome {
         }],
         lanes: Vec::new(),
         islands: Vec::new(),
+        supplies: Vec::new(),
         trades: Vec::new(),
         ports: Vec::new(),
     }
@@ -528,7 +530,16 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
         port: 1,
     });
 
-    let rows = shop_rows(&welcome);
+    welcome.supplies.push(WireSupply {
+        name: "kit".to_string(),
+        price: 80,
+        effect: "+200 HP".to_string(),
+    });
+
+    let list = shop_list(&welcome);
+    // 둘째 열은 선체에서 시작합니다.
+    assert_eq!(list.columns(), [9, 5]);
+    let rows = list.rows;
 
     // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
     let details: Vec<&str> = rows.iter().map(|row| row.detail.as_str()).collect();
@@ -536,12 +547,14 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
         details,
         [
             "",
-            "range 5, reload 0.5s",
-            "range 5, reload 0.5s",
+            "damage 10, range 5, reload 0.5s",
+            "damage 10, range 5, reload 0.5s",
             "",
             "",
             "",
-            "range 5, reload 0.5s",
+            "",
+            "",
+            "damage 10, range 5, reload 0.5s",
             "",
             "skills: skill",
             "skills: skill",
@@ -559,6 +572,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             "  2  mortar  400g",
             "Gear",
             "  1  planks  200g  (+250 HP)",
+            "Supplies (one use)",
+            "  kit  80g  (+200 HP)",
             "Combine",
             "  1  twin = gun + gun + 150g",
             "Hulls",
@@ -578,6 +593,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             None,
             Some(WireCommand::BuyGear { gear: 0 }),
             None,
+            Some(WireCommand::BuySupply { supply: 0 }),
+            None,
             Some(WireCommand::Combine { recipe: 0 }),
             None,
             Some(WireCommand::ChangeHull { hull: 0 }),
@@ -595,6 +612,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             Some(400),
             None,
             Some(200),
+            None,
+            Some(80),
             None,
             Some(150),
             None,

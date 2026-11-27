@@ -36,6 +36,10 @@ pub struct GearId(pub u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RecipeId(pub u16);
 
+/// `Tuning::supplies`의 행 번호입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SupplyId(pub u16);
+
 /// `Tuning::trades`의 행 번호입니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TradeId(pub u16);

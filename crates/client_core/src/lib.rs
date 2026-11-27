@@ -20,7 +20,7 @@ pub use interp::{CreepView, Frame, MyShip, ShipView, ShotView, SkillView, Struct
 pub use launch::{DEFAULT_NAME, DEFAULT_SERVER, LaunchOptions, RoomChoice};
 pub use memory::{Memory, RememberedSeat};
 pub use session::{Phase, Session};
-pub use shop::{ShopRow, shop_rows, weapons_for_sale};
+pub use shop::{ShopList, ShopRow, shop_list, weapons_for_sale};
 pub use start::{Field, FormKey, JoinRequest, StartForm};
 pub use view::{CameraRig, Minimap, ShopWindow};
 

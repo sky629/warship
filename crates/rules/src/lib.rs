@@ -34,7 +34,8 @@ mod tests;
 pub use command::{Command, Refusal};
 pub use creep::Creep;
 pub use ids::{
-    CreepId, GearId, HullId, RecipeId, ShipId, SkillId, StructureId, Team, TradeId, WeaponId,
+    CreepId, GearId, HullId, RecipeId, ShipId, SkillId, StructureId, SupplyId, Team, TradeId,
+    WeaponId,
 };
 pub use input::{PlayerInput, PlayerInputs, Waypoint};
 pub use math::Vec2;
@@ -44,6 +45,7 @@ pub use structures::{Structure, StructureKind};
 pub use tuning::{
     ARMOR_CAP_PERCENT, CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits,
     HullSpec, Island, MapSpec, Recipe, ShipTuning, ShopTuning, SkillEffect, SkillSpec,
-    StructureSite, StructureSpec, StructureTable, TradeSpec, Tuning, Wave, WeaponSpec,
+    StructureSite, StructureSpec, StructureTable, SupplyEffect, SupplySpec, TradeSpec, Tuning,
+    Wave, WeaponSpec,
 };
 pub use weapon::Target;

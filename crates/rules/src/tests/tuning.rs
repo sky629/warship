@@ -3,7 +3,7 @@
 use crate::ids::{SkillId, WeaponId};
 use crate::math::Vec2;
 use crate::sim::Sim;
-use crate::tuning::{GearEffect, SkillEffect, Tuning};
+use crate::tuning::{GearEffect, SkillEffect, SupplyEffect, Tuning};
 
 #[test]
 fn the_default_tuning_is_valid_and_starts_a_room() {
@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 41] = [
+    let broken: [fn(&mut Tuning); 42] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -84,6 +84,13 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.trades[0].reward = t.trades[0].price,
         |t| t.map.ports[0] = Vec2::new(65.0, 24.0),
         |t| t.map.ports[0] = Vec2::new(32.0, 24.0),
+        // 받는 피해를 100%보다 많이 줄이는 소모품입니다.
+        |t| {
+            t.supplies[2].effect = SupplyEffect::Brace {
+                percent: 101,
+                ticks: 10,
+            }
+        },
         // 상한을 넘는 선체의 장갑, 가장 높은 단계에서 배를 세우는 감속, 범위가 없는 아군 수리입니다.
         |t| t.hulls[0].armor_percent = 81,
         |t| {

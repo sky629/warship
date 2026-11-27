@@ -1,7 +1,7 @@
 //! 플레이어가 조종하는 배와 그 이동입니다.
 
 use crate::command::Refusal;
-use crate::ids::{GearId, HullId, ShipId, SkillId, Team, TradeId, WeaponId};
+use crate::ids::{GearId, HullId, ShipId, SkillId, SupplyId, Team, TradeId, WeaponId};
 use crate::input::PlayerInputs;
 use crate::math::Vec2;
 use crate::nav;
@@ -80,12 +80,14 @@ pub enum Life {
     },
 }
 
-/// 칸에 다는 아이템입니다. 무기는 스스로 쏘고, 장비는 달려 있는 동안 배의 수치를 올립니다.
+/// 칸에 다는 아이템입니다. 무기는 스스로 쏘고, 장비는 달려 있는 동안 배의 수치를 올리고, 소모품은 쓸 때 한 번 효과를 냅니다.
 /// 교역의 계약과 화물도 칸 하나를 차지합니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item {
     Weapon(WeaponId),
     Gear(GearId),
+    /// 소모품입니다. 한 번 쓰면 사라집니다.
+    Supply(SupplyId),
     /// 교역의 계약입니다. 교역항에 가면 화물로 바뀝니다.
     Contract(TradeId),
     /// 교역항에서 실은 화물입니다. 자기 진영의 본진에 가져가면 보상으로 바뀝니다.
@@ -116,7 +118,7 @@ impl Mount {
     pub fn weapon(&self) -> Option<WeaponId> {
         match self.item {
             Item::Weapon(weapon) => Some(weapon),
-            Item::Gear(_) | Item::Contract(_) | Item::Cargo(_) => None,
+            Item::Gear(_) | Item::Supply(_) | Item::Contract(_) | Item::Cargo(_) => None,
         }
     }
 
@@ -124,7 +126,7 @@ impl Mount {
     pub fn gear(&self) -> Option<GearId> {
         match self.item {
             Item::Gear(gear) => Some(gear),
-            Item::Weapon(_) | Item::Contract(_) | Item::Cargo(_) => None,
+            Item::Weapon(_) | Item::Supply(_) | Item::Contract(_) | Item::Cargo(_) => None,
         }
     }
 }

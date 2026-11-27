@@ -1,4 +1,5 @@
-//! 상점 창에 보여 줄 줄과, 줄에 커서를 올리면 보여 줄 설명입니다. 무기, 장비, 조합, 선체, 교역의 순서이고, 묶음마다 제목 줄이 있습니다.
+//! 상점 창에 보여 줄 줄과, 줄에 커서를 올리면 보여 줄 설명입니다. 묶음마다 제목 줄이 있습니다.
+//! 첫 열은 무기, 장비, 소모품, 조합이고, 둘째 열은 선체와 교역입니다.
 
 use warship_protocol::{Welcome, WireCommand};
 
@@ -42,18 +43,36 @@ pub fn weapons_for_sale(welcome: &Welcome) -> impl Iterator<Item = u16> + '_ {
         .map(|(index, _)| index as u16)
 }
 
+/// 상점 창의 목록입니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShopList {
+    pub rows: Vec<ShopRow>,
+    /// 둘째 열이 시작하는 줄의 번호입니다.
+    pub second_column: usize,
+}
+
+impl ShopList {
+    /// 열마다 있는 줄의 수입니다.
+    pub fn columns(&self) -> [usize; 2] {
+        [self.second_column, self.rows.len() - self.second_column]
+    }
+}
+
 /// 상점 창의 줄을 위에서부터 차례로 만듭니다. 묶음 안의 번호는 그 묶음의 단축키의 순서입니다.
-pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
+pub fn shop_list(welcome: &Welcome) -> ShopList {
     let weapon_name = |id: u16| {
         let weapon = welcome.weapons.get(usize::from(id));
         weapon.map_or("?", |weapon| weapon.name.as_str())
     };
-    // 무기의 사거리와 다시 쏘기까지의 시간입니다.
+    // 무기의 피해, 사거리, 다시 쏘기까지의 시간입니다.
     let weapon_detail = |id: u16| {
         let weapon = welcome.weapons.get(usize::from(id));
         weapon.map_or(String::new(), |weapon| {
             let reload = weapon.cooldown_ticks as f32 / welcome.tick_hz.max(1) as f32;
-            format!("range {}, reload {reload}s", weapon.range)
+            format!(
+                "damage {}, range {}, reload {reload}s",
+                weapon.damage, weapon.range
+            )
         })
     };
     let mut rows = vec![ShopRow::heading("Weapons")];
@@ -74,6 +93,15 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let order = WireCommand::BuyGear { gear: index as u16 };
         rows.push(ShopRow::item(label, String::new(), order, Some(price)));
     }
+    rows.push(ShopRow::heading("Supplies (one use)"));
+    for (index, supply) in welcome.supplies.iter().enumerate() {
+        let (name, price, effect) = (&supply.name, supply.price, &supply.effect);
+        let label = format!("{name}  {price}g  ({effect})");
+        let order = WireCommand::BuySupply {
+            supply: index as u16,
+        };
+        rows.push(ShopRow::item(label, String::new(), order, Some(price)));
+    }
     rows.push(ShopRow::heading("Combine"));
     for (index, recipe) in welcome.recipes.iter().enumerate() {
         let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
@@ -85,6 +113,7 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let detail = weapon_detail(recipe.result);
         rows.push(ShopRow::item(label, detail, order, Some(recipe.price)));
     }
+    let second_column = rows.len();
     rows.push(ShopRow::heading("Hulls"));
     for (index, hull) in welcome.hulls.iter().enumerate() {
         let traits = match hull.traits.as_str() {
@@ -126,5 +155,8 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
             Some(trade.price),
         ));
     }
-    rows
+    ShopList {
+        rows,
+        second_column,
+    }
 }

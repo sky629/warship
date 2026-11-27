@@ -87,6 +87,7 @@ pub enum WireRefusal {
     NotForSale,
     MissingParts,
     NoBaseInRange,
+    NotUsable,
     NotATrader,
     CarryingFreight,
 }
@@ -110,17 +111,20 @@ impl From<Refusal> for WireRefusal {
             Refusal::NotForSale => WireRefusal::NotForSale,
             Refusal::MissingParts => WireRefusal::MissingParts,
             Refusal::NoBaseInRange => WireRefusal::NoBaseInRange,
+            Refusal::NotUsable => WireRefusal::NotUsable,
             Refusal::NotATrader => WireRefusal::NotATrader,
             Refusal::CarryingFreight => WireRefusal::CarryingFreight,
         }
     }
 }
 
-/// 칸에 달린 아이템입니다. 번호는 `Welcome::weapons`, `Welcome::gear`, `Welcome::trades`의 자리입니다.
+/// 칸에 달린 아이템입니다. 번호는 `Welcome::weapons`, `Welcome::gear`, `Welcome::supplies`, `Welcome::trades`의 자리입니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WireItem {
     Weapon(u16),
     Gear(u16),
+    /// 한 번 쓰면 사라지는 소모품입니다.
+    Supply(u16),
     /// 교역의 계약입니다.
     Contract(u16),
     /// 교역항에서 실은 화물입니다.
@@ -132,7 +136,10 @@ impl WireItem {
     pub fn weapon(self) -> Option<u16> {
         match self {
             WireItem::Weapon(weapon) => Some(weapon),
-            WireItem::Gear(_) | WireItem::Contract(_) | WireItem::Cargo(_) => None,
+            WireItem::Gear(_)
+            | WireItem::Supply(_)
+            | WireItem::Contract(_)
+            | WireItem::Cargo(_) => None,
         }
     }
 }
@@ -234,6 +241,7 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning, tick: u64) -> WireShip 
             item: match mount.item {
                 Item::Weapon(weapon) => WireItem::Weapon(weapon.0),
                 Item::Gear(gear) => WireItem::Gear(gear.0),
+                Item::Supply(supply) => WireItem::Supply(supply.0),
                 Item::Contract(trade) => WireItem::Contract(trade.0),
                 Item::Cargo(trade) => WireItem::Cargo(trade.0),
             },

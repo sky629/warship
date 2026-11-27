@@ -3,7 +3,7 @@
 //! 클라이언트는 명령마다 순서 번호를 붙여서 보냅니다. 규칙은 이미 처리한 번호보다 크지 않은 명령을 무시하고,
 //! 처리한 명령의 번호와 거절한 이유를 배에 적어 둡니다. 모든 조건(골드, 상점과의 거리, 빈 칸, 쿨다운)은 여기서 검사합니다.
 
-use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, TradeId, WeaponId};
+use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, SupplyId, TradeId, WeaponId};
 use crate::tuning::Tuning;
 use crate::world::World;
 use crate::{shop, skill, trade};
@@ -14,6 +14,10 @@ pub enum Command {
     Buy(WeaponId),
     /// 장비를 사서 첫 빈 칸에 답니다.
     BuyGear(GearId),
+    /// 소모품을 사서 첫 빈 칸에 답니다.
+    BuySupply(SupplyId),
+    /// 이 칸의 소모품을 씁니다. 상점에서 먼 곳에서도 씁니다.
+    Use { slot: u8 },
     /// 이 칸의 아이템을 팝니다.
     Sell { slot: u8 },
     /// 달고 있는 재료 무기를 조합 값과 함께 결과 무기 하나로 바꿉니다.
@@ -60,6 +64,8 @@ pub enum Refusal {
     MissingParts,
     /// 자기 진영의 본진이 가까이에 없습니다.
     NoBaseInRange,
+    /// 쓰려는 칸의 아이템이 소모품이 아닙니다.
+    NotUsable,
     /// 교역선이 아닌 선체는 교역을 하지 못합니다.
     NotATrader,
     /// 교역의 계약이나 화물을 단 채로는 교역선이 아닌 선체로 바꾸지 못합니다.
@@ -88,6 +94,8 @@ pub(crate) fn apply(
         Command::Buy(weapon) => shop::buy(world, tuning, id, weapon),
         Command::Sell { slot } => shop::sell(world, tuning, id, usize::from(slot)),
         Command::BuyGear(gear) => shop::buy_gear(world, tuning, id, gear),
+        Command::BuySupply(supply) => shop::buy_supply(world, tuning, id, supply),
+        Command::Use { slot } => shop::use_supply(world, tuning, tick, id, usize::from(slot)),
         Command::Combine(recipe) => shop::combine(world, tuning, id, recipe),
         Command::ChangeHull(hull) => shop::change_hull(world, tuning, id, hull),
         Command::Contract(which) => trade::contract(world, tuning, id, which),

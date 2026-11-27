@@ -276,7 +276,7 @@ pub fn order_moves(
         return;
     }
     let welcome = net.session.welcome();
-    if welcome.is_some_and(|welcome| shop::row_under(&window, welcome, &shop).is_some()) {
+    if welcome.is_some_and(|welcome| shop::under_cursor(&window, welcome, &shop)) {
         return;
     }
     let (camera, camera_transform) = *camera;

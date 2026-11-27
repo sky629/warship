@@ -1,7 +1,9 @@
 //! 입장할 때 한 번 보내는, 접속 중에 바뀌지 않는 정보입니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::{GearEffect, HullSpec, ShipId, Sim, StructureKind, StructureSpec, WeaponSpec};
+use warship_rules::{
+    GearEffect, HullSpec, ShipId, Sim, StructureKind, StructureSpec, SupplyEffect, WeaponSpec,
+};
 
 use crate::messages::{WireTeam, WireVec2};
 use crate::seat_token::SeatToken;
@@ -27,6 +29,7 @@ pub struct Welcome {
     pub gear: Vec<WireGear>,
     /// 조합 표입니다.
     pub recipes: Vec<WireRecipe>,
+    pub supplies: Vec<WireSupply>,
     pub trades: Vec<WireTrade>,
     /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서이고, 선체마다 이 가운데 일부를 씁니다.
     pub skills: Vec<WireSkillSpec>,
@@ -90,6 +93,14 @@ pub struct WireRecipe {
     pub price: u32,
 }
 
+/// 소모품 한 종류입니다. `effect`는 쓸 때의 효과를 설명하는 글입니다.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireSupply {
+    pub name: String,
+    pub price: u32,
+    pub effect: String,
+}
+
 /// 교역 하나입니다. `port`는 `Welcome::ports`의 자리입니다.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WireTrade {
@@ -114,6 +125,7 @@ pub struct WireWeapon {
     pub price: u32,
     /// 상점에서 바로 살 수 있는지입니다. 조합으로만 얻는 무기는 거짓입니다.
     pub buyable: bool,
+    pub damage: u32,
     pub range: f32,
     pub cooldown_ticks: u32,
     pub shot_speed: f32,
@@ -131,6 +143,20 @@ pub struct WireCreepSpec {
     pub name: String,
     pub max_hp: u32,
     pub weapon: WireWeapon,
+}
+
+/// 화면에 그대로 보이는 문장이므로 영어입니다.
+fn supply_text(effect: SupplyEffect, tick_hz: u32) -> String {
+    let secs = |ticks: u32| ticks / tick_hz.max(1);
+    match effect {
+        SupplyEffect::Repair { hp } => format!("+{hp} HP"),
+        SupplyEffect::Sprint { percent, ticks } => {
+            format!("+{percent}% speed for {}s", secs(ticks))
+        }
+        SupplyEffect::Brace { percent, ticks } => {
+            format!("-{percent}% damage for {}s", secs(ticks))
+        }
+    }
 }
 
 /// 화면에 그대로 보이는 문장이므로 영어입니다.
@@ -163,6 +189,7 @@ fn wire_weapon(spec: &WeaponSpec) -> WireWeapon {
         name: spec.name.to_string(),
         price: spec.price,
         buyable: spec.buyable,
+        damage: spec.damage,
         range: spec.range,
         cooldown_ticks: spec.cooldown_ticks,
         shot_speed: spec.shot_speed,
@@ -236,6 +263,15 @@ impl Welcome {
                     parts: recipe.parts.iter().map(|part| part.0).collect(),
                     result: recipe.result.0,
                     price: recipe.price,
+                })
+                .collect(),
+            supplies: tuning
+                .supplies
+                .iter()
+                .map(|supply| WireSupply {
+                    name: supply.name.to_string(),
+                    price: supply.price,
+                    effect: supply_text(supply.effect, tuning.tick_hz),
                 })
                 .collect(),
             trades: tuning
