@@ -1,4 +1,4 @@
-//! 상점 창에 보여 줄 줄입니다. 무기, 장비, 조합, 선체, 교역의 순서이고, 묶음마다 제목 줄이 있습니다.
+//! 상점 창에 보여 줄 줄과, 줄에 커서를 올리면 보여 줄 설명입니다. 무기, 장비, 조합, 선체, 교역의 순서이고, 묶음마다 제목 줄이 있습니다.
 
 use warship_protocol::{Welcome, WireCommand};
 
@@ -8,6 +8,8 @@ pub struct ShopRow {
     pub label: String,
     /// 이 줄을 누르면 보내는 명령입니다. 제목 줄에는 없습니다.
     pub order: Option<WireCommand>,
+    /// 이 줄에 커서를 올리면 보여 주는 설명입니다. 없으면 빈 글입니다.
+    pub detail: String,
     /// 이 줄의 명령에 드는 골드입니다. 선체는 지금 선체의 값을 일부 돌려받으므로 여기에 적지 않습니다.
     pub cost: Option<u32>,
 }
@@ -16,14 +18,16 @@ impl ShopRow {
     fn heading(label: &str) -> ShopRow {
         ShopRow {
             label: label.to_string(),
+            detail: String::new(),
             order: None,
             cost: None,
         }
     }
 
-    fn item(label: String, order: WireCommand, cost: Option<u32>) -> ShopRow {
+    fn item(label: String, detail: String, order: WireCommand, cost: Option<u32>) -> ShopRow {
         ShopRow {
             label: format!("  {label}"),
+            detail,
             order: Some(order),
             cost,
         }
@@ -44,12 +48,21 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let weapon = welcome.weapons.get(usize::from(id));
         weapon.map_or("?", |weapon| weapon.name.as_str())
     };
+    // 무기의 사거리와 다시 쏘기까지의 시간입니다.
+    let weapon_detail = |id: u16| {
+        let weapon = welcome.weapons.get(usize::from(id));
+        weapon.map_or(String::new(), |weapon| {
+            let reload = weapon.cooldown_ticks as f32 / welcome.tick_hz.max(1) as f32;
+            format!("range {}, reload {reload}s", weapon.range)
+        })
+    };
     let mut rows = vec![ShopRow::heading("Weapons")];
     for (index, weapon) in weapons_for_sale(welcome).enumerate() {
         let price = welcome.weapons[usize::from(weapon)].price;
         let label = format!("{}  {}  {price}g", index + 1, weapon_name(weapon));
         rows.push(ShopRow::item(
             label,
+            weapon_detail(weapon),
             WireCommand::Buy { weapon },
             Some(price),
         ));
@@ -59,7 +72,7 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let (name, price, effect) = (&gear.name, gear.price, &gear.effect);
         let label = format!("{}  {name}  {price}g  ({effect})", index + 1);
         let order = WireCommand::BuyGear { gear: index as u16 };
-        rows.push(ShopRow::item(label, order, Some(price)));
+        rows.push(ShopRow::item(label, String::new(), order, Some(price)));
     }
     rows.push(ShopRow::heading("Combine"));
     for (index, recipe) in welcome.recipes.iter().enumerate() {
@@ -69,7 +82,8 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let order = WireCommand::Combine {
             recipe: index as u16,
         };
-        rows.push(ShopRow::item(label, order, Some(recipe.price)));
+        let detail = weapon_detail(recipe.result);
+        rows.push(ShopRow::item(label, detail, order, Some(recipe.price)));
     }
     rows.push(ShopRow::heading("Hulls"));
     for (index, hull) in welcome.hulls.iter().enumerate() {
@@ -86,7 +100,12 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
             hull.mounts
         );
         let order = WireCommand::ChangeHull { hull: index as u16 };
-        rows.push(ShopRow::item(label, order, None));
+        let skills = hull.skills.iter().map(|skill| {
+            let skill = welcome.skills.get(usize::from(*skill));
+            skill.map_or("?", |skill| skill.name.as_str())
+        });
+        let detail = format!("skills: {}", skills.collect::<Vec<_>>().join(", "));
+        rows.push(ShopRow::item(label, detail, order, None));
     }
     rows.push(ShopRow::heading("Trade (a trader hull at your base)"));
     for (index, trade) in welcome.trades.iter().enumerate() {
@@ -100,7 +119,12 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let order = WireCommand::Contract {
             trade: index as u16,
         };
-        rows.push(ShopRow::item(label, order, Some(trade.price)));
+        rows.push(ShopRow::item(
+            label,
+            String::new(),
+            order,
+            Some(trade.price),
+        ));
     }
     rows
 }

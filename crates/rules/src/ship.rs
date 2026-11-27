@@ -222,6 +222,11 @@ impl Ship {
         (u64::from(amount) * u64::from(kept) / 100) as u32
     }
 
+    /// `tick`에 적의 감속 스킬의 효과를 받고 있는지입니다.
+    pub fn slowed(&self, tick: u64) -> bool {
+        Boost::percent_at(self.snare, tick) > 0
+    }
+
     pub fn is_afloat(&self) -> bool {
         self.life == Life::Afloat
     }

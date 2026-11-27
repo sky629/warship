@@ -65,11 +65,14 @@ fn a_snare_slows_the_enemy_ships_near_it_for_its_duration() {
 
     // 4타일 안의 적은 20Tick 동안 속도가 단계마다 40% 줄어서 1초에 2.4타일을 갑니다.
     assert_close(s.ship(enemy).pos.x, 14.4);
+    assert!(s.ship(enemy).slowed(s.sim.tick()));
+    assert!(!s.ship(friend).slowed(s.sim.tick()));
     assert_close(s.ship(friend).pos.x, 14.0);
     assert_close(s.ship(far).pos.x, 14.0);
 
     s.run_ticks(20);
     assert_close(s.ship(enemy).pos.x, 18.4);
+    assert!(!s.ship(enemy).slowed(s.sim.tick()));
 }
 
 #[test]

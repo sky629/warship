@@ -19,6 +19,8 @@ pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
 const WATER: Color = Color::srgb(0.07, 0.22, 0.32);
 const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
 const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
+/// 감속된 배의 둘레에 그리는 원의 색입니다.
+const SLOWED: Color = Color::srgb(0.4, 0.9, 0.9);
 const BORDER: Color = Color::srgb(0.35, 0.55, 0.65);
 const LANE: Color = Color::srgb(0.2, 0.36, 0.45);
 const RED: Color = Color::srgb(0.9, 0.3, 0.25);
@@ -446,6 +448,9 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
             for range in &ship.ranges {
                 flat_circle(gizmos, center, *range, MINE.with_alpha(0.25));
             }
+        }
+        if ship.slowed {
+            flat_circle(gizmos, center, 0.5, SLOWED);
         }
         draw_hp(gizmos, center + Vec3::Y * 0.8, ship.hp);
     }

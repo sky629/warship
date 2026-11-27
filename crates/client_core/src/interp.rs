@@ -62,11 +62,13 @@ pub struct ShipView {
     pub id: u32,
     pub team: WireTeam,
     pub pos: Vec2,
-    /// `Welcome::hulls`의 자리입니다. 큰 번호의 선체는 화면에 더 크게 그립니다.
+    /// `Welcome::hulls`의 자리입니다.
     pub hull: u16,
     /// 최대 HP에 대한 비율입니다(0 이상 1 이하).
     pub hp: f32,
     pub sunk: bool,
+    /// 적의 감속 스킬의 효과를 받고 있는지입니다.
+    pub slowed: bool,
     /// 이 접속이 조종하는 배입니다.
     pub mine: bool,
     /// 달린 무기의 사거리입니다. 같은 사거리는 한 번만 있습니다.
@@ -216,6 +218,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             hull: ship.hull,
             hp: ship.hp as f32 / ship.max_hp.max(1) as f32,
             sunk: ship.respawn_at.is_some(),
+            slowed: ship.slowed,
             mine: ship.id == welcome.ship,
             ranges,
         });

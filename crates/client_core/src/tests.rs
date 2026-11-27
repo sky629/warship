@@ -99,6 +99,7 @@ fn ship(id: u32, x: f32) -> WireShip {
         max_hp: 1000,
         level: 1,
         respawn_at: None,
+        slowed: false,
         own: (id == ME).then(|| WireOwn {
             gold: 70,
             xp: 0,
@@ -529,6 +530,26 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
 
     let rows = shop_rows(&welcome);
 
+    // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
+    let details: Vec<&str> = rows.iter().map(|row| row.detail.as_str()).collect();
+    assert_eq!(
+        details,
+        [
+            "",
+            "range 5, reload 0.5s",
+            "range 5, reload 0.5s",
+            "",
+            "",
+            "",
+            "range 5, reload 0.5s",
+            "",
+            "skills: skill",
+            "skills: skill",
+            "",
+            "",
+        ]
+    );
+
     let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
     assert_eq!(
         labels,
@@ -583,4 +604,23 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             Some(60)
         ]
     );
+}
+
+#[test]
+fn a_slowed_ship_is_marked_in_the_frame() {
+    let mut session = playing();
+    let slowed = WireShip {
+        slowed: true,
+        ..ship(ENEMY, 12.0)
+    };
+    receive(
+        &mut session,
+        1.0,
+        snapshot(20, vec![ship(ME, 10.0), slowed]),
+    );
+
+    let frame = session.frame(1.15).unwrap();
+
+    let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.slowed).collect();
+    assert_eq!(marks, [false, true]);
 }

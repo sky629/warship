@@ -37,6 +37,8 @@ pub struct WireShip {
     pub level: u8,
     /// 가라앉은 배가 다시 나타나는 Tick입니다. 떠 있는 배에는 없습니다.
     pub respawn_at: Option<u64>,
+    /// 적의 감속 스킬의 효과를 받고 있는지입니다.
+    pub slowed: bool,
     /// 적에게 보이지 않는 정보입니다. 받는 진영의 배에만 있습니다.
     pub own: Option<WireOwn>,
     /// 아이템이 달린 칸만 있습니다.
@@ -212,7 +214,7 @@ impl Snapshot {
             ships: sim
                 .ships()
                 .filter(ship_shown)
-                .map(|ship| wire_ship(ship, team, sim.tuning()))
+                .map(|ship| wire_ship(ship, team, sim.tuning(), sim.tick()))
                 .collect(),
             creeps: sim.creeps().filter(creep_shown).map(wire_creep).collect(),
             structures: sim.structures().map(wire_structure).collect(),
@@ -224,7 +226,7 @@ impl Snapshot {
     }
 }
 
-fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning) -> WireShip {
+fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning, tick: u64) -> WireShip {
     let mounts = ship.mounts.iter().enumerate().filter_map(|(slot, mount)| {
         let mount = mount.as_ref()?;
         Some(WireMount {
@@ -252,6 +254,7 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning) -> WireShip {
             Life::Afloat => None,
             Life::Sunk { respawn_at } => Some(respawn_at),
         },
+        slowed: ship.slowed(tick),
         own: (ship.team == viewer).then(|| WireOwn {
             gold: ship.gold,
             xp: ship.xp,
