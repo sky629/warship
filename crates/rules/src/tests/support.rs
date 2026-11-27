@@ -3,21 +3,29 @@
 
 use crate::command::{Command, Refusal};
 use crate::creep::Creep;
-use crate::ids::{CreepId, HullId, ShipId, SkillId, StructureId, Team, WeaponId};
+use crate::ids::{CreepId, GearId, HullId, RecipeId, ShipId, SkillId, StructureId, Team, WeaponId};
 use crate::input::{PlayerInput, PlayerInputs, Waypoint};
 use crate::math::Vec2;
-use crate::ship::{Mount, Ship};
+use crate::ship::{Item, Mount, Ship};
 use crate::sim::Sim;
 use crate::structures::{Structure, StructureKind};
 use crate::tuning::{
-    CreepSpec, EconomyTuning, GrowthTuning, Hits, HullSpec, MapSpec, ShipTuning, ShopTuning,
-    SkillEffect, SkillSpec, StructureSpec, StructureTable, Tuning, WeaponSpec,
+    CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits, HullSpec, MapSpec, Recipe,
+    ShipTuning, ShopTuning, SkillEffect, SkillSpec, StructureSpec, StructureTable, Tuning,
+    WeaponSpec,
 };
 
 /// 사거리 5, 피해 10, 쿨다운 10Tick이고 배와 건물을 쏘는 포입니다. 포탄은 한 Tick에 1타일을 납니다.
 pub(crate) const GUN: WeaponId = WeaponId(0);
 /// 사거리 12, 피해 10, 쿨다운 10Tick이고 배만 쏘는 포입니다. 사거리가 배의 시야(9)보다 깁니다.
 pub(crate) const LONG_GUN: WeaponId = WeaponId(1);
+/// `GUN` 두 개와 50골드로 조합하는 포입니다. 피해가 30이고 상점에서 팔지 않습니다.
+pub(crate) const BIG_GUN: WeaponId = WeaponId(2);
+pub(crate) const TWIN_GUNS: RecipeId = RecipeId(0);
+pub(crate) const PLANKING: GearId = GearId(0);
+pub(crate) const SAILS: GearId = GearId(1);
+pub(crate) const CREW: GearId = GearId(2);
+pub(crate) const PLATING: GearId = GearId(3);
 pub(crate) const BIG_HULL: HullId = HullId(1);
 pub(crate) const REPAIR: SkillId = SkillId(0);
 pub(crate) const SALVO: SkillId = SkillId(1);
@@ -38,8 +46,10 @@ impl Scenario {
     /// 타워와 본진의 포는 사거리 6, 피해 15, 쿨다운 10Tick이고 배만 쏩니다. 항구는 쏘지 않습니다. 건물의 HP는 1000입니다.
     /// NPC 배는 HP 100, 1초에 2타일, 포는 `GUN`과 같습니다. NPC 배는 저절로 나오지 않습니다(일정이 없습니다).
     /// 수입은 1초에 2골드이고, 보상은 배 200, NPC 배 20, 타워 300, 항구 500입니다. 가라앉은 배는 100Tick 뒤에 다시 나타납니다.
-    /// 무기의 가격은 100이고, 팔거나 선체를 바꾸면 가격의 반을 돌려받습니다. 본진과 항구에서 5타일 안이 상점이고, 상점에 있는 배는 1초에 HP 10을 회복합니다.
-    /// 선체는 HP 1000에 칸 2개인 0번(가격 0)과 HP 2000에 칸 4개인 1번(가격 400)입니다.
+    /// 무기의 가격은 100이고, 팔거나 선체를 바꾸면 가격의 반을 돌려받습니다. 본진과 항구에서 5타일 안이 상점이고, 본진에서 5타일 안에 있는 배는 1초에 최대 HP의 1%를 회복합니다.
+    /// 선체는 HP 1000에 칸 2개인 0번(가격 0)과 HP 2000에 칸 4개인 1번(가격 400)입니다. 무기와 장비가 같은 칸을 씁니다.
+    /// 장비의 가격은 200이고, 0번은 최대 HP 300, 1번은 속도 25%, 2번은 1초에 HP 5 회복, 3번은 받는 피해 20% 감소입니다.
+    /// `GUN` 두 개와 50골드를 `BIG_GUN`(피해 30, 값 250) 하나로 조합할 수 있습니다.
     /// 누적 경험치 100에 2레벨, 300에 3레벨이 되고, 경험치는 10타일 안의 배가 나누어 받습니다.
     /// 스킬은 쿨다운 100Tick에 2단계까지이고, 0번은 단계마다 HP 100 회복, 1번(`SALVO`)은 4타일 안의 적에 단계마다 피해 30,
     /// 2번(`SPRINT`)은 20Tick 동안 단계마다 속도 50% 증가, 3번(`RELOAD`)은 모든 무기의 쿨다운 제거,
@@ -74,11 +84,7 @@ impl Scenario {
             .iter_mut()
             .find(|mount| mount.is_none())
             .expect("the ship has a free mount");
-        *free = Some(Mount {
-            weapon,
-            ready_at: 0,
-            target: None,
-        });
+        *free = Some(Mount::new(Item::Weapon(weapon)));
     }
 
     pub fn tower_at(&mut self, team: Team, x: f32, y: f32) -> StructureId {
@@ -188,6 +194,7 @@ fn gun(name: &'static str, range: f32, hits: Hits) -> WeaponSpec {
         shot_speed: 20.0,
         hits,
         price: 100,
+        buyable: true,
     }
 }
 
@@ -206,6 +213,14 @@ fn hull(
         speed: 4.0,
         vision: 9.0,
         mounts,
+    }
+}
+
+fn gear(effect: GearEffect) -> GearSpec {
+    GearSpec {
+        name: "gear",
+        price: 200,
+        effect,
     }
 }
 
@@ -249,6 +264,12 @@ fn open_sea_tuning() -> Tuning {
         weapons: vec![
             gun("gun", 5.0, Hits::ShipsAndStructures),
             gun("long gun", 12.0, Hits::ShipsOnly),
+            WeaponSpec {
+                damage: 30,
+                price: 250,
+                buyable: false,
+                ..gun("big gun", 5.0, Hits::ShipsAndStructures)
+            },
         ],
         skills: vec![
             skill(SkillEffect::Repair { hp_per_rank: 100 }),
@@ -266,10 +287,21 @@ fn open_sea_tuning() -> Tuning {
                 ticks: 20,
             }),
         ],
+        gear: vec![
+            gear(GearEffect::Planking { max_hp: 300 }),
+            gear(GearEffect::Sails { speed_percent: 25 }),
+            gear(GearEffect::Crew { repair_per_sec: 5 }),
+            gear(GearEffect::Plating { armor_percent: 20 }),
+        ],
+        recipes: vec![Recipe {
+            parts: vec![GUN, GUN],
+            result: BIG_GUN,
+            price: 50,
+        }],
         shop: ShopTuning {
             range: 5.0,
             refund_percent: 50,
-            repair_per_sec: 10,
+            repair_percent_per_sec: 1,
         },
         growth: GrowthTuning {
             level_xp: vec![100, 300],

@@ -4,18 +4,18 @@
 //!
 //! 봇이 하는 일은 네 가지입니다.
 //! - 스킬 포인트가 있으면 지금 선체의 스킬 가운데 단계가 가장 낮은 스킬에 넣습니다.
-//! - 사고 싶은 것(빈 칸에 달 무기, 칸이 다 찼으면 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
-//! - HP가 적으면 상점으로 돌아가서 수리를 받습니다.
+//! - 사고 싶은 것(조합, 빈 칸에 달 무기나 장비, 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
+//! - HP가 적으면 본진으로 돌아가서 수리를 받습니다.
 //! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 그 라인의 적 건물을 치러 갑니다.
 
 use warship_rules::{
-    Command, HullId, Ship, ShipId, Sim, SkillEffect, StructureKind, Target, Team, Tuning, Vec2,
-    WeaponId,
+    Command, GearId, HullId, RecipeId, Ship, ShipId, Sim, SkillEffect, StructureKind, Target, Team,
+    Tuning, Vec2, WeaponId,
 };
 
-/// HP가 최대 HP의 이 백분율보다 적으면 상점으로 돌아갑니다.
+/// HP가 최대 HP의 이 백분율보다 적으면 본진으로 돌아갑니다.
 const RETREAT_PERCENT: u32 = 35;
-/// 상점에 있는 동안 HP가 이 백분율이 될 때까지 떠나지 않습니다.
+/// 본진에서 수리를 받는 동안 HP가 이 백분율이 될 때까지 떠나지 않습니다.
 const REJOIN_PERCENT: u32 = 90;
 /// HP가 이 백분율보다 적으면 수리 스킬을 씁니다.
 const REPAIR_PERCENT: u32 = 60;
@@ -58,12 +58,13 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
         };
     }
 
-    let max_hp = tuning.hull(ship.hull).max_hp;
+    let max_hp = ship.max_hp(tuning);
     let below = |percent: u32| ship.hp * 100 < max_hp * percent;
-    let docked = sim.at_shop(id);
-    let hurt = below(RETREAT_PERCENT) || (docked && below(REJOIN_PERCENT));
+    let hurt = below(RETREAT_PERCENT) || (sim.at_dock(id) && below(REJOIN_PERCENT));
     let purchase = wish(ship, tuning).filter(|(_, cost)| ship.gold >= *cost);
-    if docked && let Some((command, _)) = purchase {
+    if sim.at_shop(id)
+        && let Some((command, _)) = purchase
+    {
         commands.push(command);
     }
     for (id, spec, state) in skills {
@@ -77,7 +78,11 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
             commands.push(Command::Cast(id));
         }
     }
-    let destination = if hurt || purchase.is_some() {
+    // 수리는 본진에서만 받습니다. 본진이 없는 맵에서는 물러나지 않습니다.
+    let dock = tuning.map.base_of(ship.team).filter(|_| hurt);
+    let destination = if dock.is_some() {
+        dock
+    } else if purchase.is_some() {
         nearest_shop(sim, ship)
     } else {
         front(sim, ship)
@@ -88,13 +93,40 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     }
 }
 
-/// 봇이 다음에 사려는 것과 그 값입니다. 빈 칸이 있으면 무기이고, 칸이 다 찼으면 다음 선체입니다. 더 살 것이 없으면 없습니다.
-/// 무기는 달린 무기의 수에 따라 표를 돌아가며 골라서, 여러 종류를 섞어 답니다.
+/// 봇이 다음에 사려는 것과 그 값입니다. 다음 순서로 고릅니다. 더 살 것이 없으면 없습니다.
+/// 1. 재료를 모두 단 조합이 있으면 조합합니다.
+/// 2. 빈 칸이 있으면 아이템을 삽니다. 칸 셋마다 둘은 무기, 하나는 장비입니다.
+///    무기와 장비는 이미 단 수에 따라 표를 돌아가며 골라서, 여러 종류를 섞어 답니다.
+/// 3. 다음 선체로 바꿉니다.
 fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
     let hull = tuning.hull(ship.hull);
-    let carried = ship.mounts.iter().flatten().count();
-    if carried < hull.mounts && !tuning.weapons.is_empty() {
-        let index = carried % tuning.weapons.len();
+    let mounted = || ship.mounts.iter().flatten();
+    let carried: Vec<WeaponId> = mounted().filter_map(|mount| mount.weapon()).collect();
+    let gear = mounted().filter_map(|mount| mount.gear()).count();
+    let ready = tuning.recipes.iter().position(|recipe| {
+        let needed = |part: &WeaponId| recipe.parts.iter().filter(|p| *p == part).count();
+        let held = |part: &WeaponId| carried.iter().filter(|w| *w == part).count();
+        recipe.parts.iter().all(|part| held(part) >= needed(part))
+    });
+    if let Some(index) = ready {
+        let recipe = RecipeId(index as u16);
+        return Some((Command::Combine(recipe), tuning.recipes[index].price));
+    }
+    let for_sale: Vec<usize> = (0..tuning.weapons.len())
+        .filter(|index| tuning.weapons[*index].buyable)
+        .collect();
+    let free = carried.len() + gear < hull.mounts;
+    // 무기 둘에 장비 하나의 비율을 넘지 않는 동안에는 장비를 삽니다.
+    let wants_gear = !tuning.gear.is_empty() && gear * 2 < carried.len();
+    if free && wants_gear {
+        let index = gear % tuning.gear.len();
+        return Some((
+            Command::BuyGear(GearId(index as u16)),
+            tuning.gear[index].price,
+        ));
+    }
+    if free && !for_sale.is_empty() {
+        let index = for_sale[carried.len() % for_sale.len()];
         let weapon = WeaponId(index as u16);
         return Some((Command::Buy(weapon), tuning.weapons[index].price));
     }
@@ -108,7 +140,9 @@ fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
 /// 배에 달린 무기 가운데 가장 짧은 사거리입니다. 이 거리 안의 적은 모든 무기가 쏠 수 있습니다. 무기가 없으면 0입니다.
 fn reach(ship: &Ship, tuning: &Tuning) -> f32 {
     let ranges = ship.mounts.iter().flatten();
-    let ranges = ranges.map(|mount| tuning.weapons[usize::from(mount.weapon.0)].range);
+    let ranges = ranges
+        .filter_map(|mount| mount.weapon())
+        .map(|weapon| tuning.weapons[usize::from(weapon.0)].range);
     ranges.reduce(f32::min).unwrap_or(0.0)
 }
 

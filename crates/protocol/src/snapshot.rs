@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use warship_rules::{
-    Creep, Life, Outcome, Refusal, Ship, Sim, Structure, StructureKind, Target, Team, Tuning,
+    Creep, Item, Life, Outcome, Refusal, Ship, Sim, Structure, StructureKind, Target, Team, Tuning,
 };
 
 use crate::messages::WireTeam;
@@ -32,12 +32,14 @@ pub struct WireShip {
     /// `Welcome::hulls`의 자리입니다.
     pub hull: u16,
     pub hp: u32,
+    /// 선체의 최대 HP에 장비가 올린 HP를 더한 값입니다.
+    pub max_hp: u32,
     pub level: u8,
     /// 가라앉은 배가 다시 나타나는 Tick입니다. 떠 있는 배에는 없습니다.
     pub respawn_at: Option<u64>,
     /// 적에게 보이지 않는 정보입니다. 받는 진영의 배에만 있습니다.
     pub own: Option<WireOwn>,
-    /// 무기가 달린 칸만 있습니다.
+    /// 아이템이 달린 칸만 있습니다.
     pub mounts: Vec<WireMount>,
     /// 서버가 마지막으로 처리한 이 배의 입력 순서 번호입니다.
     pub last_input_seq: u32,
@@ -80,6 +82,8 @@ pub enum WireRefusal {
     NotLearned,
     OnCooldown,
     NotOnThisHull,
+    NotForSale,
+    MissingParts,
 }
 
 impl From<Refusal> for WireRefusal {
@@ -98,17 +102,35 @@ impl From<Refusal> for WireRefusal {
             Refusal::NotLearned => WireRefusal::NotLearned,
             Refusal::OnCooldown => WireRefusal::OnCooldown,
             Refusal::NotOnThisHull => WireRefusal::NotOnThisHull,
+            Refusal::NotForSale => WireRefusal::NotForSale,
+            Refusal::MissingParts => WireRefusal::MissingParts,
+        }
+    }
+}
+
+/// 칸에 달린 아이템입니다. 번호는 `Welcome::weapons`나 `Welcome::gear`의 자리입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WireItem {
+    Weapon(u16),
+    Gear(u16),
+}
+
+impl WireItem {
+    /// 무기이면 `Welcome::weapons`의 자리입니다.
+    pub fn weapon(self) -> Option<u16> {
+        match self {
+            WireItem::Weapon(weapon) => Some(weapon),
+            WireItem::Gear(_) => None,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WireMount {
-    /// 무기가 달린 칸의 번호입니다(0부터).
+    /// 아이템이 달린 칸의 번호입니다(0부터).
     pub slot: u8,
-    /// `Welcome::weapons`의 자리입니다.
-    pub weapon: u16,
-    /// 마지막으로 쏜 표적입니다.
+    pub item: WireItem,
+    /// 무기가 마지막으로 쏜 표적입니다.
     pub target: Option<WireTarget>,
     /// 이 Tick부터 다시 쏠 수 있습니다. 표적이 있으면 마지막 사격은 이 값에서 쿨다운을 뺀 Tick에 있었습니다.
     pub ready_at: u64,
@@ -197,7 +219,10 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning) -> WireShip {
         let mount = mount.as_ref()?;
         Some(WireMount {
             slot: slot as u8,
-            weapon: mount.weapon.0,
+            item: match mount.item {
+                Item::Weapon(weapon) => WireItem::Weapon(weapon.0),
+                Item::Gear(gear) => WireItem::Gear(gear.0),
+            },
             target: mount.target.map(wire_target),
             ready_at: mount.ready_at,
         })
@@ -209,6 +234,7 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning) -> WireShip {
         y: ship.pos.y,
         hull: ship.hull.0,
         hp: ship.hp,
+        max_hp: ship.max_hp(tuning),
         level: ship.level(tuning) as u8,
         respawn_at: match ship.life {
             Life::Afloat => None,

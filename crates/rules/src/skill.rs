@@ -83,8 +83,7 @@ pub(crate) fn cast(
     let ship = world.ships.get_mut(&id).ok_or(Refusal::Sunk)?;
     match spec.effect {
         SkillEffect::Repair { hp_per_rank } => {
-            let max_hp = tuning.hull(ship.hull).max_hp;
-            ship.hp = (ship.hp + hp_per_rank * rank).min(max_hp);
+            ship.hp = (ship.hp + hp_per_rank * rank).min(ship.max_hp(tuning));
         }
         SkillEffect::Sprint {
             percent_per_rank,

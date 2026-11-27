@@ -1,11 +1,13 @@
 //! 내 배의 상태와 상점의 목록을 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다.
 //!
-//! 숫자 키는 그 번호의 무기를 사고, Shift와 숫자 키는 그 번호의 칸의 무기를 팝니다. F1부터의 키는 선체를 바꿉니다.
+//! 숫자 키는 상점의 그 번호의 무기를 사고, Alt와 숫자 키는 그 번호의 장비를 삽니다. 무기와 장비는 같은 칸에 달립니다.
+//! Shift와 숫자 키는 그 번호의 칸의 아이템을 팝니다.
+//! Z, X, C, V는 조합 표의 차례대로 무기를 조합합니다. F1부터의 키는 선체를 바꿉니다.
 //! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Ctrl과 함께 누르면 스킬 포인트를 넣습니다. 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
 use warship_client_core::MyShip;
-use warship_protocol::{Welcome, WireCommand, WireRefusal};
+use warship_protocol::{Welcome, WireCommand, WireItem, WireRefusal};
 
 use crate::net::{CurrentFrame, Net};
 
@@ -20,7 +22,20 @@ const DIGITS: [KeyCode; 9] = [
     KeyCode::Digit8,
     KeyCode::Digit9,
 ];
-const HULL_KEYS: [KeyCode; 4] = [KeyCode::F1, KeyCode::F2, KeyCode::F3, KeyCode::F4];
+const HULL_KEYS: [KeyCode; 6] = [
+    KeyCode::F1,
+    KeyCode::F2,
+    KeyCode::F3,
+    KeyCode::F4,
+    KeyCode::F5,
+    KeyCode::F6,
+];
+const RECIPE_KEYS: [(KeyCode, char); 4] = [
+    (KeyCode::KeyZ, 'Z'),
+    (KeyCode::KeyX, 'X'),
+    (KeyCode::KeyC, 'C'),
+    (KeyCode::KeyV, 'V'),
+];
 const SKILL_KEYS: [(KeyCode, char); 4] = [
     (KeyCode::KeyQ, 'Q'),
     (KeyCode::KeyW, 'W'),
@@ -57,16 +72,30 @@ pub fn order_commands(
     let held = |pair: [KeyCode; 2]| keys.any_pressed(pair);
     let shift = held([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let ctrl = held([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    let alt = held([KeyCode::AltLeft, KeyCode::AltRight]);
+    let welcome = net.session.welcome();
+    // 숫자 키의 번호는 상점이 파는 무기의 순서입니다. 조합으로만 얻는 무기는 건너뜁니다.
+    let for_sale: Vec<u16> = welcome.map_or(Vec::new(), |welcome| for_sale(welcome).collect());
+    let recipes = welcome.map_or(0, |welcome| welcome.recipes.len());
     let mut orders = Vec::new();
     for (index, key) in DIGITS.into_iter().enumerate() {
+        if !keys.just_pressed(key) {
+            continue;
+        }
+        let slot = index as u8;
+        let order = match (shift, alt) {
+            (true, _) => Some(WireCommand::Sell { slot }),
+            (false, true) => Some(WireCommand::BuyGear { gear: index as u16 }),
+            (false, false) => for_sale
+                .get(index)
+                .map(|&weapon| WireCommand::Buy { weapon }),
+        };
+        orders.extend(order);
+    }
+    for (index, (key, _)) in RECIPE_KEYS.into_iter().enumerate().take(recipes) {
         if keys.just_pressed(key) {
-            orders.push(if shift {
-                WireCommand::Sell { slot: index as u8 }
-            } else {
-                WireCommand::Buy {
-                    weapon: index as u16,
-                }
-            });
+            let recipe = index as u16;
+            orders.push(WireCommand::Combine { recipe });
         }
     }
     for (index, key) in HULL_KEYS.into_iter().enumerate() {
@@ -109,6 +138,14 @@ pub fn show_hud(
     }
 }
 
+/// 상점이 파는 무기의 번호입니다. 무기 표의 순서입니다.
+fn for_sale(welcome: &Welcome) -> impl Iterator<Item = u16> + '_ {
+    let weapons = welcome.weapons.iter().enumerate();
+    weapons
+        .filter(|(_, weapon)| weapon.buyable)
+        .map(|(index, _)| index as u16)
+}
+
 /// 내 배의 선체가 쓰는 스킬의 번호입니다. 단축키의 순서입니다.
 fn hull_skills<'a>(welcome: &'a Welcome, me: &MyShip) -> &'a [u16] {
     let hull = welcome.hulls.get(usize::from(me.hull));
@@ -122,11 +159,19 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
         "{hull_name}   Level {} (xp {})   Skill points {}\nMounts:",
         me.level, me.xp, me.skill_points
     );
-    for (slot, weapon) in me.mounts.iter().enumerate() {
-        let name = weapon
-            .and_then(|weapon| welcome.weapons.get(usize::from(weapon)))
-            .map_or("-", |weapon| weapon.name.as_str());
-        lines += &format!("  [{}] {name}", slot + 1);
+    for (slot, item) in me.mounts.iter().enumerate() {
+        let name = match item {
+            None => Some("-"),
+            Some(WireItem::Weapon(weapon)) => {
+                let weapon = welcome.weapons.get(usize::from(*weapon));
+                weapon.map(|weapon| weapon.name.as_str())
+            }
+            Some(WireItem::Gear(gear)) => {
+                let gear = welcome.gear.get(usize::from(*gear));
+                gear.map(|gear| gear.name.as_str())
+            }
+        };
+        lines += &format!("  [{}] {}", slot + 1, name.unwrap_or("?"));
     }
     lines += "\nSkills:";
     for (&id, (_, key)) in hull_skills(welcome, me).iter().zip(SKILL_KEYS) {
@@ -139,15 +184,31 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
             lines += &format!(" ({:.0}s)", skill.ready_secs.ceil());
         }
     }
+    let weapon_name = |id: u16| {
+        let weapon = welcome.weapons.get(usize::from(id));
+        weapon.map_or("?", |weapon| weapon.name.as_str())
+    };
     lines += "\nShop:";
-    for (index, weapon) in welcome.weapons.iter().enumerate() {
-        lines += &format!("  {} {} {}g", index + 1, weapon.name, weapon.price);
+    for (index, id) in for_sale(welcome).enumerate() {
+        let price = welcome.weapons[usize::from(id)].price;
+        lines += &format!("  {} {} {price}g", index + 1, weapon_name(id));
+    }
+    lines += "\nGear shop:";
+    for (index, gear) in welcome.gear.iter().enumerate() {
+        let (name, price, effect) = (&gear.name, gear.price, &gear.effect);
+        lines += &format!("  Alt+{} {name} {price}g ({effect})", index + 1);
+    }
+    lines += "\nCombine:";
+    for (recipe, (_, key)) in welcome.recipes.iter().zip(RECIPE_KEYS) {
+        let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
+        let (result, parts) = (weapon_name(recipe.result), parts.join(" + "));
+        lines += &format!("  {key} {result} = {parts} + {}g", recipe.price);
     }
     lines += "\nHulls:";
     for (index, hull) in welcome.hulls.iter().enumerate() {
         lines += &format!("  F{} {} {}g", index + 1, hull.name, hull.price);
     }
-    lines += "\nNumber: buy   Shift+number: sell mount   Ctrl+key: learn skill";
+    lines += "\nNumber: buy weapon   Alt+number: buy gear   Shift+number: sell mount   Ctrl+key: learn skill";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
     }
@@ -162,12 +223,14 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::NotEnoughGold => "not enough gold",
         WireRefusal::NoFreeMount => "every mount is in use",
         WireRefusal::EmptyMount => "that mount is empty",
-        WireRefusal::MountsInUse => "sell the weapons the new hull has no mount for",
+        WireRefusal::MountsInUse => "sell the items the new hull has no mount for",
         WireRefusal::SameHull => "the ship already has that hull",
         WireRefusal::NoSkillPoint => "no skill point",
         WireRefusal::MaxRank => "the skill is at its highest rank",
         WireRefusal::NotLearned => "learn the skill first",
         WireRefusal::OnCooldown => "the skill is not ready",
         WireRefusal::NotOnThisHull => "this hull does not have that skill",
+        WireRefusal::NotForSale => "that weapon is made by combining, not sold",
+        WireRefusal::MissingParts => "mount every part of the recipe first",
     }
 }

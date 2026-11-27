@@ -3,7 +3,7 @@
 use crate::ids::{SkillId, WeaponId};
 use crate::math::Vec2;
 use crate::sim::Sim;
-use crate::tuning::{SkillEffect, Tuning};
+use crate::tuning::{GearEffect, SkillEffect, Tuning};
 
 #[test]
 fn the_default_tuning_is_valid_and_starts_a_room() {
@@ -23,13 +23,13 @@ fn a_new_ship_carries_the_start_weapons() {
     let ship = sim.ship(id).unwrap();
     assert_eq!(ship.pos, Vec2::new(57.0, 24.0));
     assert_eq!(ship.hp, 400);
-    assert_eq!(ship.mounts[0].unwrap().weapon, WeaponId(0));
+    assert_eq!(ship.mounts[0].unwrap().weapon(), Some(WeaponId(0)));
     assert!(ship.mounts[1].is_none());
 }
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 30] = [
+    let broken: [fn(&mut Tuning); 34] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -53,6 +53,7 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.hulls[1].max_hp = 0,
         |t| t.hulls[2].speed = 0.0,
         |t| t.shop.refund_percent = 101,
+        |t| t.shop.repair_percent_per_sec = 101,
         |t| t.shop.range = 0.0,
         |t| t.growth.level_xp = vec![100, 100],
         |t| t.skills[0].max_rank = 0,
@@ -65,6 +66,12 @@ fn tunings_that_break_the_rules_are_refused() {
                 percent_per_rank: 40,
                 ticks: 10,
             }
+        },
+        // 재료가 하나인 조합, 표에 없는 무기를 만드는 조합, 상한을 넘는 장갑입니다.
+        |t| t.recipes[0].parts.truncate(1),
+        |t| t.recipes[0].result = WeaponId(99),
+        |t| {
+            t.gear[3].effect = GearEffect::Plating { armor_percent: 81 };
         },
         |t| t.map.islands[0].radius = 0.0,
         // 맵의 가장자리에 붙은 섬, 다른 섬에 붙은 섬, 시작 자리를 덮은 섬, 라인을 막은 섬입니다.

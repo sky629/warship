@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 
 use warship_protocol::{
-    Snapshot, Welcome, WireOutcome, WireRefusal, WireShip, WireStructureKind, WireTarget, WireTeam,
+    Snapshot, Welcome, WireItem, WireOutcome, WireRefusal, WireStructureKind, WireTarget, WireTeam,
     WireWeapon,
 };
 use warship_rules::Vec2;
@@ -42,8 +42,8 @@ pub struct MyShip {
     pub level: u8,
     pub xp: u32,
     pub skill_points: u8,
-    /// 선체의 칸마다 달린 무기(`Welcome::weapons`의 자리)입니다. 빈 칸은 `None`입니다.
-    pub mounts: Vec<Option<u16>>,
+    /// 선체의 칸마다 달린 아이템입니다. 빈 칸은 `None`입니다.
+    pub mounts: Vec<Option<WireItem>>,
     /// `Welcome::skills`와 같은 순서입니다.
     pub skills: Vec<SkillView>,
     /// 마지막 명령이 거절되었으면 그 이유입니다.
@@ -136,12 +136,6 @@ impl History {
     }
 }
 
-/// 배의 선체의 최대 HP입니다. 선체 표에 없는 번호이면 1입니다.
-fn max_hp(welcome: &Welcome, ship: &WireShip) -> u32 {
-    let hull = welcome.hulls.get(usize::from(ship.hull));
-    hull.map_or(1, |hull| hull.max_hp)
-}
-
 fn lerp(a: Vec2, b: Vec2, alpha: f32) -> Vec2 {
     a + (b - a) * alpha
 }
@@ -200,7 +194,9 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         let pos = ship_pos(ship.id).unwrap_or(Vec2::new(ship.x, ship.y));
         let mut ranges: Vec<f32> = Vec::new();
         for mount in &ship.mounts {
-            let Some(weapon) = welcome.weapons.get(usize::from(mount.weapon)) else {
+            // 장비는 쏘지 않으므로 사거리와 포탄이 없습니다.
+            let weapon = mount.item.weapon();
+            let Some(weapon) = weapon.and_then(|id| welcome.weapons.get(usize::from(id))) else {
                 continue;
             };
             if !ranges.contains(&weapon.range) {
@@ -218,7 +214,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             team: ship.team,
             pos,
             hull: ship.hull,
-            hp: ship.hp as f32 / max_hp(welcome, ship) as f32,
+            hp: ship.hp as f32 / ship.max_hp.max(1) as f32,
             sunk: ship.respawn_at.is_some(),
             mine: ship.id == welcome.ship,
             ranges,
@@ -269,9 +265,9 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
     let me = mine.and_then(|ship| {
         let own = ship.own.as_ref()?;
         let slots = welcome.hulls.get(usize::from(ship.hull))?.mounts;
-        let weapon_in = |slot: u8| {
+        let item_in = |slot: u8| {
             let mount = ship.mounts.iter().find(|mount| mount.slot == slot);
-            mount.map(|mount| mount.weapon)
+            mount.map(|mount| mount.item)
         };
         Some(MyShip {
             gold: own.gold,
@@ -280,7 +276,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             level: ship.level,
             xp: own.xp,
             skill_points: own.skill_points,
-            mounts: (0..slots).map(weapon_in).collect(),
+            mounts: (0..slots).map(item_in).collect(),
             skills: own
                 .skills
                 .iter()

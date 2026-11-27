@@ -7,7 +7,7 @@
 //!
 //! 읽는 순서: `tuning`(모든 수치), `sim`(Tick 하나의 처리 순서), `ship`(이동과 다시 나타남), `nav`(섬을 피해서 가는 길), `creep`(라인의 NPC 배),
 //! `vision`(진영별 시야), `weapon`(자동 사격과 늦게 닿는 피해), `economy`(수입, 보상, 경험치), `structures`(타워, 항구, 본진),
-//! `command`(명령의 순서 번호와 거절), `shop`(구매, 판매, 선체 교체), `skill`(스킬을 배우고 쓰는 것).
+//! `command`(명령의 순서 번호와 거절), `shop`(구매, 판매, 조합, 선체 교체), `skill`(스킬을 배우고 쓰는 것).
 //! `world`, `math`, `ids`, `input`은 이 모듈들이 쓰는 도구입니다.
 
 mod command;
@@ -32,15 +32,15 @@ mod tests;
 
 pub use command::{Command, Refusal};
 pub use creep::Creep;
-pub use ids::{CreepId, HullId, ShipId, SkillId, StructureId, Team, WeaponId};
+pub use ids::{CreepId, GearId, HullId, RecipeId, ShipId, SkillId, StructureId, Team, WeaponId};
 pub use input::{PlayerInput, PlayerInputs, Waypoint};
 pub use math::Vec2;
-pub use ship::{Boost, Life, MOUNTS, Mount, Ship, SkillState};
+pub use ship::{Boost, Item, Life, MOUNTS, Mount, Ship, SkillState};
 pub use sim::{Outcome, RoomFull, Sim};
 pub use structures::{Structure, StructureKind};
 pub use tuning::{
-    CreepSpec, EconomyTuning, GrowthTuning, Hits, HullSpec, Island, MapSpec, ShipTuning,
-    ShopTuning, SkillEffect, SkillSpec, StructureSite, StructureSpec, StructureTable, Tuning, Wave,
-    WeaponSpec,
+    ARMOR_CAP_PERCENT, CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits,
+    HullSpec, Island, MapSpec, Recipe, ShipTuning, ShopTuning, SkillEffect, SkillSpec,
+    StructureSite, StructureSpec, StructureTable, Tuning, Wave, WeaponSpec,
 };
 pub use weapon::Target;

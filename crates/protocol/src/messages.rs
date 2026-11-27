@@ -1,14 +1,14 @@
 //! 클라이언트와 서버가 주고받는 메시지입니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::{Command, HullId, SkillId, Team, WeaponId};
+use warship_rules::{Command, GearId, HullId, RecipeId, SkillId, Team, WeaponId};
 
 use crate::seat_token::SeatToken;
 use crate::snapshot::Snapshot;
 use crate::welcome::Welcome;
 
 /// 메시지의 형식이 바뀔 때마다 올리는 번호입니다. 서버는 다른 번호의 입장 요청을 거절합니다.
-pub const PROTOCOL_VERSION: u32 = 6;
+pub const PROTOCOL_VERSION: u32 = 7;
 
 /// 클라이언트에서 서버로 가는 메시지입니다. `Join`은 첫째 변형이어야 합니다(`codec`이 변형 번호 0으로 알아봅니다).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct InputMsg {
     pub destination: Option<WireVec2>,
 }
 
-/// 한 번만 실행해야 하는 조작(구매, 판매, 선체 교체, 스킬)입니다. 모든 조건은 서버가 검사합니다.
+/// 한 번만 실행해야 하는 조작(구매, 판매, 조합, 선체 교체, 스킬)입니다. 모든 조건은 서버가 검사합니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommandMsg {
     /// 클라이언트가 명령을 보낼 때마다 1씩 늘리는 순서 번호입니다. 서버는 이미 처리한 번호보다 크지 않은 명령을 버리고,
@@ -50,11 +50,13 @@ pub struct CommandMsg {
     pub command: WireCommand,
 }
 
-/// 번호는 `Welcome`의 무기, 선체, 스킬 목록의 자리입니다. 목록에 없는 번호는 서버가 거절합니다.
+/// 번호는 `Welcome`의 무기, 장비, 조합, 선체, 스킬 목록의 자리입니다. 목록에 없는 번호는 서버가 거절합니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WireCommand {
     Buy { weapon: u16 },
     Sell { slot: u8 },
+    BuyGear { gear: u16 },
+    Combine { recipe: u16 },
     ChangeHull { hull: u16 },
     Learn { skill: u16 },
     Cast { skill: u16 },
@@ -65,6 +67,8 @@ impl From<WireCommand> for Command {
         match command {
             WireCommand::Buy { weapon } => Command::Buy(WeaponId(weapon)),
             WireCommand::Sell { slot } => Command::Sell { slot },
+            WireCommand::BuyGear { gear } => Command::BuyGear(GearId(gear)),
+            WireCommand::Combine { recipe } => Command::Combine(RecipeId(recipe)),
             WireCommand::ChangeHull { hull } => Command::ChangeHull(HullId(hull)),
             WireCommand::Learn { skill } => Command::Learn(SkillId(skill)),
             WireCommand::Cast { skill } => Command::Cast(SkillId(skill)),

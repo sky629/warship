@@ -113,8 +113,8 @@ mod tests {
         }
     }
 
-    /// 버전 7을 적은 입장 요청입니다. 버전 뒤에 방 코드가 없어서, 지금의 `Join`으로는 해석되지 않습니다.
-    const PROTOCOL_7_JOIN: [u8; 2] = [0, 7];
+    /// 이 빌드와 다른 버전(1)을 적은 입장 요청입니다. 버전 뒤에 방 코드가 없어서, 지금의 `Join`으로는 해석되지 않습니다.
+    const OLD_JOIN: [u8; 2] = [0, 1];
 
     #[test]
     fn a_join_starts_with_its_variant_number_and_its_version() {
@@ -126,11 +126,11 @@ mod tests {
 
     #[test]
     fn a_join_of_another_version_is_told_apart_without_reading_its_body() {
-        assert!(postcard::from_bytes::<ClientMsg>(&PROTOCOL_7_JOIN).is_err());
+        assert!(postcard::from_bytes::<ClientMsg>(&OLD_JOIN).is_err());
 
-        let error = decode_client(&PROTOCOL_7_JOIN).unwrap_err();
+        let error = decode_client(&OLD_JOIN).unwrap_err();
 
-        assert_eq!(error.foreign_join_version(), Some(7));
+        assert_eq!(error.foreign_join_version(), Some(1));
     }
 
     #[test]

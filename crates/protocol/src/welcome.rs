@@ -1,7 +1,7 @@
 //! 입장할 때 한 번 보내는, 접속 중에 바뀌지 않는 정보입니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::{ShipId, Sim, StructureKind, StructureSpec, WeaponSpec};
+use warship_rules::{GearEffect, ShipId, Sim, StructureKind, StructureSpec, WeaponSpec};
 
 use crate::messages::{WireTeam, WireVec2};
 use crate::seat_token::SeatToken;
@@ -21,8 +21,12 @@ pub struct Welcome {
     pub map_height: f32,
     /// 선체 표입니다. 스냅샷의 선체 번호가 이 목록의 자리입니다.
     pub hulls: Vec<WireHull>,
-    /// 무기 표입니다. 스냅샷의 무기 번호가 이 목록의 자리이고, 상점이 이 무기를 모두 팝니다.
+    /// 무기 표입니다. 스냅샷의 무기 번호가 이 목록의 자리입니다. 상점은 `buyable`인 무기를 팝니다.
     pub weapons: Vec<WireWeapon>,
+    /// 장비 표입니다. 장비는 무기와 같은 칸에 답니다. 상점이 이 장비를 모두 팝니다.
+    pub gear: Vec<WireGear>,
+    /// 조합 표입니다.
+    pub recipes: Vec<WireRecipe>,
     /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서이고, 선체마다 이 가운데 일부를 씁니다.
     pub skills: Vec<WireSkillSpec>,
     pub tower: WireStructureSpec,
@@ -58,10 +62,27 @@ pub struct WireHull {
     pub name: String,
     pub price: u32,
     pub max_hp: u32,
-    /// 무기를 달 수 있는 칸의 수입니다.
+    /// 아이템(무기와 장비)을 달 수 있는 칸의 수입니다.
     pub mounts: u8,
     /// 이 선체의 배가 쓸 수 있는 스킬의 번호입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
     pub skills: Vec<u16>,
+}
+
+/// 장비 한 종류입니다.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireGear {
+    pub name: String,
+    pub price: u32,
+    /// 효과를 설명하는, 화면에 그대로 보이는 짧은 글자입니다.
+    pub effect: String,
+}
+
+/// 무기의 조합 하나입니다. 번호는 `Welcome::weapons`의 자리입니다.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireRecipe {
+    pub parts: Vec<u16>,
+    pub result: u16,
+    pub price: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -75,8 +96,10 @@ pub struct WireSkillSpec {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WireWeapon {
     pub name: String,
-    /// 상점에서 사는 가격입니다. 건물과 NPC 배의 포에서는 뜻이 없습니다.
+    /// 무기의 값입니다. 건물과 NPC 배의 포에서는 뜻이 없습니다.
     pub price: u32,
+    /// 상점에서 바로 살 수 있는지입니다. 조합으로만 얻는 무기는 거짓입니다.
+    pub buyable: bool,
     pub range: f32,
     pub cooldown_ticks: u32,
     pub shot_speed: f32,
@@ -96,10 +119,21 @@ pub struct WireCreepSpec {
     pub weapon: WireWeapon,
 }
 
+/// 화면에 그대로 보이는 문장이므로 영어입니다.
+fn effect_text(effect: GearEffect) -> String {
+    match effect {
+        GearEffect::Planking { max_hp } => format!("+{max_hp} HP"),
+        GearEffect::Sails { speed_percent } => format!("+{speed_percent}% speed"),
+        GearEffect::Crew { repair_per_sec } => format!("+{repair_per_sec} HP/s"),
+        GearEffect::Plating { armor_percent } => format!("-{armor_percent}% damage"),
+    }
+}
+
 fn wire_weapon(spec: &WeaponSpec) -> WireWeapon {
     WireWeapon {
         name: spec.name.to_string(),
         price: spec.price,
+        buyable: spec.buyable,
         range: spec.range,
         cooldown_ticks: spec.cooldown_ticks,
         shot_speed: spec.shot_speed,
@@ -156,6 +190,24 @@ impl Welcome {
                 })
                 .collect(),
             weapons: tuning.weapons.iter().map(wire_weapon).collect(),
+            gear: tuning
+                .gear
+                .iter()
+                .map(|gear| WireGear {
+                    name: gear.name.to_string(),
+                    price: gear.price,
+                    effect: effect_text(gear.effect),
+                })
+                .collect(),
+            recipes: tuning
+                .recipes
+                .iter()
+                .map(|recipe| WireRecipe {
+                    parts: recipe.parts.iter().map(|part| part.0).collect(),
+                    result: recipe.result.0,
+                    price: recipe.price,
+                })
+                .collect(),
             tower: structure(StructureKind::Tower),
             harbor: structure(StructureKind::Harbor),
             base: structure(StructureKind::Base),

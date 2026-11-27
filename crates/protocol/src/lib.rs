@@ -33,10 +33,11 @@ pub use player_name::{NameError, PlayerName};
 pub use room_code::{RoomCode, RoomCodeError};
 pub use seat_token::SeatToken;
 pub use snapshot::{
-    Snapshot, WireCreep, WireMount, WireOutcome, WireOwn, WireRefusal, WireShip, WireSkill,
-    WireStructure, WireStructureKind, WireTarget,
+    Snapshot, WireCreep, WireItem, WireMount, WireOutcome, WireOwn, WireRefusal, WireShip,
+    WireSkill, WireStructure, WireStructureKind, WireTarget,
 };
 pub use transport::{ClientEvent, ClientTransport, LinkId, PeerKey, ServerEvent, ServerTransport};
 pub use welcome::{
-    Welcome, WireCreepSpec, WireHull, WireIsland, WireSkillSpec, WireStructureSpec, WireWeapon,
+    Welcome, WireCreepSpec, WireGear, WireHull, WireIsland, WireRecipe, WireSkillSpec,
+    WireStructureSpec, WireWeapon,
 };

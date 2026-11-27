@@ -3,7 +3,7 @@
 //! 거리의 단위는 타일이고, 시간의 단위는 수치마다 적혀 있습니다(초 또는 Tick).
 //! 기본 수치(`Tuning::default`)는 프로토타입용 값이고, 배와 무기의 이름과 맵의 배치는 이 게임에서 새로 지은 것입니다.
 
-use crate::ids::{HullId, SkillId, Team, WeaponId};
+use crate::ids::{GearId, HullId, SkillId, Team, WeaponId};
 use crate::math::Vec2;
 use crate::nav;
 use crate::ship::MOUNTS;
@@ -22,6 +22,10 @@ pub struct Tuning {
     pub weapons: Vec<WeaponSpec>,
     /// 스킬 표입니다. `SkillId`가 이 표의 행 번호이고, 모든 배가 같은 스킬을 배울 수 있습니다.
     pub skills: Vec<SkillSpec>,
+    /// 장비 표입니다. 장비는 무기와 같은 칸에 달고, 쏘지 않고, 달려 있는 동안 배의 수치를 올립니다. 상점이 이 장비를 모두 팝니다.
+    pub gear: Vec<GearSpec>,
+    /// 조합 표입니다. 재료 무기를 모두 단 배가 값을 내면 재료가 결과 무기 하나로 바뀝니다.
+    pub recipes: Vec<Recipe>,
     pub shop: ShopTuning,
     pub growth: GrowthTuning,
     pub structures: StructureTable,
@@ -54,21 +58,21 @@ pub struct HullSpec {
     pub speed: f32,
     /// 이 거리 안의 적이 배의 진영에 보입니다.
     pub vision: f32,
-    /// 무기를 달 수 있는 칸의 수입니다. 앞에서부터 이 수만큼의 칸을 씁니다.
+    /// 아이템(무기와 장비)을 달 수 있는 칸의 수입니다. 앞에서부터 이 수만큼의 칸을 씁니다.
     pub mounts: usize,
     /// 이 선체의 배가 배우고 쓸 수 있는 스킬입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
     pub skills: Vec<SkillId>,
 }
 
-/// 상점에 관한 수치입니다. 자기 진영의 서 있는 본진과 항구가 상점입니다.
+/// 상점에 관한 수치입니다. 자기 진영의 서 있는 본진과 항구가 상점입니다. 수리는 본진에서만 받습니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShopTuning {
     /// 상점에서 이 거리 안에 있는 배가 사고팔 수 있습니다.
     pub range: f32,
     /// 무기를 팔거나 선체를 바꿀 때 돌려받는, 가격에 대한 백분율입니다.
     pub refund_percent: u32,
-    /// 상점에 떠 있는 배가 1초마다 회복하는 HP입니다.
-    pub repair_per_sec: u32,
+    /// 자기 진영의 본진 가까이에 떠 있는 배가 1초마다 회복하는, 최대 HP에 대한 백분율입니다.
+    pub repair_percent_per_sec: u32,
 }
 
 /// 레벨에 관한 수치입니다.
@@ -106,6 +110,40 @@ pub enum SkillEffect {
     Brace { percent_per_rank: u32, ticks: u32 },
 }
 
+/// 장비 한 종류의 수치입니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GearSpec {
+    pub name: &'static str,
+    pub price: u32,
+    pub effect: GearEffect,
+}
+
+/// 장비가 달려 있는 동안 배에 주는 효과입니다. 같은 장비를 여러 개 달면 효과가 더해집니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GearEffect {
+    /// 최대 HP를 올립니다.
+    Planking { max_hp: u32 },
+    /// 속도를 백분율만큼 올립니다.
+    Sails { speed_percent: u32 },
+    /// 떠 있는 동안 1초마다 HP를 회복합니다.
+    Crew { repair_per_sec: u32 },
+    /// 받는 피해를 백분율만큼 줄입니다. 스킬의 피해 감소와 더해지고, 합은 `ARMOR_CAP_PERCENT`를 넘지 않습니다.
+    Plating { armor_percent: u32 },
+}
+
+/// 받는 피해를 줄이는 효과를 모두 더한 값의 상한(백분율)입니다.
+pub const ARMOR_CAP_PERCENT: u32 = 80;
+
+/// 무기의 조합 하나입니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Recipe {
+    /// 재료 무기입니다. 같은 무기가 두 번 있으면 그 무기를 두 개 달고 있어야 합니다.
+    pub parts: Vec<WeaponId>,
+    pub result: WeaponId,
+    /// 조합할 때 내는 골드입니다.
+    pub price: u32,
+}
+
 /// 무기 한 종류의 수치입니다. 무기마다 다른 점은 모두 이 구조체의 값입니다.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WeaponSpec {
@@ -119,8 +157,10 @@ pub struct WeaponSpec {
     /// 포탄이 1초에 날아가는 거리입니다. 피해는 포탄이 표적까지 날아가는 시간이 지난 뒤에 들어갑니다.
     pub shot_speed: f32,
     pub hits: Hits,
-    /// 상점에서 사는 가격입니다. 건물과 NPC 배의 포에서는 쓰지 않습니다.
+    /// 무기의 값입니다. 상점에서 사는 가격이고, 팔 때 이 값의 일부를 돌려받습니다. 건물과 NPC 배의 포에서는 쓰지 않습니다.
     pub price: u32,
+    /// 상점에서 바로 살 수 있는지입니다. 조합으로만 얻는 무기는 거짓입니다.
+    pub buyable: bool,
 }
 
 /// 무기가 쏠 수 있는 표적의 종류입니다. 배에는 플레이어의 배와 NPC 배가 모두 들어갑니다.
@@ -225,6 +265,11 @@ impl Tuning {
     pub fn hull(&self, id: HullId) -> &HullSpec {
         &self.hulls[usize::from(id.0)]
     }
+
+    /// 장비 표에 있는 번호이면 그 장비입니다.
+    pub fn gear_of(&self, id: GearId) -> Option<&GearSpec> {
+        self.gear.get(usize::from(id.0))
+    }
 }
 
 impl MapSpec {
@@ -309,9 +354,29 @@ impl Tuning {
                 ));
             }
         }
-        if !is_positive(self.shop.range) || self.shop.refund_percent > 100 {
+        let known = |weapon: &WeaponId| usize::from(weapon.0) < self.weapons.len();
+        for recipe in &self.recipes {
+            if recipe.parts.len() < 2 || !recipe.parts.iter().all(known) || !known(&recipe.result) {
+                return Err(
+                    "a recipe needs two or more parts, and its parts and result must be weapons of the table"
+                        .to_string(),
+                );
+            }
+        }
+        for gear in &self.gear {
+            if matches!(gear.effect, GearEffect::Plating { armor_percent } if armor_percent > ARMOR_CAP_PERCENT)
+            {
+                return Err(format!(
+                    "gear {}: plating takes at most {ARMOR_CAP_PERCENT} percent",
+                    gear.name
+                ));
+            }
+        }
+        let percents = [self.shop.refund_percent, self.shop.repair_percent_per_sec];
+        if !is_positive(self.shop.range) || percents.iter().any(|percent| *percent > 100) {
             return Err(
-                "the shop needs a positive range and a refund of at most 100 percent".to_string(),
+                "the shop needs a positive range, and a refund and a repair of at most 100 percent"
+                    .to_string(),
             );
         }
         if !is_positive(self.growth.share_range) {
@@ -482,17 +547,37 @@ impl Default for Tuning {
             shot_speed,
             hits,
             price: 0,
+            buyable: false,
         };
-        let sold = |price, weapon: WeaponSpec| WeaponSpec { price, ..weapon };
-        // 모든 선체가 0번과 1번 스킬을 쓰고, 선체마다 고유한 스킬이 하나씩 있습니다.
-        let hull = |name, price, max_hp, speed, vision, mounts, own_skill| HullSpec {
+        // 상점에서 파는 무기와, 조합으로만 얻는 무기입니다. 조합한 무기의 값은 재료의 값과 조합 값의 합입니다.
+        let sold = |price, weapon: WeaponSpec| WeaponSpec {
+            price,
+            buyable: true,
+            ..weapon
+        };
+        let made = |price, weapon: WeaponSpec| WeaponSpec { price, ..weapon };
+        let recipe = |parts: [u16; 2], result, price| Recipe {
+            parts: parts.map(WeaponId).to_vec(),
+            result: WeaponId(result),
+            price,
+        };
+        let gear = |name, price, effect| GearSpec {
             name,
             price,
-            max_hp,
-            speed,
-            vision,
-            mounts,
-            skills: vec![SkillId(0), SkillId(1), SkillId(own_skill)],
+            effect,
+        };
+        // 모든 선체가 0번과 1번 스킬을 쓰고, 선체마다 고유한 스킬이 있습니다.
+        let hull = |name, price, max_hp, speed, mounts, own_skills: &[u16]| {
+            let own = own_skills.iter().map(|skill| SkillId(*skill));
+            HullSpec {
+                name,
+                price,
+                max_hp,
+                speed,
+                vision: 9.0 + max_hp as f32 / 1500.0,
+                mounts,
+                skills: [SkillId(0), SkillId(1)].into_iter().chain(own).collect(),
+            }
         };
         let skill = |name, cooldown_ticks, effect| SkillSpec {
             name,
@@ -527,9 +612,11 @@ impl Default for Tuning {
                 bounty: 200,
             },
             hulls: vec![
-                hull("Sloop", 0, 400, 4.0, 9.0, 3, 2),
-                hull("Frigate", 600, 800, 3.6, 9.5, 5, 3),
-                hull("Galleon", 1500, 1500, 3.0, 10.0, 6, 4),
+                hull("Sloop", 0, 400, 4.0, 3, &[2]),
+                hull("Brig", 500, 650, 3.8, 4, &[2]),
+                hull("Frigate", 1100, 950, 3.6, 5, &[3]),
+                hull("Galleon", 2000, 1500, 3.2, 6, &[4]),
+                hull("Man-of-War", 3500, 2300, 3.0, 6, &[3, 4]),
             ],
             weapons: vec![
                 sold(100, gun("Deck Gun", 20, 5.5, 30, 14.0, both)),
@@ -537,6 +624,26 @@ impl Default for Tuning {
                 sold(300, gun("Long Nine", 30, 12.0, 25, 12.0, Hits::ShipsOnly)),
                 sold(250, gun("Carronade", 45, 3.5, 40, 14.0, both)),
                 sold(400, gun("Mortar", 50, 9.0, 60, 7.0, both)),
+                made(350, gun("Twin Deck Guns", 48, 5.5, 30, 14.0, both)),
+                made(500, gun("Chain Gun", 6, 4.0, 2, 18.0, both)),
+                made(600, gun("Heavy Carronade", 80, 4.0, 36, 14.0, both)),
+                made(1100, gun("Siege Mortar", 90, 11.0, 55, 8.0, both)),
+            ],
+            recipes: vec![
+                recipe([0, 0], 5, 150),
+                recipe([1, 1], 6, 200),
+                recipe([3, 0], 7, 250),
+                recipe([4, 2], 8, 400),
+            ],
+            gear: vec![
+                gear("Oak Planking", 200, GearEffect::Planking { max_hp: 250 }),
+                gear("Extra Sails", 250, GearEffect::Sails { speed_percent: 12 }),
+                gear("Shipwrights", 300, GearEffect::Crew { repair_per_sec: 6 }),
+                gear(
+                    "Copper Sheathing",
+                    350,
+                    GearEffect::Plating { armor_percent: 12 },
+                ),
             ],
             skills: vec![
                 skill("Patch Up", 600, SkillEffect::Repair { hp_per_rank: 80 }),
@@ -569,7 +676,7 @@ impl Default for Tuning {
             shop: ShopTuning {
                 range: 5.0,
                 refund_percent: 50,
-                repair_per_sec: 25,
+                repair_percent_per_sec: 5,
             },
             growth: GrowthTuning {
                 level_xp: vec![100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200],

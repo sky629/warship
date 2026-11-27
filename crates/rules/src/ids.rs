@@ -28,6 +28,14 @@ pub struct HullId(pub u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SkillId(pub u16);
 
+/// `Tuning::gear`의 행 번호입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GearId(pub u16);
+
+/// `Tuning::recipes`의 행 번호입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RecipeId(pub u16);
+
 /// 개체가 편들어 싸우는 쪽입니다. 진영은 둘뿐이고, 이 타입의 값은 `RED`와 `BLUE`만 있습니다.
 ///
 /// 「누가 누구를 공격할 수 있는가」는 `is_hostile_to`로 판정합니다.

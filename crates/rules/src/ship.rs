@@ -1,15 +1,15 @@
 //! 플레이어가 조종하는 배와 그 이동입니다.
 
 use crate::command::Refusal;
-use crate::ids::{HullId, ShipId, SkillId, Team, WeaponId};
+use crate::ids::{GearId, HullId, ShipId, SkillId, Team, WeaponId};
 use crate::input::PlayerInputs;
 use crate::math::Vec2;
 use crate::nav;
-use crate::tuning::Tuning;
+use crate::tuning::{ARMOR_CAP_PERCENT, GearEffect, Tuning};
 use crate::weapon::Target;
 use crate::world::World;
 
-/// 가장 큰 선체가 달 수 있는 무기의 수입니다. 선체마다 쓰는 칸의 수는 `HullSpec::mounts`입니다.
+/// 가장 큰 선체의 아이템 칸의 수입니다. 선체마다 쓰는 칸의 수는 `HullSpec::mounts`입니다.
 pub const MOUNTS: usize = 6;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -31,7 +31,7 @@ pub struct Ship {
     pub brace: Option<Boost>,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
     pub route: Vec<Vec2>,
-    /// 무기를 다는 칸입니다. 빈 칸은 `None`입니다.
+    /// 아이템을 다는 칸입니다. 무기와 장비가 같은 칸을 나누어 씁니다. 빈 칸은 `None`입니다.
     pub mounts: [Option<Mount>; MOUNTS],
     /// 마지막으로 처리한 입력의 순서 번호입니다.
     pub last_input_seq: u32,
@@ -78,25 +78,55 @@ pub enum Life {
     },
 }
 
-/// 칸 하나에 달린 무기입니다.
+/// 칸에 다는 아이템입니다. 무기는 스스로 쏘고, 장비는 달려 있는 동안 배의 수치를 올립니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Item {
+    Weapon(WeaponId),
+    Gear(GearId),
+}
+
+/// 칸 하나에 달린 아이템입니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mount {
-    pub weapon: WeaponId,
-    /// 이 Tick부터 다시 쏠 수 있습니다.
+    pub item: Item,
+    /// 무기가 이 Tick부터 다시 쏠 수 있습니다. 장비에서는 쓰지 않습니다.
     pub ready_at: u64,
-    /// 마지막으로 쏜 표적입니다. 쏠 수 있는데 쏠 적이 없으면 `None`이 됩니다.
+    /// 무기가 마지막으로 쏜 표적입니다. 쏠 수 있는데 쏠 적이 없으면 `None`이 됩니다.
     pub target: Option<Target>,
+}
+
+impl Mount {
+    /// 바로 쓸 수 있는 새 아이템입니다.
+    pub(crate) fn new(item: Item) -> Mount {
+        Mount {
+            item,
+            ready_at: 0,
+            target: None,
+        }
+    }
+
+    /// 이 칸의 아이템이 무기이면 그 무기입니다.
+    pub fn weapon(&self) -> Option<WeaponId> {
+        match self.item {
+            Item::Weapon(weapon) => Some(weapon),
+            Item::Gear(_) => None,
+        }
+    }
+
+    /// 이 칸의 아이템이 장비이면 그 장비입니다.
+    pub fn gear(&self) -> Option<GearId> {
+        match self.item {
+            Item::Gear(gear) => Some(gear),
+            Item::Weapon(_) => None,
+        }
+    }
 }
 
 impl Ship {
     pub(crate) fn new(id: ShipId, team: Team, pos: Vec2, tuning: &Tuning) -> Ship {
         let mut mounts = [None; MOUNTS];
         for (mount, &weapon) in mounts.iter_mut().zip(&tuning.ship.start_weapons) {
-            *mount = Some(Mount {
-                weapon,
-                ready_at: 0,
-                target: None,
-            });
+            *mount = Some(Mount::new(Item::Weapon(weapon)));
         }
         Ship {
             id,
@@ -135,9 +165,50 @@ impl Ship {
         tuning.hull(self.hull).skills.contains(&skill)
     }
 
+    /// 달고 있는 장비의 효과입니다.
+    fn gear_effects<'a>(&'a self, tuning: &'a Tuning) -> impl Iterator<Item = GearEffect> + 'a {
+        let gear = self.mounts.iter().flatten().filter_map(Mount::gear);
+        let specs = gear.filter_map(|id| tuning.gear_of(id));
+        specs.map(|gear| gear.effect)
+    }
+
+    /// 선체의 최대 HP에 장비가 올린 HP를 더한 값입니다.
+    pub fn max_hp(&self, tuning: &Tuning) -> u32 {
+        let planking = self.gear_effects(tuning).map(|effect| match effect {
+            GearEffect::Planking { max_hp } => max_hp,
+            _ => 0,
+        });
+        tuning.hull(self.hull).max_hp + planking.sum::<u32>()
+    }
+
+    /// `tick`에 이 배가 1초에 가는 거리입니다. 선체의 속도에 돛 장비와 속도 스킬의 백분율을 더해서 올립니다.
+    pub fn speed(&self, tuning: &Tuning, tick: u64) -> f32 {
+        let sails = self.gear_effects(tuning).map(|effect| match effect {
+            GearEffect::Sails { speed_percent } => speed_percent,
+            _ => 0,
+        });
+        let percent = 100 + sails.sum::<u32>() + Boost::percent_at(self.sprint, tick);
+        tuning.hull(self.hull).speed * percent as f32 / 100.0
+    }
+
+    /// 선원 장비가 1초마다 회복하는 HP입니다.
+    fn crew_repair(&self, tuning: &Tuning) -> u32 {
+        let crew = self.gear_effects(tuning).map(|effect| match effect {
+            GearEffect::Crew { repair_per_sec } => repair_per_sec,
+            _ => 0,
+        });
+        crew.sum()
+    }
+
     /// `tick`에 이 배에 닿은 `amount`의 피해 가운데 실제로 HP에서 빠지는 양입니다.
-    pub(crate) fn braced(&self, amount: u32, tick: u64) -> u32 {
-        let kept = 100 - Boost::percent_at(self.brace, tick).min(100);
+    /// 장갑 장비와 피해 감소 스킬의 백분율을 더하고, 합은 `ARMOR_CAP_PERCENT`를 넘지 않습니다.
+    pub(crate) fn braced(&self, tuning: &Tuning, amount: u32, tick: u64) -> u32 {
+        let plating = self.gear_effects(tuning).map(|effect| match effect {
+            GearEffect::Plating { armor_percent } => armor_percent,
+            _ => 0,
+        });
+        let armor = plating.sum::<u32>() + Boost::percent_at(self.brace, tick);
+        let kept = 100 - armor.min(ARMOR_CAP_PERCENT);
         (u64::from(amount) * u64::from(kept) / 100) as u32
     }
 
@@ -151,10 +222,20 @@ pub(crate) fn respawn(world: &mut World, tuning: &Tuning, tick: u64) {
     for ship in world.ships.values_mut() {
         if matches!(ship.life, Life::Sunk { respawn_at } if respawn_at <= tick) {
             ship.life = Life::Afloat;
-            ship.hp = tuning.hull(ship.hull).max_hp;
+            ship.hp = ship.max_hp(tuning);
             ship.pos = tuning.map.spawns[ship.team.index()];
             ship.route.clear();
         }
+    }
+}
+
+/// 선원 장비를 단 떠 있는 배가 1초에 한 번 HP를 회복합니다.
+pub(crate) fn crew_repairs(world: &mut World, tuning: &Tuning, tick: u64) {
+    if !tick.is_multiple_of(u64::from(tuning.tick_hz)) {
+        return;
+    }
+    for ship in world.ships.values_mut().filter(|ship| ship.is_afloat()) {
+        ship.hp = (ship.hp + ship.crew_repair(tuning)).min(ship.max_hp(tuning));
     }
 }
 
@@ -178,9 +259,7 @@ pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuni
         if !ship.is_afloat() {
             continue;
         }
-        let boost = Boost::percent_at(ship.sprint, tick);
-        let speed = tuning.hull(ship.hull).speed * (100 + boost) as f32 / 100.0;
-        let mut step = speed / tuning.tick_hz as f32;
+        let mut step = ship.speed(tuning, tick) / tuning.tick_hz as f32;
         while let Some(&next) = ship.route.first() {
             let offset = next - ship.pos;
             let distance = offset.length();

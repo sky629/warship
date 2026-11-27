@@ -4,9 +4,9 @@
 
 use warship_protocol::{
     ClientEvent, ClientMsg, CommandMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg,
-    Snapshot, Welcome, WireCommand, WireCreep, WireCreepSpec, WireHull, WireMount, WireOutcome,
-    WireOwn, WireRefusal, WireShip, WireSkill, WireSkillSpec, WireStructure, WireStructureKind,
-    WireStructureSpec, WireTarget, WireTeam, WireVec2, WireWeapon,
+    Snapshot, Welcome, WireCommand, WireCreep, WireCreepSpec, WireHull, WireItem, WireMount,
+    WireOutcome, WireOwn, WireRefusal, WireShip, WireSkill, WireSkillSpec, WireStructure,
+    WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2, WireWeapon,
 };
 use warship_protocol::{SeatToken, WireMember};
 use warship_rules::Vec2;
@@ -22,6 +22,7 @@ fn welcome() -> Welcome {
     let gun = WireWeapon {
         name: "gun".to_string(),
         price: 100,
+        buyable: true,
         range: 5.0,
         cooldown_ticks: 10,
         shot_speed: 20.0,
@@ -55,6 +56,8 @@ fn welcome() -> Welcome {
             },
         ],
         weapons: vec![gun.clone()],
+        gear: Vec::new(),
+        recipes: Vec::new(),
         skills: vec![WireSkillSpec {
             name: "skill".to_string(),
             cooldown_ticks: 100,
@@ -88,6 +91,7 @@ fn ship(id: u32, x: f32) -> WireShip {
         y: 10.0,
         hull: 0,
         hp: 500,
+        max_hp: 1000,
         level: 1,
         respawn_at: None,
         own: (id == ME).then(|| WireOwn {
@@ -241,7 +245,7 @@ fn a_shell_is_drawn_between_the_gun_and_its_target_while_it_flies() {
     let armed = |x| {
         let mount = WireMount {
             slot: 0,
-            weapon: 0,
+            item: WireItem::Weapon(0),
             target: Some(WireTarget::Ship(ENEMY)),
             ready_at: 30,
         };
@@ -339,12 +343,13 @@ fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
     // 큰 선체(HP 2000, 칸 4개)의 둘째 칸에 무기가 있고, 스킬은 120번째 Tick부터 다시 쓸 수 있습니다.
     let mount = WireMount {
         slot: 1,
-        weapon: 0,
+        item: WireItem::Weapon(0),
         target: None,
         ready_at: 0,
     };
     let mine = WireShip {
         hull: 1,
+        max_hp: 2000,
         level: 3,
         mounts: vec![mount],
         own: Some(WireOwn {
@@ -371,7 +376,7 @@ fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
     let me = frame.me.expect("my ship is in the snapshot");
     assert_eq!((me.hull, me.level, me.xp, me.skill_points), (1, 3, 320, 2));
     assert_eq!(me.gold, 250);
-    assert_eq!(me.mounts, [None, Some(0), None, None]);
+    assert_eq!(me.mounts, [None, Some(WireItem::Weapon(0)), None, None]);
     let skill = SkillView {
         rank: 1,
         ready_secs: 19.0 / 20.0,

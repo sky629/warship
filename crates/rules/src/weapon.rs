@@ -68,7 +68,9 @@ pub(crate) fn fire_all(world: &mut World, sight: &Sight, tuning: &Tuning, tick: 
             let Some(mount) = mount.filter(|mount| mount.ready_at <= tick) else {
                 continue;
             };
-            if let Some(spec) = tuning.weapons.get(usize::from(mount.weapon.0)) {
+            let weapon = mount.weapon();
+            if let Some(spec) = weapon.and_then(|weapon| tuning.weapons.get(usize::from(weapon.0)))
+            {
                 decide(Shooter::Mount(ship.id, slot), spec, ship.team, ship.pos);
             }
         }
@@ -166,10 +168,9 @@ pub(crate) fn land_impacts(world: &mut World, tuning: &Tuning, tick: u64) -> Vec
     let mut kills = Vec::new();
     for impact in due {
         let damage = match impact.target {
-            Target::Ship(id) => world
-                .ships
-                .get(&id)
-                .map_or(impact.damage, |ship| ship.braced(impact.damage, tick)),
+            Target::Ship(id) => world.ships.get(&id).map_or(impact.damage, |ship| {
+                ship.braced(tuning, impact.damage, tick)
+            }),
             _ => impact.damage,
         };
         if world.damage(impact.target, damage, respawn_at) {

@@ -15,7 +15,7 @@ fn customer() -> (Scenario, ShipId) {
 fn weapons(s: &Scenario, ship: ShipId) -> Vec<Option<WeaponId>> {
     let mounts = s.ship(ship).mounts.iter();
     mounts
-        .map(|mount| mount.map(|mount| mount.weapon))
+        .map(|mount| mount.and_then(|mount| mount.weapon()))
         .collect()
 }
 
@@ -168,15 +168,18 @@ fn a_command_with_a_sequence_number_already_handled_is_ignored() {
 }
 
 #[test]
-fn a_ship_at_a_shop_is_repaired_every_second_up_to_its_hull_hp() {
-    let (mut s, docked) = customer();
-    let away = s.ship_at(Team::RED, 30.0, 30.0);
+fn a_ship_at_its_base_is_repaired_every_second_up_to_its_hull_hp_but_not_at_a_harbor() {
+    let (mut s, at_harbor) = customer();
+    s.structure_at(StructureKind::Base, Team::RED, 30.0, 30.0);
+    let docked = s.ship_at(Team::RED, 31.0, 30.0);
     s.set_ship_hp(docked, 985);
-    s.set_ship_hp(away, 985);
-    assert!(s.sim.at_shop(docked) && !s.sim.at_shop(away));
+    s.set_ship_hp(at_harbor, 985);
+    assert!(s.sim.at_shop(at_harbor) && !s.sim.at_dock(at_harbor));
+    assert!(s.sim.at_shop(docked) && s.sim.at_dock(docked));
 
+    // 1초에 최대 HP 1000의 1%를 회복합니다.
     s.run_ticks(20);
-    assert_eq!((s.ship(docked).hp, s.ship(away).hp), (995, 985));
+    assert_eq!((s.ship(docked).hp, s.ship(at_harbor).hp), (995, 985));
     s.run_ticks(20);
     assert_eq!(s.ship(docked).hp, 1000);
 }

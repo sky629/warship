@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 use warship_protocol::{
     ClientEvent, ClientMsg, ClientTransport, CommandMsg, InputMsg, LoopbackClient,
     LoopbackConnector, PROTOCOL_VERSION, RejectReason, SeatToken, ServerLimits, ServerMsg,
-    Snapshot, Welcome, WireCommand, WireMember, WireRefusal, WireTeam, WireVec2, loopback,
+    Snapshot, Welcome, WireCommand, WireItem, WireMember, WireRefusal, WireTeam, WireVec2,
+    loopback,
 };
 use warship_rules::{Command, ShipId, Sim, SkillId, Tuning, Vec2, Waypoint};
 use warship_server::{GameServer, Notice, Orders, Pilot, PredictableRandom};
@@ -463,8 +464,9 @@ fn a_ship_buys_a_weapon_at_its_base_once_it_has_the_gold() {
     bench.run_ticks(1);
 
     let ship = kang.last_snapshot().ships.remove(0);
-    let weapons: Vec<u16> = ship.mounts.iter().map(|mount| mount.weapon).collect();
-    assert_eq!(weapons, [0, 0], "the start weapon and the bought one");
+    let items: Vec<WireItem> = ship.mounts.iter().map(|mount| mount.item).collect();
+    let gun = WireItem::Weapon(0);
+    assert_eq!(items, [gun, gun], "the start weapon and the bought one");
     let own = ship.own.expect("my ship");
     assert_eq!((own.gold, own.refusal), (0, None));
 }
