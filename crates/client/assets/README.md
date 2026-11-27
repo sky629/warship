@@ -29,6 +29,8 @@ A missing icon is drawn as a square in the color of its kind with the initials o
 | `models/structures/` | `tower.glb`, `harbor.glb`, `base.glb`, `port.glb` | tower 1 wide and 2 high, harbor 2 x 2, base 2.4 x 2.4, port 1.6 x 1.6 |
 | `models/shots/` | weapon (`deck_gun.glb`, `siege_mortar.glb`, `cutter_gun.glb`, ...) and attack kind (`shell.glb`, `scatter.glb`, `bomb.glb`, `flame.glb`) | about 0.3 across. The game makes the shots of stronger weapons larger. |
 
+| `models/scenery/` | `island.glb` | radius 1, bottom at the water. The game scales it to the radius of each island. |
+
 A shot uses the model of its weapon. If that file is missing it uses the model of its attack kind, and if that is missing too it is a ball. A shot model points the way it flies. A scatter shot is drawn as three small copies.
 
 Rules for every model:
@@ -39,6 +41,15 @@ Rules for every model:
 - The first scene of the file is used.
 
 A missing model is drawn with the built-in shape.
+
+## Textures
+
+| File | Use |
+|---|---|
+| `textures/water.png` | The water. It repeats; one copy covers 8 x 8 tiles. Make it seamless. |
+| `textures/island.png` | The built-in island shape. It is stretched once over the top of each island and wraps around the side. Not used when `models/scenery/island.glb` exists. |
+
+Without these files the water and the islands are flat colors.
 
 ## Sounds and music
 

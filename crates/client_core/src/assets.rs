@@ -76,6 +76,8 @@ pub enum ModelKind {
     Structure,
     /// 포탄입니다. 무기마다 하나씩 있고, 공격 방식마다 하나씩 있습니다.
     Shot,
+    /// 맵의 지형(섬)입니다.
+    Scenery,
 }
 
 /// 포탄의 모형의 경로입니다. 앞의 것부터 찾습니다: 그 무기의 포탄, 그 공격 방식의 포탄.
@@ -103,6 +105,7 @@ pub fn model_path(kind: ModelKind, name: &str) -> String {
         ModelKind::Creep => "creeps",
         ModelKind::Structure => "structures",
         ModelKind::Shot => "shots",
+        ModelKind::Scenery => "scenery",
     };
     format!("models/{folder}/{}.glb", slug(name))
 }

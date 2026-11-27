@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::gltf::{GltfAssetLabel, GltfMaterialName};
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
+use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use warship_client_core::{Frame, ModelKind, Phase, model_path, shot_models};
@@ -47,6 +49,11 @@ const HP_BACK: Color = Color::srgb(0.35, 0.1, 0.1);
 const LINE_HEIGHT: f32 = 0.05;
 /// 섬의 높이입니다.
 const ISLAND_HEIGHT: f32 = 0.5;
+/// 수면과 섬의 질감입니다. 에셋 폴더에 있으면 씁니다.
+const WATER_TEXTURE: &str = "textures/water.png";
+const LAND_TEXTURE: &str = "textures/island.png";
+/// 질감 한 장이 덮는 넓이의 한 변(타일)입니다.
+const TEXTURE_TILES: f32 = 8.0;
 
 /// 타일 좌표를 수면 위의 점으로 바꿉니다.
 pub fn on_water(pos: warship_rules::Vec2) -> Vec3 {
@@ -158,6 +165,7 @@ pub struct PromptText;
 
 pub fn setup(
     mut commands: Commands,
+    assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -177,6 +185,32 @@ pub fn setup(
         brightness: 150.0,
         ..default()
     });
+    // 수면과 섬은 에셋 폴더에 질감이 있으면 그 질감으로 그립니다. 질감은 되풀이해서 깝니다.
+    let tiled = |settings: &mut ImageLoaderSettings| {
+        settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+            address_mode_u: ImageAddressMode::Repeat,
+            address_mode_v: ImageAddressMode::Repeat,
+            ..ImageSamplerDescriptor::linear()
+        });
+    };
+    let mut ground = |color: Color, texture: &'static str| {
+        let texture = ui::has(texture).then(|| {
+            let builder = assets.load_builder().with_settings(tiled);
+            builder.load::<Image>(texture)
+        });
+        materials.add(StandardMaterial {
+            // 질감이 있으면 질감의 색을 그대로 보여 줍니다.
+            base_color: if texture.is_some() {
+                Color::WHITE
+            } else {
+                color
+            },
+            base_color_texture: texture,
+            perceptual_roughness: 0.9,
+            ..default()
+        })
+    };
+    let (land, sea) = (ground(ISLAND, LAND_TEXTURE), ground(WATER, WATER_TEXTURE));
     let mut matte = |color: Color| {
         materials.add(StandardMaterial {
             base_color: color,
@@ -189,8 +223,8 @@ pub fn setup(
         blue: matte(BLUE),
         wild: matte(WILD),
         sunk: matte(SUNK),
-        land: matte(ISLAND),
-        sea: matte(WATER),
+        land,
+        sea,
         neutral: matte(PORT),
         fire: matte(FIRE),
         // 모양의 바닥이 높이 0입니다. NPC 배는 배의 모양을 작게 줄인 것입니다.
@@ -253,6 +287,7 @@ pub fn build_scenery(
     net: NonSend<Net>,
     look: Res<Look>,
     scenery: Query<(), With<Scenery>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
 ) {
     let Some(welcome) = net.session.welcome() else {
@@ -262,6 +297,10 @@ pub fn build_scenery(
         return;
     }
     let (width, height) = (welcome.map_width, welcome.map_height);
+    // 수면의 질감은 맵의 크기와 관계없이 같은 크기로 되풀이합니다.
+    if let Some(mut sea) = materials.get_mut(&look.sea) {
+        sea.uv_transform = Affine2::from_scale(Vec2::new(width, height) / TEXTURE_TILES);
+    }
     commands.spawn((
         Scenery,
         Mesh3d(look.water.clone()),
@@ -269,17 +308,25 @@ pub fn build_scenery(
         Transform::from_xyz(width / 2.0, 0.0, -height / 2.0)
             .with_scale(Vec3::new(width, 1.0, height)),
     ));
+    // 섬의 모형은 반지름이 1이고 바닥이 수면입니다. 섬마다 반지름에 맞춰서 키웁니다.
+    // 모형이 없으면 납작한 원기둥이고, 원기둥의 가운데가 높이의 반에 오게 놓습니다.
+    let island_model = [model_path(ModelKind::Scenery, "island")];
+    let shape = Shape::of(&island_model, &look.island);
     for island in &welcome.islands {
-        let center = Vec3::new(island.center.x, ISLAND_HEIGHT / 2.0, -island.center.y);
+        let (lift, scale) = match shape {
+            Shape::Model(_) => (0.0, Vec3::splat(island.radius)),
+            Shape::Mesh(_) => (
+                ISLAND_HEIGHT / 2.0,
+                Vec3::new(island.radius, ISLAND_HEIGHT, island.radius),
+            ),
+        };
+        let center = Vec3::new(island.center.x, lift, -island.center.y);
         commands.spawn((
             Scenery,
-            Mesh3d(look.island.clone()),
-            MeshMaterial3d(look.land.clone()),
-            Transform::from_translation(center).with_scale(Vec3::new(
-                island.radius,
-                ISLAND_HEIGHT,
-                island.radius,
-            )),
+            shape.clone(),
+            Tint(look.land.clone()),
+            Transform::from_translation(center).with_scale(scale),
+            Visibility::default(),
         ));
     }
     let port_model = [model_path(ModelKind::Structure, "port")];
