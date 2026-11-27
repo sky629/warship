@@ -1,5 +1,5 @@
 //! 골드와 경험치입니다. 모든 배가 1초마다 수입을 받고, 적을 가라앉히거나 건물을 파괴한 포탄을 쏜 배가 보상을 받습니다.
-//! 그 자리 가까이에 있던 배는 경험치를 받습니다.
+//! 그 자리 가까이에 있던 배는 경험치를 받습니다. 배마다 가라앉힌 적의 수와 가라앉은 횟수도 여기서 셉니다.
 
 use crate::ship::Ship;
 use crate::tuning::Tuning;
@@ -40,6 +40,16 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill]) {
         };
         if let Some(ship) = kill.by.and_then(|id| world.ships.get_mut(&id)) {
             ship.gold += bounty;
+            match kill.target {
+                Target::Ship(_) => ship.kills += 1,
+                Target::Creep(_) => ship.creep_kills += 1,
+                Target::Structure(_) => {}
+            }
+        }
+        if let Target::Ship(id) = kill.target
+            && let Some(ship) = world.ships.get_mut(&id)
+        {
+            ship.deaths += 1;
         }
         let near = |ship: &&mut Ship| {
             ship.is_afloat()

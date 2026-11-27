@@ -6,6 +6,7 @@
 //! - `view`: 카메라가 보는 점(따라가기, 화면 옮기기, 거리)과 미니맵의 좌표, 상점 창과 칸 줄의 자리입니다.
 //! - `mounts`: 화면 아래의 칸 줄에 보여 줄 아이템의 이름과 안내입니다.
 //! - `memory`: 기기가 기억하는 이름, 방 코드, 자리의 표식입니다.
+//! - `score`: 점수판에 보여 줄 줄입니다.
 //! - `session`: 접속 방식의 이벤트에 따라 바뀌는 접속 상태입니다. 입장한 뒤에는 입장 안내, 스냅샷 보관, 입력과 명령의 순서 번호를 가집니다.
 //! - `interp`: 스냅샷을 보관하고 100ms 이전의 방 모습을 보간해서 `Frame`으로 만듭니다. 날아가는 포탄의 위치도 여기서 계산합니다.
 
@@ -13,6 +14,7 @@ mod interp;
 mod launch;
 mod memory;
 mod mounts;
+mod score;
 mod session;
 mod shop;
 mod start;
@@ -24,6 +26,7 @@ pub use interp::{
 pub use launch::{DEFAULT_NAME, DEFAULT_SERVER, LaunchOptions, RoomChoice};
 pub use memory::{Memory, RememberedSeat};
 pub use mounts::{MountView, mount_views};
+pub use score::score_lines;
 pub use session::{Phase, Session};
 pub use shop::{ShopList, ShopRow, shop_list};
 pub use start::{Field, FormKey, JoinRequest, StartForm};

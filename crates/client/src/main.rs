@@ -87,6 +87,7 @@ fn main() {
                 draw::clear_room.run_if(resource_equals(Screen::Start)),
                 draw::show_status,
                 draw::show_prompt,
+                draw::show_scores,
                 hud::show_hud,
                 start::show_start,
                 minimap::show_minimap,

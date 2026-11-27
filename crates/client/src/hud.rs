@@ -120,7 +120,7 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
         }
     }
     lines += "\nB: shop (click a row to buy)   Shift+key: learn skill   Number: use a supply";
-    lines += "\nMount: click to use a supply, right-click to sell";
+    lines += "\nMount: click to use a supply, right-click to sell   Tab: scores";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
     }

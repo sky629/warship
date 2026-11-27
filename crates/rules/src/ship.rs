@@ -44,6 +44,12 @@ pub struct Ship {
     pub route: Vec<Vec2>,
     /// 아이템을 다는 칸입니다. 무기와 장비가 같은 칸을 나누어 씁니다. 빈 칸은 `None`입니다.
     pub mounts: [Option<Mount>; MOUNTS],
+    /// 이 배의 포탄이 가라앉힌 적의 배의 수입니다.
+    pub kills: u32,
+    /// 이 배가 가라앉은 횟수입니다.
+    pub deaths: u32,
+    /// 이 배의 포탄이 가라앉힌 NPC 배의 수입니다.
+    pub creep_kills: u32,
     /// 마지막으로 처리한 입력의 순서 번호입니다.
     pub last_input_seq: u32,
     /// 마지막으로 처리한 명령의 순서 번호입니다.
@@ -167,6 +173,9 @@ impl Ship {
             supply_ready_at: 0,
             route: Vec::new(),
             mounts,
+            kills: 0,
+            deaths: 0,
+            creep_kills: 0,
             last_input_seq: 0,
             last_command_seq: 0,
             refusal: None,

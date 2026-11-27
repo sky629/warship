@@ -30,6 +30,11 @@ fn the_ship_whose_shell_sinks_an_enemy_gets_the_bounty() {
     assert!(!s.ship(victim).is_afloat());
     assert_eq!(s.ship(killer).gold, 200);
     assert_eq!(s.ship(helper).gold, 0, "only the ship that fired is paid");
+    let score = |id| (s.ship(id).kills, s.ship(id).deaths);
+    assert_eq!(
+        [score(killer), score(helper), score(victim)],
+        [(1, 0), (0, 0), (0, 1)]
+    );
 }
 
 #[test]

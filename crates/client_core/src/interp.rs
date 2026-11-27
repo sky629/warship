@@ -8,8 +8,8 @@
 use std::collections::VecDeque;
 
 use warship_protocol::{
-    Snapshot, Welcome, WireItem, WireOutcome, WireRefusal, WireShot, WireStructureKind, WireTarget,
-    WireTeam, WireVec2, WireWeapon,
+    Snapshot, Welcome, WireItem, WireOutcome, WireRefusal, WireScore, WireShot, WireStructureKind,
+    WireTarget, WireTeam, WireVec2, WireWeapon,
 };
 use warship_rules::Vec2;
 
@@ -28,6 +28,8 @@ pub struct Frame {
     pub shots: Vec<ShotView>,
     /// 방금 터진 산탄과 폭탄의 범위입니다.
     pub blasts: Vec<BlastView>,
+    /// 방에 있는 모든 배의 점수입니다.
+    pub scores: Vec<WireScore>,
     /// 이 접속이 조종하는 배의 상태입니다.
     pub me: Option<MyShip>,
     pub outcome: Option<WireOutcome>,
@@ -391,6 +393,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         structures,
         shots,
         blasts,
+        scores: next.scores.clone(),
         me,
         outcome: next.outcome,
     }

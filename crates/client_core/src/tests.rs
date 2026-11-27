@@ -10,11 +10,12 @@ use warship_protocol::{
     WireWeapon,
 };
 use warship_protocol::{
-    SeatToken, WireHire, WireMember, WireRecipe, WireShop, WireShot, WireSupply, WireTrade,
+    SeatToken, WireHire, WireMember, WireRecipe, WireScore, WireShop, WireShot, WireSupply,
+    WireTrade,
 };
 use warship_rules::Vec2;
 
-use crate::{BlastView, MountView, Phase, Session, SkillView, mount_views, shop_list};
+use crate::{BlastView, MountView, Phase, Session, SkillView, mount_views, score_lines, shop_list};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -136,8 +137,42 @@ fn snapshot(tick: u64, ships: Vec<WireShip>) -> ServerMsg {
         ships,
         creeps: Vec::new(),
         structures: Vec::new(),
+        scores: Vec::new(),
         outcome: None,
     }))
+}
+
+#[test]
+fn the_scoreboard_lists_each_team_with_the_best_ship_first() {
+    let score = |ship, team, kills, deaths| WireScore {
+        ship,
+        team,
+        level: 3,
+        kills,
+        deaths,
+        creep_kills: 14,
+    };
+    let scores = [
+        score(1, WireTeam::Red, 0, 2),
+        score(2, WireTeam::Blue, 1, 0),
+        score(3, WireTeam::Red, 4, 1),
+    ];
+    let roster = [WireMember {
+        ship: 3,
+        name: "KANG".to_string(),
+        connected: true,
+    }];
+
+    let lines = score_lines(&scores, &roster, 3);
+
+    assert_eq!(
+        lines,
+        "Red                Lv    K    D  Creeps\n\
+         > KANG              3    4    1      14\n\
+         \x20 Bot 1             3    0    2      14\n\
+         Blue               Lv    K    D  Creeps\n\
+         \x20 Bot 2             3    1    0      14"
+    );
 }
 
 /// 입장을 마친 접속입니다.
@@ -328,6 +363,7 @@ fn the_frame_shows_creeps_structures_gold_the_respawn_time_and_the_outcome() {
             ships: vec![sunk.clone()],
             creeps: vec![creep(creep_x)],
             structures: vec![harbor.clone()],
+            scores: Vec::new(),
             outcome: Some(WireOutcome::Victory(WireTeam::Blue)),
         }))
     };

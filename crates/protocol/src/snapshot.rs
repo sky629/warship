@@ -19,8 +19,24 @@ pub struct Snapshot {
     pub creeps: Vec<WireCreep>,
     /// 번호가 작은 건물부터입니다. 건물은 두 진영에 모두 보이고, 파괴된 건물은 없습니다.
     pub structures: Vec<WireStructure>,
+    /// 방에 있는 모든 배의 점수입니다. 번호가 작은 배부터이고, 보이지 않는 적의 배도 있습니다.
+    pub scores: Vec<WireScore>,
     /// 대전의 결과입니다. 끝나기 전에는 없습니다.
     pub outcome: Option<WireOutcome>,
+}
+
+/// 배 하나의 점수입니다. 점수판에 보여 줍니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireScore {
+    pub ship: u32,
+    pub team: WireTeam,
+    pub level: u8,
+    /// 가라앉힌 적의 배의 수입니다.
+    pub kills: u32,
+    /// 가라앉은 횟수입니다.
+    pub deaths: u32,
+    /// 가라앉힌 NPC 배의 수입니다.
+    pub creep_kills: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -237,6 +253,17 @@ impl Snapshot {
                 .collect(),
             creeps: sim.creeps().filter(creep_shown).map(wire_creep).collect(),
             structures: sim.structures().map(wire_structure).collect(),
+            scores: sim
+                .ships()
+                .map(|ship| WireScore {
+                    ship: ship.id.0,
+                    team: ship.team.into(),
+                    level: ship.level(sim.tuning()) as u8,
+                    kills: ship.kills,
+                    deaths: ship.deaths,
+                    creep_kills: ship.creep_kills,
+                })
+                .collect(),
             outcome: sim.outcome().map(|outcome| match outcome {
                 Outcome::Victory(winner) => WireOutcome::Victory(winner.into()),
                 Outcome::Draw => WireOutcome::Draw,
