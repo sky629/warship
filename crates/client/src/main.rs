@@ -15,6 +15,7 @@ mod draw;
 mod hud;
 mod minimap;
 mod net;
+mod shapes;
 mod shop;
 mod start;
 mod storage;

@@ -13,6 +13,7 @@ use warship_protocol::{WireOutcome, WireStructureKind, WireTeam};
 
 use crate::camera::{CAMERA_OFFSET, Rig};
 use crate::net::{CurrentFrame, Destination, LeavePrompt, Net};
+use crate::shapes;
 
 /// 맵 밖의 바다와 하늘의 색입니다.
 pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
@@ -149,15 +150,15 @@ pub fn setup(
         land: matte(ISLAND),
         sea: matte(WATER),
         neutral: matte(PORT),
-        // 배와 NPC 배는 x축 방향으로 긴 상자입니다. 뱃머리가 x축의 양의 방향입니다.
-        ship: meshes.add(Cuboid::new(1.0, 0.4, 0.45)),
-        creep: meshes.add(Cuboid::new(0.55, 0.25, 0.25)),
-        tower: meshes.add(Cylinder::new(0.5, 1.6)),
-        harbor: meshes.add(Cuboid::new(1.8, 0.6, 1.8)),
-        base: meshes.add(Cuboid::new(2.4, 1.4, 2.4)),
+        // 모양의 바닥이 높이 0입니다. NPC 배는 배의 모양을 작게 줄인 것입니다.
+        ship: meshes.add(shapes::ship()),
+        creep: meshes.add(shapes::ship().scaled_by(Vec3::splat(0.55))),
+        tower: meshes.add(shapes::tower()),
+        harbor: meshes.add(shapes::harbor()),
+        base: meshes.add(shapes::base()),
         shot: meshes.add(Sphere::new(0.12)),
         island: meshes.add(Cylinder::new(1.0, 1.0)),
-        port: meshes.add(Cuboid::new(1.4, 0.8, 1.4)),
+        port: meshes.add(shapes::port()),
         water: meshes.add(Plane3d::default().mesh().size(1.0, 1.0)),
     };
     commands.insert_resource(look);
@@ -241,7 +242,7 @@ pub fn build_scenery(
             Scenery,
             Mesh3d(look.port.clone()),
             MeshMaterial3d(look.neutral.clone()),
-            Transform::from_xyz(port.x, 0.4, -port.y),
+            Transform::from_xyz(port.x, 0.0, -port.y),
         ));
     }
 }
@@ -299,12 +300,12 @@ pub fn sync_pieces(
         });
     };
     for site in &frame.structures {
-        let (mesh, lift) = match site.kind {
-            WireStructureKind::Tower => (&look.tower, 0.8),
-            WireStructureKind::Harbor => (&look.harbor, 0.3),
-            WireStructureKind::Base => (&look.base, 0.7),
+        let mesh = match site.kind {
+            WireStructureKind::Tower => &look.tower,
+            WireStructureKind::Harbor => &look.harbor,
+            WireStructureKind::Base => &look.base,
         };
-        let at = on_water(site.pos) + Vec3::Y * lift;
+        let at = on_water(site.pos);
         want(
             Piece::Structure(site.id),
             mesh,
@@ -314,16 +315,16 @@ pub fn sync_pieces(
         );
     }
     for creep in &frame.creeps {
-        let at = on_water(creep.pos) + Vec3::Y * 0.1;
+        let at = on_water(creep.pos);
         let material = look.team(creep.team);
         want(Piece::Creep(creep.id), &look.creep, material, at, true);
     }
     for ship in &frame.ships {
-        // 가라앉은 배는 회색이고 수면 아래로 내려가 있습니다.
+        // 가라앉은 배는 회색이고 수면 아래로 내려가서 돛만 보입니다.
         let (material, lift) = if ship.sunk {
-            (look.sunk.clone(), -0.1)
+            (look.sunk.clone(), -0.35)
         } else {
-            (look.team(ship.team), 0.15)
+            (look.team(ship.team), 0.0)
         };
         let at = on_water(ship.pos) + Vec3::Y * lift;
         want(Piece::Ship(ship.id), &look.ship, material, at, true);
@@ -433,14 +434,14 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
             flat_circle(gizmos, center, range, color);
         }
         let top = match site.kind {
-            WireStructureKind::Tower => 2.0,
-            WireStructureKind::Harbor => 1.0,
-            WireStructureKind::Base => 1.8,
+            WireStructureKind::Tower => 2.3,
+            WireStructureKind::Harbor => 1.3,
+            WireStructureKind::Base => 2.6,
         };
         draw_hp(gizmos, center + Vec3::Y * top, site.hp);
     }
     for creep in &frame.creeps {
-        draw_hp(gizmos, on_water(creep.pos) + Vec3::Y * 0.5, creep.hp);
+        draw_hp(gizmos, on_water(creep.pos) + Vec3::Y * 0.7, creep.hp);
     }
     for ship in frame.ships.iter().filter(|ship| !ship.sunk) {
         let center = on_water(ship.pos);
@@ -457,7 +458,7 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
         if ship.cloaked {
             flat_circle(gizmos, center, 0.65, CLOAKED);
         }
-        draw_hp(gizmos, center + Vec3::Y * 0.8, ship.hp);
+        draw_hp(gizmos, center + Vec3::Y * 1.3, ship.hp);
     }
 }
 
