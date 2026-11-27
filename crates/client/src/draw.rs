@@ -79,7 +79,8 @@ pub struct Pieces(HashMap<Piece, Entity>);
 /// 도형과 재질입니다. 한 번 만들어서 모든 개체가 함께 씁니다.
 #[derive(Resource)]
 pub struct Look {
-    ship: Handle<Mesh>,
+    /// 돛대가 1개, 2개, 3개인 배입니다. 선체의 칸이 많을수록 돛대가 많습니다.
+    ships: [Handle<Mesh>; 3],
     creep: Handle<Mesh>,
     tower: Handle<Mesh>,
     harbor: Handle<Mesh>,
@@ -151,8 +152,8 @@ pub fn setup(
         sea: matte(WATER),
         neutral: matte(PORT),
         // 모양의 바닥이 높이 0입니다. NPC 배는 배의 모양을 작게 줄인 것입니다.
-        ship: meshes.add(shapes::ship()),
-        creep: meshes.add(shapes::ship().scaled_by(Vec3::splat(0.55))),
+        ships: [1, 2, 3].map(|masts| meshes.add(shapes::ship(masts))),
+        creep: meshes.add(shapes::ship(1).scaled_by(Vec3::splat(0.55))),
         tower: meshes.add(shapes::tower()),
         harbor: meshes.add(shapes::harbor()),
         base: meshes.add(shapes::base()),
@@ -267,7 +268,11 @@ pub fn sync_pieces(
     frame: Res<CurrentFrame>,
     look: Res<Look>,
     mut pieces: ResMut<Pieces>,
-    mut placed: Query<(&mut Transform, &mut MeshMaterial3d<StandardMaterial>)>,
+    mut placed: Query<(
+        &mut Transform,
+        &mut MeshMaterial3d<StandardMaterial>,
+        &mut Mesh3d,
+    )>,
     mut commands: Commands,
 ) {
     let Some(frame) = &frame.0 else {
@@ -327,7 +332,16 @@ pub fn sync_pieces(
             (look.team(ship.team), 0.0)
         };
         let at = on_water(ship.pos) + Vec3::Y * lift;
-        want(Piece::Ship(ship.id), &look.ship, material, at, true);
+        // 칸이 3개까지는 돛대 1개, 5개까지는 2개, 그보다 많으면 3개입니다.
+        let mounts = hulls
+            .get(usize::from(ship.hull))
+            .map_or(0, |hull| hull.mounts);
+        let masts = match mounts {
+            0..=3 => 0,
+            4..=5 => 1,
+            _ => 2,
+        };
+        want(Piece::Ship(ship.id), &look.ships[masts], material, at, true);
     }
     for (index, shot) in frame.shots.iter().enumerate() {
         let at = on_water(shot.pos) + Vec3::Y * 0.5;
@@ -356,7 +370,11 @@ pub fn sync_pieces(
             .get(&piece)
             .and_then(|entity| placed.get_mut(*entity).ok());
         match found {
-            Some((mut transform, mut shown)) => {
+            Some((mut transform, mut shown, mut shape)) => {
+                // 선체를 바꾼 배는 모양이 바뀝니다.
+                if shape.0 != mesh {
+                    shape.0 = mesh;
+                }
                 // 움직인 방향으로 뱃머리를 돌립니다. 멈춘 배는 마지막 방향을 유지합니다.
                 let moved = at - transform.translation;
                 if turns && moved.xz().length_squared() > 1e-6 {

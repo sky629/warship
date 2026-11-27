@@ -34,13 +34,13 @@ fn join(parts: Vec<Mesh>) -> Mesh {
     whole
 }
 
-/// 선체, 뾰족한 뱃머리, 돛대와 돛입니다. 길이는 약 1.3입니다.
-pub fn ship() -> Mesh {
+/// 선체, 뾰족한 뱃머리, 선실, 돛대와 돛입니다. 길이는 약 1.3이고, 돛대는 `masts`개(1개에서 3개)입니다.
+pub fn ship(masts: usize) -> Mesh {
     // 원뿔의 축을 x축으로 눕혀서 뱃머리로 씁니다.
     let bow = Mesh::from(Cone::new(0.2, 0.45))
         .rotated_by(Quat::from_rotation_z(-FRAC_PI_2))
         .scaled_by(Vec3::new(1.0, 0.65, 1.0));
-    join(vec![
+    let mut parts = vec![
         part(
             Cuboid::new(0.9, 0.26, 0.4),
             BODY,
@@ -52,13 +52,24 @@ pub fn ship() -> Mesh {
             DARK,
             Vec3::new(-0.38, 0.32, 0.0),
         ),
-        part(Cylinder::new(0.025, 0.85), DARK, Vec3::new(0.05, 0.68, 0.0)),
-        part(
-            Cuboid::new(0.03, 0.42, 0.6),
+    ];
+    // 돛대를 선체의 길이에 고르게 놓습니다. 가운데 돛대가 가장 높습니다.
+    let places: &[(f32, f32)] = match masts {
+        1 => &[(0.05, 0.85)],
+        2 => &[(-0.12, 0.8), (0.25, 0.9)],
+        _ => &[(-0.2, 0.75), (0.08, 0.95), (0.36, 0.8)],
+    };
+    for &(x, height) in places {
+        let mast = Cylinder::new(0.025, height);
+        parts.push(part(mast, DARK, Vec3::new(x, 0.26 + height / 2.0, 0.0)));
+        let sail = Cuboid::new(0.03, height * 0.5, 0.6);
+        parts.push(part(
+            sail,
             LIGHT,
-            Vec3::new(0.09, 0.72, 0.0),
-        ),
-    ])
+            Vec3::new(x + 0.04, 0.3 + height * 0.6, 0.0),
+        ));
+    }
+    join(parts)
 }
 
 /// 둥근 몸통과 뾰족한 지붕입니다.
@@ -128,7 +139,8 @@ mod tests {
     #[test]
     fn every_shape_stands_on_the_water_and_carries_a_color_for_each_vertex() {
         for (name, mesh) in [
-            ("ship", ship()),
+            ("ship", ship(1)),
+            ("big ship", ship(3)),
             ("tower", tower()),
             ("harbor", harbor()),
             ("base", base()),
