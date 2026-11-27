@@ -4,7 +4,7 @@
 //! Space를 누르면 다시 내 배를 따라갑니다. 마우스 휠은 거리를 바꾸고, 미니맵을 왼쪽 버튼으로 누르면 그 자리를 봅니다.
 //! 보는 점의 계산은 `warship_client_core::CameraRig`가 합니다.
 
-use bevy::input::mouse::AccumulatedMouseScroll;
+use bevy::input::mouse::{AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use warship_client_core::{CameraRig, Minimap};
@@ -78,7 +78,11 @@ pub fn steer_camera(
     let rig = rig.0.get_or_insert_with(|| CameraRig::new(map * 0.5));
     let (_, on_minimap) = minimap_under(&window, welcome);
 
-    rig.zoom_by(scroll.delta.y);
+    // 브라우저와 트랙패드는 휠을 픽셀로 알려 줍니다. 칸으로 알려 주는 마우스와 같은 양이 되게 바꿉니다.
+    match scroll.unit {
+        MouseScrollUnit::Line => rig.zoom_by(scroll.delta.y),
+        MouseScrollUnit::Pixel => rig.zoom_by_pixels(scroll.delta.y),
+    }
     let direction = pan_direction(&keys, &window, on_minimap.is_some());
     rig.pan(direction, time.delta_secs(), map);
     // 한 프레임 안에 눌렀다 뗀 버튼은 `pressed`에 나타나지 않으므로 `just_pressed`도 봅니다.

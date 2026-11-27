@@ -9,6 +9,8 @@ use warship_rules::Vec2;
 const PAN_SPEED: f32 = 24.0;
 /// 카메라 거리의 배율의 범위입니다.
 const ZOOM_RANGE: (f32, f32) = (0.4, 2.5);
+/// 픽셀로 알려 주는 휠에서, 마우스 휠 한 칸에 해당하는 픽셀 수입니다.
+const WHEEL_PIXELS_PER_STEP: f32 = 100.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CameraRig {
@@ -57,6 +59,11 @@ impl CameraRig {
     pub fn zoom_by(&mut self, wheel: f32) {
         let (near, far) = ZOOM_RANGE;
         self.zoom = (self.zoom * (1.0 - wheel.clamp(-3.0, 3.0) * 0.1)).clamp(near, far);
+    }
+
+    /// 휠을 픽셀 단위로 알려 주는 환경(브라우저, 트랙패드)에서 `pixels`만큼 돌린 거리를 바꿉니다.
+    pub fn zoom_by_pixels(&mut self, pixels: f32) {
+        self.zoom_by(pixels / WHEEL_PIXELS_PER_STEP);
     }
 }
 
@@ -311,6 +318,20 @@ mod tests {
 
         rig.pan(Vec2::new(1.0, 0.0), 0.5, MAP);
         assert_eq!(rig.focus.x, 30.0);
+    }
+
+    #[test]
+    fn a_wheel_reported_in_pixels_moves_one_step_for_each_hundred_pixels() {
+        let mut rig = CameraRig::new(Vec2::default());
+        rig.zoom_by_pixels(100.0);
+        assert!((rig.zoom - 0.9).abs() < 1e-6, "one notch of a mouse wheel");
+
+        let mut rig = CameraRig::new(Vec2::default());
+        rig.zoom_by_pixels(10.0);
+        assert!(
+            (rig.zoom - 0.99).abs() < 1e-6,
+            "one small move of a trackpad"
+        );
     }
 
     #[test]
