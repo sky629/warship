@@ -87,17 +87,29 @@ fn gear_is_refused_without_gold_and_away_from_a_shop() {
 }
 
 #[test]
-fn planking_raises_the_hull_hp_and_selling_it_takes_the_hp_back() {
+fn planking_keeps_the_share_of_hp_when_bought_and_sold() {
     let (mut s, ship) = customer();
-    s.set_ship_hp(ship, 900);
+    s.set_ship_hp(ship, 500);
 
     s.command(ship, Command::BuyGear(PLANKING));
     assert_eq!(s.ship(ship).max_hp(s.sim.tuning()), 1300);
-    assert_eq!(s.ship(ship).hp, 1200, "the new planks come whole");
+    assert_eq!(s.ship(ship).hp, 650);
 
-    s.set_ship_hp(ship, 1300);
     s.command(ship, Command::Sell { slot: 0 });
-    assert_eq!(s.ship(ship).hp, 1000);
+    assert_eq!(s.ship(ship).hp, 500, "buying and selling does not repair");
+}
+
+#[test]
+fn buying_and_selling_planking_never_adds_hp() {
+    for hp in [1, 2, 3, 333, 999, 1000] {
+        let (mut s, ship) = customer();
+        s.set_ship_hp(ship, hp);
+
+        s.command(ship, Command::BuyGear(PLANKING));
+        s.command(ship, Command::Sell { slot: 0 });
+
+        assert_eq!(s.ship(ship).hp, hp);
+    }
 }
 
 #[test]

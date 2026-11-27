@@ -4,7 +4,7 @@ use crate::command::Refusal;
 use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, WeaponId};
 use crate::ship::{Item, Mount, Ship};
 use crate::structures::StructureKind;
-use crate::tuning::{GearEffect, Tuning};
+use crate::tuning::Tuning;
 use crate::world::World;
 
 /// 배가 자기 진영의 서 있는 본진이나 항구에서 상점 거리 안에 있는지입니다.
@@ -84,7 +84,7 @@ pub(crate) fn buy(
     mount_bought(ship, tuning, Item::Weapon(weapon), spec.price)
 }
 
-/// 장비를 사서 첫 빈 칸에 답니다. 최대 HP를 올리는 장비는 지금의 HP도 그만큼 올립니다.
+/// 장비를 사서 첫 빈 칸에 답니다. HP는 최대 HP에 대한 비율을 유지합니다.
 pub(crate) fn buy_gear(
     world: &mut World,
     tuning: &Tuning,
@@ -93,11 +93,23 @@ pub(crate) fn buy_gear(
 ) -> Result<(), Refusal> {
     let spec = tuning.gear_of(gear).ok_or(Refusal::UnknownItem)?;
     let ship = customer(world, tuning, id)?;
+    let before = ship.max_hp(tuning);
     mount_bought(ship, tuning, Item::Gear(gear), spec.price)?;
-    if let GearEffect::Planking { max_hp } = spec.effect {
-        ship.hp += max_hp;
-    }
+    keep_hp_share(ship, tuning, before);
     Ok(())
+}
+
+/// 최대 HP가 `before`에서 바뀐 뒤에 HP를 같은 비율로 맞춥니다.
+/// 최대 HP가 늘 때는 올림하고 줄 때는 내림해서, 늘렸다가 되돌려도 HP가 늘지 않습니다.
+fn keep_hp_share(ship: &mut Ship, tuning: &Tuning, before: u32) {
+    let after = u64::from(ship.max_hp(tuning));
+    let before = u64::from(before);
+    let scaled = u64::from(ship.hp) * after;
+    ship.hp = if after >= before {
+        scaled.div_ceil(before) as u32
+    } else {
+        ((scaled / before) as u32).max(ship.hp.min(1))
+    };
 }
 
 /// 값을 내고 아이템을 선체의 첫 빈 칸에 답니다. 빈 칸이 없거나 골드가 모자라면 거절합니다.
@@ -113,7 +125,7 @@ fn mount_bought(ship: &mut Ship, tuning: &Tuning, item: Item, price: u32) -> Res
     Ok(())
 }
 
-/// 칸의 아이템을 팝니다. 최대 HP를 올리는 장비를 팔면 HP도 새 최대 HP 아래로 내려갑니다.
+/// 칸의 아이템을 팝니다. HP는 최대 HP에 대한 비율을 유지합니다.
 pub(crate) fn sell(
     world: &mut World,
     tuning: &Tuning,
@@ -121,6 +133,7 @@ pub(crate) fn sell(
     slot: usize,
 ) -> Result<(), Refusal> {
     let ship = customer(world, tuning, id)?;
+    let before = ship.max_hp(tuning);
     let mount = ship.mounts.get_mut(slot).and_then(Option::take);
     let mount = mount.ok_or(Refusal::EmptyMount)?;
     let price = match mount.item {
@@ -128,7 +141,7 @@ pub(crate) fn sell(
         Item::Gear(gear) => tuning.gear_of(gear).map_or(0, |gear| gear.price),
     };
     ship.gold += refund(price, tuning);
-    ship.hp = ship.hp.min(ship.max_hp(tuning));
+    keep_hp_share(ship, tuning, before);
     Ok(())
 }
 
@@ -188,10 +201,9 @@ pub(crate) fn change_hull(
         return Err(Refusal::NotEnoughGold);
     }
     ship.gold = funds - new.price;
-    let before = u64::from(ship.max_hp(tuning));
+    let before = ship.max_hp(tuning);
     ship.hull = hull;
-    let after = u64::from(ship.max_hp(tuning));
-    ship.hp = (u64::from(ship.hp) * after).div_ceil(before) as u32;
+    keep_hp_share(ship, tuning, before);
     // 새 선체에 없는 스킬에 넣은 스킬 포인트는 돌아옵니다.
     for (index, skill) in ship.skills.iter_mut().enumerate() {
         if !new.skills.contains(&SkillId(index as u16)) {
