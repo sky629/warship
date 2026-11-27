@@ -4,6 +4,8 @@
 //! 이름은 소문자로 바꾸고, 글자와 숫자가 아닌 것은 `_`로 바꿉니다.
 //! 아이콘의 파일이 없으면 화면은 종류의 색의 네모에 이름의 머리글자를 적어서 보여 주고, 모형의 파일이 없으면 기본 도형을 합친 모양을 보여 줍니다.
 
+use warship_protocol::WireShot;
+
 /// 아이콘의 종류입니다. 종류마다 폴더가 하나씩 있습니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IconKind {
@@ -57,7 +59,7 @@ impl Icon {
 }
 
 /// 이름을 파일의 이름으로 바꿉니다. 소문자로 바꾸고, 글자와 숫자가 아닌 것은 `_`로 바꿉니다.
-fn slug(name: &str) -> String {
+pub(crate) fn slug(name: &str) -> String {
     let letters = name.chars().map(|c| match c {
         c if c.is_ascii_alphanumeric() => c.to_ascii_lowercase(),
         _ => '_',
@@ -72,6 +74,26 @@ pub enum ModelKind {
     Creep,
     /// 타워, 항구, 본진, 그리고 어느 진영의 것도 아닌 항구입니다.
     Structure,
+    /// 포탄입니다. 무기마다 하나씩 있고, 공격 방식마다 하나씩 있습니다.
+    Shot,
+}
+
+/// 포탄의 모형의 경로입니다. 앞의 것부터 찾습니다: 그 무기의 포탄, 그 공격 방식의 포탄.
+pub fn shot_models(weapon: &str, kind: WireShot) -> [String; 2] {
+    [
+        model_path(ModelKind::Shot, weapon),
+        model_path(ModelKind::Shot, shot_name(kind)),
+    ]
+}
+
+/// 공격 방식의 이름입니다. 포탄의 모형과 발사음의 파일의 이름에 씁니다.
+pub(crate) fn shot_name(kind: WireShot) -> &'static str {
+    match kind {
+        WireShot::Shell => "shell",
+        WireShot::Scatter { .. } => "scatter",
+        WireShot::Bomb { .. } => "bomb",
+        WireShot::Fire { .. } => "flame",
+    }
 }
 
 /// 에셋 폴더 안에서 이 모형의 파일의 경로입니다.
@@ -80,6 +102,7 @@ pub fn model_path(kind: ModelKind, name: &str) -> String {
         ModelKind::Hull => "hulls",
         ModelKind::Creep => "creeps",
         ModelKind::Structure => "structures",
+        ModelKind::Shot => "shots",
     };
     format!("models/{folder}/{}.glb", slug(name))
 }

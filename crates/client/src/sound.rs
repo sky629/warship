@@ -53,10 +53,12 @@ pub fn play_sounds(
         (Some(at), Some(focus)) => 1.0 - at.distance(focus) / HEAR_RANGE,
         _ => 1.0,
     };
-    let audible = events
-        .iter()
-        .map(|event| (event.sound.path(), volume(event.at)))
-        .filter(|(path, volume)| *volume > 0.0 && ui::has(path));
+    // 소리마다 에셋 폴더에 있는 첫 파일을 고릅니다.
+    let audible = events.iter().filter_map(|event| {
+        let volume = volume(event.at);
+        let path = event.sound.paths().into_iter().find(|path| ui::has(path))?;
+        (volume > 0.0).then_some((path, volume))
+    });
     for (path, volume) in audible.take(MOST_AT_ONCE) {
         let settings = PlaybackSettings::DESPAWN.with_volume(Volume::Linear(volume));
         commands.spawn((AudioPlayer::new(assets.load(path)), settings));

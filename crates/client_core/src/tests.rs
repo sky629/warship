@@ -20,7 +20,7 @@ use crate::{
     score_table, shop_tabs, shops_near,
 };
 use crate::{HudView, ScoreRow, ScoreTeam, SkillSlot, TopBar, hud_view, top_bar};
-use crate::{Sound, SoundEvent, Volley, sound_events};
+use crate::{Sound, Volley, sound_events};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -932,7 +932,7 @@ fn a_bomb_flies_in_an_arc_to_the_place_it_was_aimed_at() {
 
     // 22번째 Tick에 폭탄은 4타일의 한가운데, 포물선의 가장 높은 곳에 있습니다.
     let frame = session.frame(1.15).unwrap();
-    let bomb = frame.shots[0];
+    let bomb = &frame.shots[0];
     assert!(
         (bomb.pos.x - 12.0).abs() < 1e-3,
         "it flies to the aim, not the ship"
@@ -1086,25 +1086,29 @@ fn the_sounds_between_two_frames_are_the_things_that_happened() {
 
     let events = sound_events(&welcome, &prev, &next);
 
-    let sounds: Vec<Sound> = events.iter().map(|event| event.sound).collect();
+    let sounds: Vec<Sound> = events.iter().map(|event| event.sound.clone()).collect();
+    let fire = Sound::Fire {
+        weapon: "gun".to_string(),
+        kind: WireShot::Shell,
+    };
+    // 발사음은 그 무기의 소리를 먼저 찾고, 없으면 공격 방식의 소리를 찾습니다.
+    assert_eq!(
+        fire.paths(),
+        ["sounds/fire/gun.ogg", "sounds/fire_shell.ogg"]
+    );
     assert_eq!(
         sounds,
-        [
-            Sound::FireShell,
-            Sound::Sink,
-            Sound::Buy,
-            Sound::Refuse,
-            Sound::LevelUp
-        ]
+        [fire, Sound::Sink, Sound::Buy, Sound::Refuse, Sound::LevelUp]
     );
     assert_eq!(events[1].at, Some(Vec2::new(14.0, 10.0)));
     assert_eq!(events[2].at, None, "my own purchase has no place");
     // 같은 프레임 사이에는 새로 일어난 일이 없습니다.
     assert_eq!(sound_events(&welcome, &next, &next), []);
-    assert_eq!(Sound::LevelUp.path(), "sounds/level_up.ogg");
-    let event = SoundEvent {
-        sound: Sound::Blast,
-        at: None,
-    };
-    assert_eq!(event.sound.path(), "sounds/blast.ogg");
+    assert_eq!(Sound::LevelUp.paths(), ["sounds/level_up.ogg"]);
+    // 포탄의 모형도 그 무기의 것을 먼저 찾고, 없으면 공격 방식의 것을 찾습니다.
+    let models = crate::shot_models("Siege Mortar", WireShot::Bomb { radius: 2.5 });
+    assert_eq!(
+        models,
+        ["models/shots/siege_mortar.glb", "models/shots/bomb.glb"]
+    );
 }

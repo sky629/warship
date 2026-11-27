@@ -126,9 +126,11 @@ pub struct Volley {
     pub fired: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ShotView {
     pub volley: Volley,
+    /// 쏜 무기의 이름입니다. 화면이 무기마다 다른 모형과 발사음을 고르는 데 씁니다.
+    pub weapon: String,
     pub pos: Vec2,
     pub team: WireTeam,
     /// 포탄의 종류입니다. 화면이 종류마다 다르게 그립니다.
@@ -272,6 +274,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         if (0.0..1.0).contains(&progress) {
             return Some(Seen::Shot(ShotView {
                 volley,
+                weapon: weapon.name.clone(),
                 pos: lerp(from, to, progress),
                 team,
                 kind: weapon.shot,

@@ -10,7 +10,7 @@ use std::f32::consts::FRAC_PI_2;
 use bevy::gltf::{GltfAssetLabel, GltfMaterialName};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use warship_client_core::{Frame, ModelKind, Phase, model_path};
+use warship_client_core::{Frame, ModelKind, Phase, model_path, shot_models};
 use warship_protocol::{WireShot, WireStructureKind, WireTeam};
 
 use crate::camera::{CAMERA_OFFSET, Rig};
@@ -78,10 +78,10 @@ pub enum Shape {
 }
 
 impl Shape {
-    /// `model`의 파일이 있으면 그 모형이고, 없으면 `mesh`입니다.
-    fn of(model: Option<String>, mesh: &Handle<Mesh>) -> Shape {
-        match model.filter(|path| ui::has(path)) {
-            Some(path) => Shape::Model(path),
+    /// `models` 가운데 파일이 있는 첫 모형이고, 하나도 없으면 `mesh`입니다.
+    fn of(models: &[String], mesh: &Handle<Mesh>) -> Shape {
+        match models.iter().find(|path| ui::has(path)) {
+            Some(path) => Shape::Model(path.clone()),
             None => Shape::Mesh(mesh.clone()),
         }
     }
@@ -282,11 +282,11 @@ pub fn build_scenery(
             )),
         ));
     }
-    let port_model = Some(model_path(ModelKind::Structure, "port"));
+    let port_model = [model_path(ModelKind::Structure, "port")];
     for port in &welcome.ports {
         commands.spawn((
             Scenery,
-            Shape::of(port_model.clone(), &look.port),
+            Shape::of(&port_model, &look.port),
             Tint(look.neutral.clone()),
             Transform::from_xyz(port.x, 0.0, -port.y),
             Visibility::default(),
@@ -324,8 +324,8 @@ pub fn sync_pieces(
     let hulls = welcome.map_or(&[][..], |welcome| &welcome.hulls);
     let creeps = welcome.map_or(&[][..], |welcome| &welcome.creeps);
     let mut wanted: Vec<Wanted> = Vec::new();
-    let mut want = |piece, model: Option<String>, mesh: &Handle<Mesh>, material, at, turns| {
-        let shape = Shape::of(model, mesh);
+    let mut want = |piece, models: &[String], mesh: &Handle<Mesh>, material, at, turns| {
+        let shape = Shape::of(models, mesh);
         // 배는 선체의 최대 HP가 클수록 크게 그립니다. 시작 선체의 크기가 1입니다.
         let scale = match piece {
             Piece::Ship(id) => {
@@ -363,7 +363,7 @@ pub fn sync_pieces(
         let at = on_water(site.pos);
         want(
             Piece::Structure(site.id),
-            Some(model_path(ModelKind::Structure, name)),
+            &[model_path(ModelKind::Structure, name)],
             mesh,
             look.team(site.team),
             at,
@@ -377,7 +377,7 @@ pub fn sync_pieces(
         let model = model.map(|spec| model_path(ModelKind::Creep, &spec.name));
         want(
             Piece::Creep(creep.id),
-            model,
+            model.as_slice(),
             &look.creep,
             material,
             at,
@@ -402,7 +402,14 @@ pub fn sync_pieces(
             _ => 2,
         };
         let mesh = &look.ships[masts];
-        want(Piece::Ship(ship.id), model, mesh, material, at, true);
+        want(
+            Piece::Ship(ship.id),
+            model.as_slice(),
+            mesh,
+            material,
+            at,
+            true,
+        );
     }
     for (index, shot) in frame.shots.iter().enumerate() {
         let at = on_water(shot.pos) + Vec3::Y * shot.lift;
@@ -416,16 +423,13 @@ pub fn sync_pieces(
             WireShot::Scatter { .. } => &SCATTER,
             _ => &[Vec3::ZERO],
         };
+        // 포탄의 모형은 날아가는 쪽을 봅니다. 기본 모양은 공이라서 돌리지 않습니다.
+        let models = shot_models(&shot.weapon, shot.kind);
+        let turns = models.iter().any(|path| ui::has(path));
         for (pellet, offset) in pellets.iter().enumerate() {
             let piece = Piece::Shot(index * SCATTER.len() + pellet);
-            want(
-                piece,
-                None,
-                &look.shot,
-                material.clone(),
-                at + *offset,
-                false,
-            );
+            let at = at + *offset;
+            want(piece, &models, &look.shot, material.clone(), at, turns);
         }
     }
 

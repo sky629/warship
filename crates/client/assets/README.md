@@ -27,12 +27,15 @@ A missing icon is drawn as a square in the color of its kind with the initials o
 | `models/hulls/` | hull (`sloop.glb`, `man_of_war.glb`, ...) | about 1.3 long. The game makes hulls with more HP larger. |
 | `models/creeps/` | creep kind (`cutter.glb`, `brig.glb`, `sea_raider.glb`) | about 0.7 long. The game makes kinds with more HP larger. |
 | `models/structures/` | `tower.glb`, `harbor.glb`, `base.glb`, `port.glb` | tower 1 wide and 2 high, harbor 2 x 2, base 2.4 x 2.4, port 1.6 x 1.6 |
+| `models/shots/` | weapon (`deck_gun.glb`, `siege_mortar.glb`, `cutter_gun.glb`, ...) and attack kind (`shell.glb`, `scatter.glb`, `bomb.glb`, `flame.glb`) | about 0.3 across. The game makes the shots of stronger weapons larger. |
+
+A shot uses the model of its weapon. If that file is missing it uses the model of its attack kind, and if that is missing too it is a ball. A shot model points the way it flies. A scatter shot is drawn as three small copies.
 
 Rules for every model:
 
 - The bow points along +X, up is +Y, and the bottom is at Y = 0 (the water).
 - The origin is the middle of the model on the water.
-- A material named `team` is replaced by the color of the team (red, blue, the neutral color, or gray for a sunk ship). Every other material keeps its own look.
+- A material named `team` is replaced by the color of the team (red, blue, the neutral color, or gray for a sunk ship; orange for a fire shot). Every other material keeps its own look.
 - The first scene of the file is used.
 
 A missing model is drawn with the built-in shape.
@@ -43,10 +46,11 @@ Ogg Vorbis files.
 
 | File | Played when |
 |---|---|
-| `sounds/fire_shell.ogg` | a plain shell is fired |
-| `sounds/fire_scatter.ogg` | a scatter shot is fired |
-| `sounds/fire_bomb.ogg` | a bomb is fired |
-| `sounds/fire_flame.ogg` | a fire shot is fired |
+| `sounds/fire/<weapon>.ogg` | that weapon fires (`sounds/fire/deck_gun.ogg`, ...) |
+| `sounds/fire_shell.ogg` | a plain shell is fired by a weapon without its own sound |
+| `sounds/fire_scatter.ogg` | the same for a scatter shot |
+| `sounds/fire_bomb.ogg` | the same for a bomb |
+| `sounds/fire_flame.ogg` | the same for a fire shot |
 | `sounds/blast.ogg` | a scatter shot or a bomb bursts |
 | `sounds/sink.ogg` | a ship sinks |
 | `sounds/wreck.ogg` | a structure is destroyed |
