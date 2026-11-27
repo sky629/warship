@@ -88,3 +88,24 @@ fn a_sunk_ship_does_not_move() {
     assert!(!s.ship(a).is_afloat());
     assert_eq!(s.ship(a).pos, Vec2::new(10.0, 10.0));
 }
+
+#[test]
+fn a_ship_sent_onto_a_structure_stops_at_its_edge_on_the_near_side() {
+    let mut s = Scenario::open_sea();
+    let a = s.ship_at(Team::RED, 10.0, 10.0);
+    let tower = s.tower_at(Team::RED, 20.0, 10.0);
+    s.sail_to(a, 20.0, 10.0);
+
+    s.run_ticks(100);
+
+    // 타워의 둘레는 반지름 1입니다.
+    assert_close(s.ship(a).pos.x, 19.0);
+    assert_close(s.ship(a).pos.y, 10.0);
+
+    // 파괴된 건물의 자리에는 설 수 있습니다.
+    s.set_structure_hp(tower, 0);
+    s.run_ticks(1);
+    s.sail_to(a, 20.0, 10.0);
+    s.run_ticks(20);
+    assert_close(s.ship(a).pos.x, 20.0);
+}

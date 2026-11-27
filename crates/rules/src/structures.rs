@@ -30,6 +30,35 @@ pub struct Structure {
     pub target: Option<Target>,
 }
 
+impl StructureKind {
+    /// 건물이 차지하는 원의 반지름입니다. 배는 이 안에 서지 않습니다.
+    pub fn footprint(self) -> f32 {
+        match self {
+            StructureKind::Tower => 1.0,
+            StructureKind::Harbor => 1.7,
+            StructureKind::Base => 2.2,
+        }
+    }
+}
+
+/// `p`가 서 있는 건물이 차지하는 원 안이면, 그 원의 둘레에서 `from`에 가장 가까운 점입니다. 아니면 `p`입니다.
+/// 배는 가는 길에 건물을 지날 수 있지만, 건물 위에 서지는 않습니다.
+pub(crate) fn beside(world: &World, p: Vec2, from: Vec2) -> Vec2 {
+    let mut standing = world.structures.values().filter(|site| site.hp > 0);
+    let Some(site) = standing.find(|site| site.pos.distance(p) < site.kind.footprint()) else {
+        return p;
+    };
+    let offset = from - site.pos;
+    let distance = offset.length();
+    // 배가 건물의 한가운데에 있으면 동쪽으로 옮깁니다.
+    let direction = if distance > 0.0 {
+        offset * (1.0 / distance)
+    } else {
+        Vec2::new(1.0, 0.0)
+    };
+    site.pos + direction * site.kind.footprint()
+}
+
 /// HP가 0이 된 건물을 맵에서 지우고, 본진을 잃은 진영을 돌려줍니다.
 pub(crate) fn remove_destroyed(world: &mut World) -> Vec<Team> {
     let fallen = world

@@ -1,10 +1,13 @@
 //! 플레이어가 조종하는 배와 그 이동입니다.
 
+use std::collections::BTreeMap;
+
 use crate::command::Refusal;
 use crate::ids::{GearId, HullId, ShipId, SkillId, SupplyId, Team, TradeId, WeaponId};
 use crate::input::PlayerInputs;
 use crate::math::Vec2;
 use crate::nav;
+use crate::structures;
 use crate::tuning::{ARMOR_CAP_PERCENT, GearEffect, Tuning};
 use crate::weapon::Target;
 use crate::world::World;
@@ -271,14 +274,23 @@ pub(crate) fn crew_repairs(world: &mut World, tuning: &Tuning, tick: u64) {
 /// 목적지가 바뀌면 섬을 피해서 가는 길을 다시 찾습니다. 맵 밖이나 섬 위의 목적지는 배가 설 수 있는 가까운 점으로 옮깁니다.
 /// 한 Tick에 갈 수 있는 거리 안에 목적지가 있으면 목적지에 정확히 섭니다.
 pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuning, tick: u64) {
+    // 건물 위의 목적지를 그 건물의 둘레로 옮깁니다. 배를 고치는 동안에는 건물을 읽을 수 없으므로 먼저 계산합니다.
+    let asked = world.ships.values().filter_map(|ship| {
+        let point = inputs.get(&ship.id)?.destination?.get();
+        let open = nav::settle(&tuning.map, point);
+        let beside = structures::beside(world, open, ship.pos);
+        Some((ship.id, nav::settle(&tuning.map, beside)))
+    });
+    let asked: BTreeMap<ShipId, Vec2> = asked.collect();
     for ship in world.ships.values_mut() {
         if let Some(input) = inputs.get(&ship.id) {
             ship.last_input_seq = input.seq;
             match input.destination {
                 None => ship.route.clear(),
-                Some(point) => {
-                    let destination = nav::settle(&tuning.map, point.get());
-                    if ship.route.last() != Some(&destination) {
+                Some(_) => {
+                    if let Some(&destination) = asked.get(&ship.id)
+                        && ship.route.last() != Some(&destination)
+                    {
                         ship.route = nav::route(&tuning.map, ship.pos, destination);
                     }
                 }
