@@ -9,8 +9,8 @@
 //! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 그 라인의 적 건물을 치러 갑니다.
 
 use warship_rules::{
-    Command, GearId, HullId, RecipeId, Ship, ShipId, Sim, SkillEffect, StructureKind, Target, Team,
-    Tuning, Vec2, WeaponId,
+    Command, GearId, HullId, HullSpec, RecipeId, Ship, ShipId, Sim, SkillEffect, StructureKind,
+    Target, Team, Tuning, Vec2, WeaponId,
 };
 
 /// HP가 최대 HP의 이 백분율보다 적으면 본진으로 돌아갑니다.
@@ -69,8 +69,12 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     }
     for (id, spec, state) in skills {
         let useful = match spec.effect {
-            SkillEffect::Repair { .. } | SkillEffect::Brace { .. } => below(REPAIR_PERCENT),
-            SkillEffect::Salvo { radius, .. } => enemy_within(sim, ship, radius),
+            SkillEffect::Repair { .. } | SkillEffect::Brace { .. } | SkillEffect::Rally { .. } => {
+                below(REPAIR_PERCENT)
+            }
+            SkillEffect::Salvo { radius, .. } | SkillEffect::Snare { radius, .. } => {
+                enemy_within(sim, ship, radius)
+            }
             SkillEffect::Sprint { .. } => hurt,
             SkillEffect::Reload => enemy_within(sim, ship, reach(ship, tuning)),
         };
@@ -97,7 +101,7 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
 /// 1. 재료를 모두 단 조합이 있으면 조합합니다.
 /// 2. 빈 칸이 있으면 아이템을 삽니다. 칸 셋마다 둘은 무기, 하나는 장비입니다.
 ///    무기와 장비는 이미 단 수에 따라 표를 돌아가며 골라서, 여러 종류를 섞어 답니다.
-/// 3. 다음 선체로 바꿉니다.
+/// 3. 더 비싼 전투용 선체로 바꿉니다.
 fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
     let hull = tuning.hull(ship.hull);
     let mounted = || ship.mounts.iter().flatten();
@@ -130,8 +134,20 @@ fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
         let weapon = WeaponId(index as u16);
         return Some((Command::Buy(weapon), tuning.weapons[index].price));
     }
-    let next = HullId(ship.hull.0 + 1);
-    let spec = tuning.hulls.get(usize::from(next.0))?;
+    // 지금 선체보다 비싼 전투용 선체 가운데 가장 싼 값의 선체로 바꿉니다. 그 값의 선체가 여럿이면 배마다 다른 것을 고릅니다.
+    let fits =
+        |spec: &&HullSpec| !spec.trader && spec.price > hull.price && spec.mounts >= hull.mounts;
+    let price = tuning
+        .hulls
+        .iter()
+        .filter(fits)
+        .map(|spec| spec.price)
+        .min()?;
+    let choices: Vec<usize> = (0..tuning.hulls.len())
+        .filter(|index| fits(&&tuning.hulls[*index]) && tuning.hulls[*index].price == price)
+        .collect();
+    let index = choices[ship.id.0 as usize % choices.len()];
+    let (next, spec) = (HullId(index as u16), &tuning.hulls[index]);
     let refund = u64::from(hull.price) * u64::from(tuning.shop.refund_percent) / 100;
     let cost = spec.price.saturating_sub(refund as u32);
     Some((Command::ChangeHull(next), cost))

@@ -119,9 +119,9 @@ pub struct ShopWindow {
 }
 
 impl ShopWindow {
-    pub const WIDTH: f32 = 460.0;
+    pub const WIDTH: f32 = 500.0;
     /// 줄 하나의 높이입니다.
-    pub const ROW: f32 = 20.0;
+    pub const ROW: f32 = 18.0;
     /// 창의 왼쪽 가장자리와 상점 창 사이의 간격입니다.
     pub const MARGIN: f32 = 10.0;
     /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 줄 두 줄을 가리지 않습니다.
@@ -234,15 +234,15 @@ mod tests {
     #[test]
     fn the_shop_window_sits_in_the_upper_left_corner_and_finds_the_row_under_the_cursor() {
         let shop = ShopWindow::with_rows(5);
-        assert_eq!((shop.left, shop.top, shop.height()), (10.0, 60.0, 100.0));
+        assert_eq!((shop.left, shop.top, shop.height()), (10.0, 60.0, 90.0));
 
         assert_eq!(shop.row_at((10.0, 60.0)), Some(0));
-        assert_eq!(shop.row_at((469.0, 79.0)), Some(0));
-        assert_eq!(shop.row_at((200.0, 80.0)), Some(1));
-        assert_eq!(shop.row_at((200.0, 159.0)), Some(4));
-        assert_eq!(shop.row_at((200.0, 160.0)), None, "below the last row");
+        assert_eq!(shop.row_at((509.0, 77.0)), Some(0));
+        assert_eq!(shop.row_at((200.0, 78.0)), Some(1));
+        assert_eq!(shop.row_at((200.0, 149.0)), Some(4));
+        assert_eq!(shop.row_at((200.0, 150.0)), None, "below the last row");
         assert_eq!(shop.row_at((9.0, 100.0)), None);
-        assert_eq!(shop.row_at((470.0, 100.0)), None);
+        assert_eq!(shop.row_at((510.0, 100.0)), None);
         assert_eq!(shop.row_at((200.0, 59.0)), None, "the status lines");
     }
 }

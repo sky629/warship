@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 38] = [
+    let broken: [fn(&mut Tuning); 41] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -84,6 +84,21 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.trades[0].reward = t.trades[0].price,
         |t| t.map.ports[0] = Vec2::new(65.0, 24.0),
         |t| t.map.ports[0] = Vec2::new(32.0, 24.0),
+        // 상한을 넘는 선체의 장갑, 가장 높은 단계에서 배를 세우는 감속, 범위가 없는 아군 수리입니다.
+        |t| t.hulls[0].armor_percent = 81,
+        |t| {
+            t.skills[6].effect = SkillEffect::Snare {
+                percent_per_rank: 34,
+                radius: 4.0,
+                ticks: 10,
+            }
+        },
+        |t| {
+            t.skills[5].effect = SkillEffect::Rally {
+                hp_per_rank: 10,
+                radius: 0.0,
+            }
+        },
     ];
     for adjust in broken {
         let mut tuning = Tuning::default();

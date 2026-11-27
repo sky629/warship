@@ -47,6 +47,7 @@ fn welcome() -> Welcome {
                 max_hp: 1000,
                 mounts: 2,
                 skills: vec![0],
+                traits: String::new(),
             },
             WireHull {
                 name: "big".to_string(),
@@ -54,6 +55,7 @@ fn welcome() -> Welcome {
                 max_hp: 2000,
                 mounts: 4,
                 skills: vec![0],
+                traits: "trader, -15% damage".to_string(),
             },
         ],
         weapons: vec![gun.clone()],
@@ -540,8 +542,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             "  1  twin = gun + gun + 150g",
             "Hulls",
             "  1  small  0g  (1000 HP, 2 mounts)",
-            "  2  big  400g  (2000 HP, 4 mounts)",
-            "Trade (at your base)",
+            "  2  big  400g  (2000 HP, 4 mounts, trader, -15% damage)",
+            "Trade (a trader hull at your base)",
             "  salt  60g  (port 2, pays 90g)",
         ]
     );

@@ -1,11 +1,11 @@
 //! 스킬입니다. 배는 레벨마다 받는 스킬 포인트를 스킬에 넣어서 배우고, 배운 스킬을 쿨다운마다 한 번 씁니다.
 //!
-//! 모든 스킬은 자기 배를 중심으로 일어나므로 표적을 고르지 않습니다.
+//! 모든 스킬은 자기 배를 중심으로 일어나므로 표적을 고르지 않습니다. 자기 배에만 주는 효과와, 가까이에 있는 배에 주는 효과가 있습니다.
 //! 배는 지금 선체에 있는 스킬만 배우고 씁니다. 선체를 바꾸면 새 선체에 없는 스킬에 넣은 스킬 포인트가 돌아옵니다.
 
 use crate::command::Refusal;
 use crate::ids::{ShipId, SkillId};
-use crate::ship::Boost;
+use crate::ship::{Boost, Ship};
 use crate::tuning::{SkillEffect, Tuning};
 use crate::weapon::{Impact, Target};
 use crate::world::World;
@@ -80,6 +80,36 @@ pub(crate) fn cast(
             by: Some(id),
         }));
     }
+    // 범위 안의 다른 배에 주는 효과입니다. 아군 수리는 자기 배도 받습니다.
+    let near =
+        |other: &&mut Ship, radius: f32| other.is_afloat() && other.pos.distance(pos) <= radius;
+    match spec.effect {
+        SkillEffect::Rally {
+            hp_per_rank,
+            radius,
+        } => {
+            let friends = world.ships.values_mut();
+            for friend in friends.filter(|other| other.team == team && near(other, radius)) {
+                friend.hp = (friend.hp + hp_per_rank * rank).min(friend.max_hp(tuning));
+            }
+        }
+        SkillEffect::Snare {
+            percent_per_rank,
+            radius,
+            ticks,
+        } => {
+            let enemies = world.ships.values_mut();
+            for enemy in
+                enemies.filter(|other| other.team.is_hostile_to(team) && near(other, radius))
+            {
+                enemy.snare = Some(Boost {
+                    until: tick + u64::from(ticks),
+                    percent: percent_per_rank * rank,
+                });
+            }
+        }
+        _ => {}
+    }
     let ship = world.ships.get_mut(&id).ok_or(Refusal::Sunk)?;
     match spec.effect {
         SkillEffect::Repair { hp_per_rank } => {
@@ -108,7 +138,7 @@ pub(crate) fn cast(
                 mount.ready_at = tick;
             }
         }
-        SkillEffect::Salvo { .. } => {}
+        SkillEffect::Salvo { .. } | SkillEffect::Rally { .. } | SkillEffect::Snare { .. } => {}
     }
     ship.skills[index].ready_at = tick + u64::from(spec.cooldown_ticks);
     Ok(())

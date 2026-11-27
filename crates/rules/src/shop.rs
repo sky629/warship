@@ -4,6 +4,7 @@ use crate::command::Refusal;
 use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, WeaponId};
 use crate::ship::{Item, Mount, Ship};
 use crate::structures::StructureKind;
+use crate::trade;
 use crate::tuning::Tuning;
 use crate::world::World;
 
@@ -202,6 +203,9 @@ pub(crate) fn change_hull(
     }
     if ship.mounts[new.mounts..].iter().any(Option::is_some) {
         return Err(Refusal::MountsInUse);
+    }
+    if !new.trader && trade::carries_freight(ship) {
+        return Err(Refusal::CarryingFreight);
     }
     let old = tuning.hull(ship.hull);
     let funds = ship.gold + refund(old.price, tuning);

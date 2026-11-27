@@ -258,6 +258,7 @@ pub fn clear_room(
 
 /// 프레임에 있는 개체마다 도형 하나를 두고 위치를 맞춥니다. 프레임에서 사라진 개체의 도형은 치웁니다.
 pub fn sync_pieces(
+    net: NonSend<Net>,
     frame: Res<CurrentFrame>,
     look: Res<Look>,
     mut pieces: ResMut<Pieces>,
@@ -267,14 +268,20 @@ pub fn sync_pieces(
     let Some(frame) = &frame.0 else {
         return;
     };
+    let hulls = net
+        .session
+        .welcome()
+        .map_or(&[][..], |welcome| &welcome.hulls);
     let mut wanted: Vec<Wanted> = Vec::new();
     let mut want = |piece, mesh: &Handle<Mesh>, material, at, turns| {
         let mesh = mesh.clone();
-        // 배는 선체의 번호가 클수록 크게 그립니다.
+        // 배는 선체의 최대 HP가 클수록 크게 그립니다. 시작 선체의 크기가 1입니다.
         let scale = match piece {
             Piece::Ship(id) => {
                 let ship = frame.ships.iter().find(|ship| ship.id == id);
-                1.0 + 0.35 * ship.map_or(0.0, |ship| f32::from(ship.hull))
+                let hp = |hull: u16| hulls.get(usize::from(hull)).map(|hull| hull.max_hp as f32);
+                let ratio = ship.and_then(|ship| Some(hp(ship.hull)? / hp(0)?));
+                ratio.map_or(1.0, f32::sqrt)
             }
             _ => 1.0,
         };

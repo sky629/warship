@@ -22,13 +22,17 @@ const DIGITS: [KeyCode; 9] = [
     KeyCode::Digit8,
     KeyCode::Digit9,
 ];
-const HULL_KEYS: [KeyCode; 6] = [
+const HULL_KEYS: [KeyCode; 10] = [
     KeyCode::F1,
     KeyCode::F2,
     KeyCode::F3,
     KeyCode::F4,
     KeyCode::F5,
     KeyCode::F6,
+    KeyCode::F7,
+    KeyCode::F8,
+    KeyCode::F9,
+    KeyCode::F10,
 ];
 const RECIPE_KEYS: [KeyCode; 4] = [KeyCode::KeyZ, KeyCode::KeyX, KeyCode::KeyC, KeyCode::KeyV];
 const SKILL_KEYS: [(KeyCode, char); 4] = [
@@ -182,8 +186,7 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
             lines += &format!(" ({:.0}s)", skill.ready_secs.ceil());
         }
     }
-    lines +=
-        "\nB: shop   Number: buy weapon   Alt+number: buy gear   Z, X, C, V: combine   F1-F6: hull";
+    lines += "\nB: shop   Number: buy weapon   Alt+number: buy gear   Z, X, C, V: combine   F1-F10: hull";
     lines += "\nShift+number: sell mount   Ctrl+key: learn skill";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
@@ -209,5 +212,7 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::NotForSale => "that weapon is made by combining, not sold",
         WireRefusal::MissingParts => "mount every part of the recipe first",
         WireRefusal::NoBaseInRange => "go near your base",
+        WireRefusal::NotATrader => "only a trader hull trades",
+        WireRefusal::CarryingFreight => "sell the contract or cargo before leaving the trader hull",
     }
 }

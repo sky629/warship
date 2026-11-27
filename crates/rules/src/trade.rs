@@ -8,7 +8,7 @@ use crate::shop;
 use crate::tuning::Tuning;
 use crate::world::World;
 
-/// 계약을 사서 첫 빈 칸에 답니다. 본진 가까이에 떠 있는 배만 삽니다.
+/// 계약을 사서 첫 빈 칸에 답니다. 본진 가까이에 떠 있는 교역선만 삽니다.
 pub(crate) fn contract(
     world: &mut World,
     tuning: &Tuning,
@@ -25,15 +25,16 @@ pub(crate) fn contract(
         return Err(Refusal::NoBaseInRange);
     }
     let ship = world.ships.get_mut(&id).ok_or(Refusal::Sunk)?;
+    if !tuning.hull(ship.hull).trader {
+        return Err(Refusal::NotATrader);
+    }
     shop::mount_bought(ship, tuning, Item::Contract(trade), spec.price)
 }
 
 /// 교역항 가까이에 떠 있는 배의 계약을 화물로 바꾸고, 본진 가까이에 떠 있는 배의 화물을 보상으로 바꿉니다.
 pub(crate) fn haul(world: &mut World, tuning: &Tuning) {
-    let carriers = world.ships.values().filter(|ship| {
-        let freight = |mount: &Mount| matches!(mount.item, Item::Contract(_) | Item::Cargo(_));
-        ship.is_afloat() && ship.mounts.iter().flatten().any(freight)
-    });
+    let carriers = world.ships.values();
+    let carriers = carriers.filter(|ship| ship.is_afloat() && carries_freight(ship));
     let carriers: Vec<(ShipId, bool)> = carriers
         .map(|ship| (ship.id, shop::at_dock(world, tuning, ship)))
         .collect();
@@ -61,6 +62,12 @@ pub(crate) fn haul(world: &mut World, tuning: &Tuning) {
             }
         }
     }
+}
+
+/// 배가 계약이나 화물을 달고 있는지입니다.
+pub(crate) fn carries_freight(ship: &Ship) -> bool {
+    let freight = |mount: &Mount| matches!(mount.item, Item::Contract(_) | Item::Cargo(_));
+    ship.mounts.iter().flatten().any(freight)
 }
 
 /// 가라앉는 배의 계약과 화물을 없앱니다.

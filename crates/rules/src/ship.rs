@@ -29,6 +29,8 @@ pub struct Ship {
     pub sprint: Option<Boost>,
     /// 받는 피해를 줄이는 스킬의 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
     pub brace: Option<Boost>,
+    /// 적의 스킬이 속도를 줄이는 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
+    pub snare: Option<Boost>,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
     pub route: Vec<Vec2>,
     /// 아이템을 다는 칸입니다. 무기와 장비가 같은 칸을 나누어 씁니다. 빈 칸은 `None`입니다.
@@ -145,6 +147,7 @@ impl Ship {
             skills: vec![SkillState::default(); tuning.skills.len()],
             sprint: None,
             brace: None,
+            snare: None,
             route: Vec::new(),
             mounts,
             last_input_seq: 0,
@@ -186,33 +189,35 @@ impl Ship {
         tuning.hull(self.hull).max_hp + planking.sum::<u32>()
     }
 
-    /// `tick`에 이 배가 1초에 가는 거리입니다. 선체의 속도에 돛 장비와 속도 스킬의 백분율을 더해서 올립니다.
+    /// `tick`에 이 배가 1초에 가는 거리입니다. 선체의 속도에 돛 장비와 속도 스킬의 백분율을 더해서 올리고, 적의 감속 스킬의 백분율만큼 줄입니다.
     pub fn speed(&self, tuning: &Tuning, tick: u64) -> f32 {
         let sails = self.gear_effects(tuning).map(|effect| match effect {
             GearEffect::Sails { speed_percent } => speed_percent,
             _ => 0,
         });
         let percent = 100 + sails.sum::<u32>() + Boost::percent_at(self.sprint, tick);
-        tuning.hull(self.hull).speed * percent as f32 / 100.0
+        let kept = 100 - Boost::percent_at(self.snare, tick).min(100);
+        tuning.hull(self.hull).speed * (percent * kept) as f32 / 10_000.0
     }
 
-    /// 선원 장비가 1초마다 회복하는 HP입니다.
+    /// 선체와 선원 장비가 1초마다 회복하는 HP입니다.
     fn crew_repair(&self, tuning: &Tuning) -> u32 {
         let crew = self.gear_effects(tuning).map(|effect| match effect {
             GearEffect::Crew { repair_per_sec } => repair_per_sec,
             _ => 0,
         });
-        crew.sum()
+        tuning.hull(self.hull).repair_per_sec + crew.sum::<u32>()
     }
 
     /// `tick`에 이 배에 닿은 `amount`의 피해 가운데 실제로 HP에서 빠지는 양입니다.
-    /// 장갑 장비와 피해 감소 스킬의 백분율을 더하고, 합은 `ARMOR_CAP_PERCENT`를 넘지 않습니다.
+    /// 선체의 장갑, 장갑 장비, 피해 감소 스킬의 백분율을 더하고, 합은 `ARMOR_CAP_PERCENT`를 넘지 않습니다.
     pub(crate) fn braced(&self, tuning: &Tuning, amount: u32, tick: u64) -> u32 {
         let plating = self.gear_effects(tuning).map(|effect| match effect {
             GearEffect::Plating { armor_percent } => armor_percent,
             _ => 0,
         });
-        let armor = plating.sum::<u32>() + Boost::percent_at(self.brace, tick);
+        let hull = tuning.hull(self.hull).armor_percent;
+        let armor = hull + plating.sum::<u32>() + Boost::percent_at(self.brace, tick);
         let kept = 100 - armor.min(ARMOR_CAP_PERCENT);
         (u64::from(amount) * u64::from(kept) / 100) as u32
     }

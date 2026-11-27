@@ -60,6 +60,10 @@ pub enum Refusal {
     MissingParts,
     /// 자기 진영의 본진이 가까이에 없습니다.
     NoBaseInRange,
+    /// 교역선이 아닌 선체는 교역을 하지 못합니다.
+    NotATrader,
+    /// 교역의 계약이나 화물을 단 채로는 교역선이 아닌 선체로 바꾸지 못합니다.
+    CarryingFreight,
 }
 
 /// 배의 명령 하나를 처리합니다. 없는 배의 명령과 이미 처리한 순서 번호의 명령은 무시합니다.

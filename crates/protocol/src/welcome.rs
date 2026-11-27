@@ -1,7 +1,7 @@
 //! 입장할 때 한 번 보내는, 접속 중에 바뀌지 않는 정보입니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::{GearEffect, ShipId, Sim, StructureKind, StructureSpec, WeaponSpec};
+use warship_rules::{GearEffect, HullSpec, ShipId, Sim, StructureKind, StructureSpec, WeaponSpec};
 
 use crate::messages::{WireTeam, WireVec2};
 use crate::seat_token::SeatToken;
@@ -69,6 +69,8 @@ pub struct WireHull {
     pub mounts: u8,
     /// 이 선체의 배가 쓸 수 있는 스킬의 번호입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
     pub skills: Vec<u16>,
+    /// 선체의 고유한 점(교역선, 장갑, 자체 수리)을 설명하는 글입니다. 없으면 빈 글입니다.
+    pub traits: String,
 }
 
 /// 장비 한 종류입니다.
@@ -132,6 +134,21 @@ pub struct WireCreepSpec {
 }
 
 /// 화면에 그대로 보이는 문장이므로 영어입니다.
+fn traits_text(hull: &HullSpec) -> String {
+    let mut traits = Vec::new();
+    if hull.trader {
+        traits.push("trader".to_string());
+    }
+    if hull.armor_percent > 0 {
+        traits.push(format!("-{}% damage", hull.armor_percent));
+    }
+    if hull.repair_per_sec > 0 {
+        traits.push(format!("+{} HP/s", hull.repair_per_sec));
+    }
+    traits.join(", ")
+}
+
+/// 화면에 그대로 보이는 문장이므로 영어입니다.
 fn effect_text(effect: GearEffect) -> String {
     match effect {
         GearEffect::Planking { max_hp } => format!("+{max_hp} HP"),
@@ -190,6 +207,7 @@ impl Welcome {
                     max_hp: hull.max_hp,
                     mounts: hull.mounts as u8,
                     skills: hull.skills.iter().map(|skill| skill.0).collect(),
+                    traits: traits_text(hull),
                 })
                 .collect(),
             skills: tuning

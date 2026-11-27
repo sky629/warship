@@ -64,6 +64,12 @@ pub struct HullSpec {
     pub mounts: usize,
     /// 이 선체의 배가 배우고 쓸 수 있는 스킬입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
     pub skills: Vec<SkillId>,
+    /// 선체가 받는 피해를 줄이는 백분율입니다. 장비와 스킬의 피해 감소와 더해집니다.
+    pub armor_percent: u32,
+    /// 떠 있는 동안 선체가 1초마다 회복하는 HP입니다.
+    pub repair_per_sec: u32,
+    /// 교역선인지입니다. 교역선만 교역의 계약을 사고 화물을 싣습니다.
+    pub trader: bool,
 }
 
 /// 상점에 관한 수치입니다. 자기 진영의 서 있는 본진과 항구가 상점입니다. 수리는 본진에서만 받습니다.
@@ -110,6 +116,14 @@ pub enum SkillEffect {
     Reload,
     /// `ticks` 동안 자기 배가 받는 피해를 백분율만큼 줄입니다.
     Brace { percent_per_rank: u32, ticks: u32 },
+    /// 자기 배와 `radius` 안의 같은 진영의 배의 HP를 최대 HP까지 회복합니다.
+    Rally { hp_per_rank: u32, radius: f32 },
+    /// `ticks` 동안 `radius` 안의 적의 배의 속도를 백분율만큼 줄입니다.
+    Snare {
+        percent_per_rank: u32,
+        radius: f32,
+        ticks: u32,
+    },
 }
 
 /// 장비 한 종류의 수치입니다.
@@ -364,6 +378,12 @@ impl Tuning {
             if !is_positive(hull.speed) {
                 return Err(format!("hull {}: speed must be positive", hull.name));
             }
+            if hull.armor_percent > ARMOR_CAP_PERCENT {
+                return Err(format!(
+                    "hull {}: armor takes at most {ARMOR_CAP_PERCENT} percent",
+                    hull.name
+                ));
+            }
             if hull.mounts == 0 || hull.mounts > MOUNTS {
                 return Err(format!("hull {}: mounts must be 1 to {MOUNTS}", hull.name));
             }
@@ -417,7 +437,15 @@ impl Tuning {
         }
         for skill in &self.skills {
             let effect_fits = match skill.effect {
-                SkillEffect::Salvo { radius, .. } => is_positive(radius),
+                SkillEffect::Salvo { radius, .. } | SkillEffect::Rally { radius, .. } => {
+                    is_positive(radius)
+                }
+                // 가장 높은 단계에서도 배가 서지 않아야 합니다.
+                SkillEffect::Snare {
+                    percent_per_rank,
+                    radius,
+                    ..
+                } => is_positive(radius) && percent_per_rank * u32::from(skill.max_rank) < 100,
                 // 가장 높은 단계에서도 피해가 음수가 되지 않아야 합니다.
                 SkillEffect::Brace {
                     percent_per_rank, ..
@@ -428,7 +456,7 @@ impl Tuning {
             };
             if skill.cooldown_ticks == 0 || skill.max_rank == 0 || !effect_fits {
                 return Err(format!(
-                    "skill {}: cooldown_ticks, max_rank and radius must be positive, and a brace takes at most 100 percent",
+                    "skill {}: cooldown_ticks, max_rank and radius must be positive, a brace takes at most 100 percent, and a snare less than 100 percent",
                     skill.name
                 ));
             }
@@ -609,18 +637,20 @@ impl Default for Tuning {
             effect,
         };
         // 모든 선체가 0번과 1번 스킬을 쓰고, 선체마다 고유한 스킬이 있습니다.
-        let hull = |name, price, max_hp, speed, mounts, own_skills: &[u16]| {
-            let own = own_skills.iter().map(|skill| SkillId(*skill));
-            HullSpec {
-                name,
-                price,
-                max_hp,
-                speed,
-                vision: 9.0 + max_hp as f32 / 1500.0,
-                mounts,
-                skills: [SkillId(0), SkillId(1)].into_iter().chain(own).collect(),
-            }
+        let hull = |name, price, max_hp, speed, mounts, skills: &[u16]| HullSpec {
+            name,
+            price,
+            max_hp,
+            speed,
+            vision: 9.0 + max_hp as f32 / 1500.0,
+            mounts,
+            skills: skills.iter().map(|skill| SkillId(*skill)).collect(),
+            armor_percent: 0,
+            repair_per_sec: 0,
+            trader: false,
         };
+        // 스킬 표의 자리입니다.
+        let (patch, grape, sail, broadside, iron, rally, chain) = (0, 1, 2, 3, 4, 5, 6);
         let skill = |name, cooldown_ticks, effect| SkillSpec {
             name,
             cooldown_ticks,
@@ -653,12 +683,37 @@ impl Default for Tuning {
                 respawn_ticks: 200,
                 bounty: 200,
             },
+            // 값의 순서입니다. 같은 값의 선체는 서로 다른 역할을 합니다: 화력, 속도, 지원, 방어, 교역.
             hulls: vec![
-                hull("Sloop", 0, 400, 4.0, 3, &[2]),
-                hull("Brig", 500, 650, 3.8, 4, &[2]),
-                hull("Frigate", 1100, 950, 3.6, 5, &[3]),
-                hull("Galleon", 2000, 1500, 3.2, 6, &[4]),
-                hull("Man-of-War", 3500, 2300, 3.0, 6, &[3, 4]),
+                hull("Sloop", 0, 400, 4.0, 3, &[patch, grape, sail]),
+                HullSpec {
+                    trader: true,
+                    ..hull("Lugger", 150, 220, 4.6, 4, &[sail])
+                },
+                hull("Brig", 500, 650, 3.8, 4, &[patch, grape, sail]),
+                hull("Corvette", 500, 480, 4.6, 3, &[grape, sail, chain]),
+                hull("Frigate", 1100, 950, 3.6, 5, &[patch, grape, broadside]),
+                HullSpec {
+                    repair_per_sec: 4,
+                    ..hull("Tender", 1100, 800, 3.7, 4, &[patch, rally, sail])
+                },
+                HullSpec {
+                    trader: true,
+                    ..hull("Merchantman", 1500, 500, 4.2, 6, &[patch, sail])
+                },
+                hull("Galleon", 2000, 1500, 3.2, 6, &[patch, grape, iron]),
+                HullSpec {
+                    armor_percent: 15,
+                    ..hull("Bulwark", 2000, 1900, 2.9, 5, &[patch, iron, chain])
+                },
+                hull(
+                    "Man-of-War",
+                    3500,
+                    2300,
+                    3.0,
+                    6,
+                    &[patch, grape, broadside, iron],
+                ),
             ],
             weapons: vec![
                 sold(100, gun("Deck Gun", 20, 5.5, 30, 14.0, both)),
@@ -718,6 +773,23 @@ impl Default for Tuning {
                     SkillEffect::Brace {
                         percent_per_rank: 20,
                         ticks: 100,
+                    },
+                ),
+                skill(
+                    "Field Repairs",
+                    500,
+                    SkillEffect::Rally {
+                        hp_per_rank: 50,
+                        radius: 5.0,
+                    },
+                ),
+                skill(
+                    "Chain Shot",
+                    400,
+                    SkillEffect::Snare {
+                        percent_per_rank: 20,
+                        radius: 5.0,
+                        ticks: 60,
                     },
                 ),
             ],

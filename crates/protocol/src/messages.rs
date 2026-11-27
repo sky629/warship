@@ -8,7 +8,7 @@ use crate::snapshot::Snapshot;
 use crate::welcome::Welcome;
 
 /// 메시지의 형식이 바뀔 때마다 올리는 번호입니다. 서버는 다른 번호의 입장 요청을 거절합니다.
-pub const PROTOCOL_VERSION: u32 = 8;
+pub const PROTOCOL_VERSION: u32 = 9;
 
 /// 클라이언트에서 서버로 가는 메시지입니다. `Join`은 첫째 변형이어야 합니다(`codec`이 변형 번호 0으로 알아봅니다).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -73,8 +73,12 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
     }
     rows.push(ShopRow::heading("Hulls"));
     for (index, hull) in welcome.hulls.iter().enumerate() {
+        let traits = match hull.traits.as_str() {
+            "" => String::new(),
+            traits => format!(", {traits}"),
+        };
         let label = format!(
-            "{}  {}  {}g  ({} HP, {} mounts)",
+            "{}  {}  {}g  ({} HP, {} mounts{traits})",
             index + 1,
             hull.name,
             hull.price,
@@ -84,7 +88,7 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         let order = WireCommand::ChangeHull { hull: index as u16 };
         rows.push(ShopRow::item(label, order, None));
     }
-    rows.push(ShopRow::heading("Trade (at your base)"));
+    rows.push(ShopRow::heading("Trade (a trader hull at your base)"));
     for (index, trade) in welcome.trades.iter().enumerate() {
         let label = format!(
             "{}  {}g  (port {}, pays {}g)",

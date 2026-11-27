@@ -36,6 +36,8 @@ pub(crate) const SALVO: SkillId = SkillId(1);
 pub(crate) const SPRINT: SkillId = SkillId(2);
 pub(crate) const RELOAD: SkillId = SkillId(3);
 pub(crate) const BRACE: SkillId = SkillId(4);
+pub(crate) const RALLY: SkillId = SkillId(5);
+pub(crate) const SNARE: SkillId = SkillId(6);
 
 pub(crate) struct Scenario {
     pub sim: Sim,
@@ -58,7 +60,9 @@ impl Scenario {
     /// 누적 경험치 100에 2레벨, 300에 3레벨이 되고, 경험치는 10타일 안의 배가 나누어 받습니다.
     /// 스킬은 쿨다운 100Tick에 2단계까지이고, 0번은 단계마다 HP 100 회복, 1번(`SALVO`)은 4타일 안의 적에 단계마다 피해 30,
     /// 2번(`SPRINT`)은 20Tick 동안 단계마다 속도 50% 증가, 3번(`RELOAD`)은 모든 무기의 쿨다운 제거,
-    /// 4번(`BRACE`)은 20Tick 동안 단계마다 받는 피해 40% 감소입니다. 0번 선체는 모든 스킬을 쓰고, 1번 선체는 `SPRINT`를 쓰지 못합니다.
+    /// 4번(`BRACE`)은 20Tick 동안 단계마다 받는 피해 40% 감소, 5번(`RALLY`)은 4타일 안의 같은 진영의 배가 단계마다 HP 60 회복,
+    /// 6번(`SNARE`)은 4타일 안의 적의 배가 20Tick 동안 단계마다 속도 40% 감소입니다.
+    /// 0번 선체는 모든 스킬을 쓰고 교역을 합니다. 1번 선체는 `REPAIR`, `SALVO`, `RELOAD`, `BRACE`만 쓰고 교역을 하지 못합니다.
     pub fn open_sea() -> Scenario {
         Scenario::with_tuning(|_| {})
     }
@@ -218,6 +222,9 @@ fn hull(
         speed: 4.0,
         vision: 9.0,
         mounts,
+        armor_percent: 0,
+        repair_per_sec: 0,
+        trader: false,
     }
 }
 
@@ -257,13 +264,16 @@ fn open_sea_tuning() -> Tuning {
             bounty: 200,
         },
         hulls: vec![
-            hull(
-                "small hull",
-                0,
-                1000,
-                2,
-                &[REPAIR, SALVO, SPRINT, RELOAD, BRACE],
-            ),
+            HullSpec {
+                trader: true,
+                ..hull(
+                    "small hull",
+                    0,
+                    1000,
+                    2,
+                    &[REPAIR, SALVO, SPRINT, RELOAD, BRACE, RALLY, SNARE],
+                )
+            },
             hull("big hull", 400, 2000, 4, &[REPAIR, SALVO, RELOAD, BRACE]),
         ],
         weapons: vec![
@@ -289,6 +299,15 @@ fn open_sea_tuning() -> Tuning {
             skill(SkillEffect::Reload),
             skill(SkillEffect::Brace {
                 percent_per_rank: 40,
+                ticks: 20,
+            }),
+            skill(SkillEffect::Rally {
+                hp_per_rank: 60,
+                radius: 4.0,
+            }),
+            skill(SkillEffect::Snare {
+                percent_per_rank: 40,
+                radius: 4.0,
                 ticks: 20,
             }),
         ],
