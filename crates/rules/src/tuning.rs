@@ -3,7 +3,7 @@
 //! 거리의 단위는 타일이고, 시간의 단위는 수치마다 적혀 있습니다(초 또는 Tick).
 //! 기본 수치(`Tuning::default`)는 프로토타입용 값이고, 배와 무기의 이름과 맵의 배치는 이 게임에서 새로 지은 것입니다.
 
-use crate::ids::{GearId, HullId, SkillId, Team, WeaponId};
+use crate::ids::{GearId, HullId, SkillId, Team, TradeId, WeaponId};
 use crate::math::Vec2;
 use crate::nav;
 use crate::ship::MOUNTS;
@@ -26,6 +26,8 @@ pub struct Tuning {
     pub gear: Vec<GearSpec>,
     /// 조합 표입니다. 재료 무기를 모두 단 배가 값을 내면 재료가 결과 무기 하나로 바뀝니다.
     pub recipes: Vec<Recipe>,
+    /// 교역 표입니다. `TradeId`가 이 표의 행 번호입니다. 본진이 이 교역의 계약을 모두 팝니다.
+    pub trades: Vec<TradeSpec>,
     pub shop: ShopTuning,
     pub growth: GrowthTuning,
     pub structures: StructureTable,
@@ -144,6 +146,19 @@ pub struct Recipe {
     pub price: u32,
 }
 
+/// 교역 하나입니다. 본진에서 계약을 사고, 교역항에서 화물을 싣고, 본진에 돌아오면 보상을 받습니다.
+/// 계약과 화물은 칸 하나를 차지하고, 배가 가라앉으면 사라집니다.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TradeSpec {
+    pub name: &'static str,
+    /// 계약의 값입니다.
+    pub price: u32,
+    /// 화물을 본진에 가져오면 받는 골드입니다. 계약의 값보다 큽니다.
+    pub reward: u32,
+    /// 화물을 싣는 교역항입니다. `MapSpec::ports`의 자리입니다.
+    pub port: usize,
+}
+
 /// 무기 한 종류의 수치입니다. 무기마다 다른 점은 모두 이 구조체의 값입니다.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WeaponSpec {
@@ -243,6 +258,8 @@ pub struct MapSpec {
     pub structures: Vec<StructureSite>,
     /// 배가 지나가지 못하는 섬입니다.
     pub islands: Vec<Island>,
+    /// 교역항의 자리입니다. 어느 진영의 것도 아니고, 상점 거리 안에 온 배의 계약을 화물로 바꿉니다.
+    pub ports: Vec<Vec2>,
 }
 
 /// 원 모양의 섬입니다.
@@ -264,6 +281,11 @@ pub struct StructureSite {
 impl Tuning {
     pub fn hull(&self, id: HullId) -> &HullSpec {
         &self.hulls[usize::from(id.0)]
+    }
+
+    /// 교역 표에 있는 번호이면 그 교역입니다.
+    pub fn trade_of(&self, id: TradeId) -> Option<&TradeSpec> {
+        self.trades.get(usize::from(id.0))
     }
 
     /// 장비 표에 있는 번호이면 그 장비입니다.
@@ -361,6 +383,14 @@ impl Tuning {
                     "a recipe needs two or more parts, and its parts and result must be weapons of the table"
                         .to_string(),
                 );
+            }
+        }
+        for trade in &self.trades {
+            if trade.port >= self.map.ports.len() || trade.reward <= trade.price {
+                return Err(format!(
+                    "trade {}: it names a port of the map and pays more than its price",
+                    trade.name
+                ));
             }
         }
         for gear in &self.gear {
@@ -472,9 +502,10 @@ impl MapSpec {
         if !sites
             .chain(self.spawns)
             .chain(lane_points)
+            .chain(self.ports.iter().copied())
             .all(|p| self.contains(p))
         {
-            return Err("spawns, lanes and structures must be inside the map".to_string());
+            return Err("spawns, lanes, structures and ports must be inside the map".to_string());
         }
         if self.lanes.iter().any(|lane| lane.len() < 2) {
             return Err("a lane needs at least two points".to_string());
@@ -516,8 +547,13 @@ impl MapSpec {
             }
         }
         let sites = self.structures.iter().map(|site| site.pos);
-        if !sites.chain(self.spawns).all(|p| nav::is_open(self, p)) {
-            return Err("spawns and structures must be off the islands".to_string());
+        let ports = self.ports.iter().copied();
+        if !sites
+            .chain(self.spawns)
+            .chain(ports)
+            .all(|p| nav::is_open(self, p))
+        {
+            return Err("spawns, structures and ports must be off the islands".to_string());
         }
         // NPC 배는 길을 찾지 않으므로, 항구에서 적의 본진까지 가는 길의 모든 구간이 섬을 지나지 않아야 합니다.
         for site in &self.structures {
@@ -560,6 +596,12 @@ impl Default for Tuning {
             parts: parts.map(WeaponId).to_vec(),
             result: WeaponId(result),
             price,
+        };
+        let trade = |name, price, reward, port| TradeSpec {
+            name,
+            price,
+            reward,
+            port,
         };
         let gear = |name, price, effect| GearSpec {
             name,
@@ -634,6 +676,12 @@ impl Default for Tuning {
                 recipe([1, 1], 6, 200),
                 recipe([3, 0], 7, 250),
                 recipe([4, 2], 8, 400),
+            ],
+            trades: vec![
+                trade("Timber", 60, 90, 0),
+                trade("Salt", 60, 90, 1),
+                trade("Spice", 300, 360, 0),
+                trade("Silk", 300, 360, 1),
             ],
             gear: vec![
                 gear("Oak Planking", 200, GearEffect::Planking { max_hp: 250 }),
@@ -759,6 +807,8 @@ impl Default for Tuning {
                     radius,
                 })
                 .collect(),
+                // 두 진영의 본진에서 같은 거리에 있는, 가운데 섬의 북쪽과 남쪽입니다.
+                ports: vec![Vec2::new(32.0, 31.5), Vec2::new(32.0, 16.5)],
             },
         }
     }

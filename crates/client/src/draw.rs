@@ -18,6 +18,7 @@ use crate::net::{CurrentFrame, Destination, LeavePrompt, Net};
 pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
 const WATER: Color = Color::srgb(0.07, 0.22, 0.32);
 const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
+const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
 const BORDER: Color = Color::srgb(0.35, 0.55, 0.65);
 const LANE: Color = Color::srgb(0.2, 0.36, 0.45);
 const RED: Color = Color::srgb(0.9, 0.3, 0.25);
@@ -81,6 +82,7 @@ pub struct Look {
     shot: Handle<Mesh>,
     /// 반지름과 높이가 1인 원기둥입니다. 섬마다 크기를 맞춰서 씁니다.
     island: Handle<Mesh>,
+    port: Handle<Mesh>,
     /// 한 변이 1인 평면입니다. 맵의 크기에 맞춰서 씁니다.
     water: Handle<Mesh>,
     red: Handle<StandardMaterial>,
@@ -88,6 +90,8 @@ pub struct Look {
     sunk: Handle<StandardMaterial>,
     land: Handle<StandardMaterial>,
     sea: Handle<StandardMaterial>,
+    /// 어느 진영의 것도 아닌 교역항의 재질입니다.
+    neutral: Handle<StandardMaterial>,
 }
 
 impl Look {
@@ -140,6 +144,7 @@ pub fn setup(
         sunk: matte(SUNK),
         land: matte(ISLAND),
         sea: matte(WATER),
+        neutral: matte(PORT),
         // 배와 NPC 배는 x축 방향으로 긴 상자입니다. 뱃머리가 x축의 양의 방향입니다.
         ship: meshes.add(Cuboid::new(1.0, 0.4, 0.45)),
         creep: meshes.add(Cuboid::new(0.55, 0.25, 0.25)),
@@ -148,6 +153,7 @@ pub fn setup(
         base: meshes.add(Cuboid::new(2.4, 1.4, 2.4)),
         shot: meshes.add(Sphere::new(0.12)),
         island: meshes.add(Cylinder::new(1.0, 1.0)),
+        port: meshes.add(Cuboid::new(1.4, 0.8, 1.4)),
         water: meshes.add(Plane3d::default().mesh().size(1.0, 1.0)),
     };
     commands.insert_resource(look);
@@ -192,7 +198,7 @@ fn team_color(team: WireTeam) -> Color {
     }
 }
 
-/// 입장하면 수면과 섬을 한 번 놓습니다.
+/// 입장하면 수면, 섬, 교역항을 한 번 놓습니다.
 pub fn build_scenery(
     net: NonSend<Net>,
     look: Res<Look>,
@@ -224,6 +230,14 @@ pub fn build_scenery(
                 ISLAND_HEIGHT,
                 island.radius,
             )),
+        ));
+    }
+    for port in &welcome.ports {
+        commands.spawn((
+            Scenery,
+            Mesh3d(look.port.clone()),
+            MeshMaterial3d(look.neutral.clone()),
+            Transform::from_xyz(port.x, 0.4, -port.y),
         ));
     }
 }

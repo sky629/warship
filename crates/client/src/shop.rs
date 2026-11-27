@@ -1,6 +1,6 @@
 //! 상점 창입니다. B 키로 열고 닫고, 줄을 왼쪽 클릭하면 그 줄의 명령을 보냅니다.
 //!
-//! 창은 화면의 오른쪽 위에 있고, 줄의 자리는 `ShopWindow`가 정합니다. 그리는 자리와 클릭을 찾는 자리가 같은 계산을 씁니다.
+//! 창은 화면의 왼쪽 위에 있고, 줄의 자리는 `ShopWindow`가 정합니다. 그리는 자리와 클릭을 찾는 자리가 같은 계산을 씁니다.
 //! 조건은 서버가 검사하고, 거절한 이유는 HUD에 나옵니다.
 
 use bevy::prelude::*;
@@ -38,15 +38,15 @@ pub fn setup(mut commands: Commands) {
     ));
 }
 
-/// 상점 창이 열려 있으면, 이 창에서의 상점 창의 자리입니다.
-fn shop_window(window: &Window, welcome: &Welcome, open: &ShopOpen) -> Option<ShopWindow> {
+/// 상점 창이 열려 있으면 그 자리입니다.
+fn shop_window(welcome: &Welcome, open: &ShopOpen) -> Option<ShopWindow> {
     open.0
-        .then(|| ShopWindow::in_window(window.width(), shop_rows(welcome).len()))
+        .then(|| ShopWindow::with_rows(shop_rows(welcome).len()))
 }
 
 /// 커서가 열려 있는 상점 창 위에 있으면, 커서 아래의 줄의 번호입니다.
 pub fn row_under(window: &Window, welcome: &Welcome, open: &ShopOpen) -> Option<usize> {
-    let shop = shop_window(window, welcome, open)?;
+    let shop = shop_window(welcome, open)?;
     let cursor = window.cursor_position()?;
     shop.row_at((cursor.x, cursor.y))
 }
@@ -87,7 +87,7 @@ pub fn show_shop(
     let (root, mut node) = root.into_inner();
     commands.entity(root).despawn_children();
     let welcome = net.as_ref().and_then(|net| net.session.welcome());
-    let shop = welcome.and_then(|welcome| Some((welcome, shop_window(&window, welcome, &open)?)));
+    let shop = welcome.and_then(|welcome| Some((welcome, shop_window(welcome, &open)?)));
     let Some((welcome, shop)) = shop else {
         node.display = Display::None;
         return;

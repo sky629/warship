@@ -3,10 +3,10 @@
 //! 클라이언트는 명령마다 순서 번호를 붙여서 보냅니다. 규칙은 이미 처리한 번호보다 크지 않은 명령을 무시하고,
 //! 처리한 명령의 번호와 거절한 이유를 배에 적어 둡니다. 모든 조건(골드, 상점과의 거리, 빈 칸, 쿨다운)은 여기서 검사합니다.
 
-use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, WeaponId};
+use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, TradeId, WeaponId};
 use crate::tuning::Tuning;
 use crate::world::World;
-use crate::{shop, skill};
+use crate::{shop, skill, trade};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -20,6 +20,8 @@ pub enum Command {
     Combine(RecipeId),
     /// 선체를 바꿉니다. 지금 선체의 가격의 일부를 돌려받습니다.
     ChangeHull(HullId),
+    /// 교역의 계약을 사서 첫 빈 칸에 답니다. 자기 진영의 본진에서만 삽니다.
+    Contract(TradeId),
     /// 스킬 포인트 하나를 이 스킬에 넣습니다.
     Learn(SkillId),
     /// 스킬을 씁니다.
@@ -56,6 +58,8 @@ pub enum Refusal {
     NotForSale,
     /// 조합의 재료 무기를 모두 달고 있지 않습니다.
     MissingParts,
+    /// 자기 진영의 본진이 가까이에 없습니다.
+    NoBaseInRange,
 }
 
 /// 배의 명령 하나를 처리합니다. 없는 배의 명령과 이미 처리한 순서 번호의 명령은 무시합니다.
@@ -82,6 +86,7 @@ pub(crate) fn apply(
         Command::BuyGear(gear) => shop::buy_gear(world, tuning, id, gear),
         Command::Combine(recipe) => shop::combine(world, tuning, id, recipe),
         Command::ChangeHull(hull) => shop::change_hull(world, tuning, id, hull),
+        Command::Contract(which) => trade::contract(world, tuning, id, which),
         Command::Learn(which) => skill::learn(world, tuning, id, which),
         Command::Cast(which) => skill::cast(world, tuning, tick, id, which),
     };

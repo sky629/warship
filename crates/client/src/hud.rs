@@ -158,8 +158,18 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
                 let gear = welcome.gear.get(usize::from(*gear));
                 gear.map(|gear| gear.name.as_str())
             }
+            Some(WireItem::Contract(trade) | WireItem::Cargo(trade)) => {
+                let trade = welcome.trades.get(usize::from(*trade));
+                trade.map(|trade| trade.name.as_str())
+            }
         };
-        lines += &format!("  [{}] {}", slot + 1, name.unwrap_or("?"));
+        // 계약은 교역항으로, 화물은 본진으로 가져갑니다.
+        let errand = match item {
+            Some(WireItem::Contract(_)) => " (contract: go to its port)",
+            Some(WireItem::Cargo(_)) => " (cargo: bring it to your base)",
+            _ => "",
+        };
+        lines += &format!("  [{}] {}{errand}", slot + 1, name.unwrap_or("?"));
     }
     lines += "\nSkills:";
     for (&id, (_, key)) in hull_skills(welcome, me).iter().zip(SKILL_KEYS) {
@@ -198,5 +208,6 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::NotOnThisHull => "this hull does not have that skill",
         WireRefusal::NotForSale => "that weapon is made by combining, not sold",
         WireRefusal::MissingParts => "mount every part of the recipe first",
+        WireRefusal::NoBaseInRange => "go near your base",
     }
 }

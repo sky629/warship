@@ -110,7 +110,7 @@ impl Minimap {
     }
 }
 
-/// 창의 오른쪽 위에 놓이는 상점 창의 자리(픽셀)입니다. 줄의 높이가 모두 같아서, 커서의 자리로 줄을 찾습니다.
+/// 창의 왼쪽 위에 놓이는 상점 창의 자리(픽셀)입니다. 줄의 높이가 모두 같아서, 커서의 자리로 줄을 찾습니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShopWindow {
     pub left: f32,
@@ -121,16 +121,16 @@ pub struct ShopWindow {
 impl ShopWindow {
     pub const WIDTH: f32 = 460.0;
     /// 줄 하나의 높이입니다.
-    pub const ROW: f32 = 22.0;
-    /// 창의 오른쪽 가장자리와 상점 창 사이의 간격입니다.
+    pub const ROW: f32 = 20.0;
+    /// 창의 왼쪽 가장자리와 상점 창 사이의 간격입니다.
     pub const MARGIN: f32 = 10.0;
     /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 줄 두 줄을 가리지 않습니다.
     pub const TOP: f32 = 60.0;
 
-    /// 너비가 `window_width`인 창에서, 줄이 `rows`개인 상점 창의 자리입니다.
-    pub fn in_window(window_width: f32, rows: usize) -> ShopWindow {
+    /// 줄이 `rows`개인 상점 창의 자리입니다.
+    pub fn with_rows(rows: usize) -> ShopWindow {
         ShopWindow {
-            left: window_width - Self::MARGIN - Self::WIDTH,
+            left: Self::MARGIN,
             top: Self::TOP,
             rows,
         }
@@ -232,17 +232,17 @@ mod tests {
     }
 
     #[test]
-    fn the_shop_window_sits_in_the_upper_right_corner_and_finds_the_row_under_the_cursor() {
-        let shop = ShopWindow::in_window(1000.0, 5);
-        assert_eq!((shop.left, shop.top, shop.height()), (530.0, 60.0, 110.0));
+    fn the_shop_window_sits_in_the_upper_left_corner_and_finds_the_row_under_the_cursor() {
+        let shop = ShopWindow::with_rows(5);
+        assert_eq!((shop.left, shop.top, shop.height()), (10.0, 60.0, 100.0));
 
-        assert_eq!(shop.row_at((530.0, 60.0)), Some(0));
-        assert_eq!(shop.row_at((989.0, 81.0)), Some(0));
-        assert_eq!(shop.row_at((700.0, 82.0)), Some(1));
-        assert_eq!(shop.row_at((700.0, 169.0)), Some(4));
-        assert_eq!(shop.row_at((700.0, 170.0)), None, "below the last row");
-        assert_eq!(shop.row_at((529.0, 100.0)), None);
-        assert_eq!(shop.row_at((990.0, 100.0)), None);
-        assert_eq!(shop.row_at((700.0, 59.0)), None, "the status lines");
+        assert_eq!(shop.row_at((10.0, 60.0)), Some(0));
+        assert_eq!(shop.row_at((469.0, 79.0)), Some(0));
+        assert_eq!(shop.row_at((200.0, 80.0)), Some(1));
+        assert_eq!(shop.row_at((200.0, 159.0)), Some(4));
+        assert_eq!(shop.row_at((200.0, 160.0)), None, "below the last row");
+        assert_eq!(shop.row_at((9.0, 100.0)), None);
+        assert_eq!(shop.row_at((470.0, 100.0)), None);
+        assert_eq!(shop.row_at((200.0, 59.0)), None, "the status lines");
     }
 }

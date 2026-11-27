@@ -8,6 +8,7 @@ use crate::input::PlayerInputs;
 use crate::ship::{self, Ship};
 use crate::shop;
 use crate::structures::{self, Structure};
+use crate::trade;
 use crate::tuning::Tuning;
 use crate::vision::{self, Sight};
 use crate::weapon::{self, Target};
@@ -105,7 +106,7 @@ impl Sim {
     /// Tick 하나를 실행합니다. 대전이 끝난 뒤에는 아무 일도 하지 않습니다.
     ///
     /// 가라앉았던 배가 다시 나타나고, 항구가 NPC 배를 내보내고, 배와 NPC 배가 움직이고, 진영별 시야를 정하고,
-    /// 쏠 수 있는 무기가 쏘고, 닿을 때가 된 포탄이 피해를 주고, 보상과 수입을 주고, 상점의 배를 수리하고, 선원 장비가 배를 수리하고, 사라진 것을 지우고, 승패를 판정합니다.
+    /// 쏠 수 있는 무기가 쏘고, 닿을 때가 된 포탄이 피해를 주고, 보상과 수입을 주고, 교역의 화물을 싣고 내리고, 상점의 배를 수리하고, 선원 장비가 배를 수리하고, 사라진 것을 지우고, 승패를 판정합니다.
     /// 무기는 이번 Tick의 피해가 들어가기 전의 상태를 보고 쏘므로, 같은 Tick에 가라앉는 배도 그 Tick의 사격은 마칩니다.
     pub fn step(&mut self, inputs: &PlayerInputs) {
         if self.outcome.is_some() {
@@ -122,6 +123,7 @@ impl Sim {
         let kills = weapon::land_impacts(world, tuning, self.tick);
         economy::pay_bounties(world, tuning, &kills);
         economy::pay_income(world, tuning, self.tick);
+        trade::haul(world, tuning);
         shop::repair(world, tuning, self.tick);
         ship::crew_repairs(world, tuning, self.tick);
         creep::remove_sunk(world);

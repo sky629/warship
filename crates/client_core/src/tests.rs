@@ -9,7 +9,7 @@ use warship_protocol::{
     WireStructure, WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2,
     WireWeapon,
 };
-use warship_protocol::{SeatToken, WireMember, WireRecipe};
+use warship_protocol::{SeatToken, WireMember, WireRecipe, WireTrade};
 use warship_rules::Vec2;
 
 use crate::{Phase, Session, SkillView, shop_rows};
@@ -77,6 +77,8 @@ fn welcome() -> Welcome {
         }],
         lanes: Vec::new(),
         islands: Vec::new(),
+        trades: Vec::new(),
+        ports: Vec::new(),
     }
 }
 
@@ -516,6 +518,12 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
         result: 1,
         price: 150,
     });
+    welcome.trades.push(WireTrade {
+        name: "salt".to_string(),
+        price: 60,
+        reward: 90,
+        port: 1,
+    });
 
     let rows = shop_rows(&welcome);
 
@@ -533,6 +541,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             "Hulls",
             "  1  small  0g  (1000 HP, 2 mounts)",
             "  2  big  400g  (2000 HP, 4 mounts)",
+            "Trade (at your base)",
+            "  salt  60g  (port 2, pays 90g)",
         ]
     );
     let orders: Vec<Option<WireCommand>> = rows.iter().map(|row| row.order).collect();
@@ -549,6 +559,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             None,
             Some(WireCommand::ChangeHull { hull: 0 }),
             Some(WireCommand::ChangeHull { hull: 1 }),
+            None,
+            Some(WireCommand::Contract { trade: 0 }),
         ]
     );
     let costs: Vec<Option<u32>> = rows.iter().map(|row| row.cost).collect();
@@ -564,7 +576,9 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             Some(150),
             None,
             None,
-            None
+            None,
+            None,
+            Some(60)
         ]
     );
 }

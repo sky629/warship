@@ -15,6 +15,7 @@ use crate::net::{CurrentFrame, Net};
 const BACK: Color = Color::srgba(0.02, 0.08, 0.12, 0.85);
 const EDGE: Color = Color::srgb(0.35, 0.55, 0.65);
 const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
+const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
 const RED: Color = Color::srgb(0.9, 0.3, 0.25);
 const BLUE: Color = Color::srgb(0.3, 0.55, 1.0);
 const MINE: Color = Color::srgb(1.0, 1.0, 1.0);
@@ -103,7 +104,7 @@ pub fn show_minimap(
     });
 }
 
-/// 미니맵에 놓을 점의 자리, 크기, 색입니다. 나중에 놓는 점이 위에 그려지므로 섬, 건물, NPC 배, 배의 순서입니다.
+/// 미니맵에 놓을 점의 자리, 크기, 색입니다. 나중에 놓는 점이 위에 그려지므로 섬, 교역항, 건물, NPC 배, 배의 순서입니다.
 fn dots(minimap: &Minimap, welcome: &Welcome, frame: &Frame) -> Vec<Dot> {
     let square = |side: f32| (side, side);
     let mut dots = Vec::new();
@@ -111,6 +112,10 @@ fn dots(minimap: &Minimap, welcome: &Welcome, frame: &Frame) -> Vec<Dot> {
         let center = warship_rules::Vec2::new(island.center.x, island.center.y);
         let side = island.radius * 2.0 * Minimap::PX_PER_TILE * 0.85;
         dots.push((minimap.dot(center), square(side), ISLAND));
+    }
+    for port in &welcome.ports {
+        let center = warship_rules::Vec2::new(port.x, port.y);
+        dots.push((minimap.dot(center), square(6.0), PORT));
     }
     for site in &frame.structures {
         let side = match site.kind {

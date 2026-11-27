@@ -7,6 +7,7 @@ use crate::ids::{CreepId, ShipId, StructureId, Team};
 use crate::math::Vec2;
 use crate::ship::{Life, Ship};
 use crate::structures::Structure;
+use crate::trade;
 use crate::weapon::{Impact, Target};
 
 #[derive(Default)]
@@ -46,7 +47,7 @@ impl World {
     }
 
     /// 표적의 HP를 줄이고, 이 피해로 HP가 0이 되었는지 돌려줍니다. 이미 사라졌거나 가라앉은 표적이면 아무 일도 하지 않습니다.
-    /// HP가 0이 된 배는 가라앉고 `respawn_at` Tick에 다시 나타납니다.
+    /// HP가 0이 된 배는 가라앉고 `respawn_at` Tick에 다시 나타납니다. 가라앉는 배는 교역의 계약과 화물을 잃습니다.
     pub fn damage(&mut self, target: Target, amount: u32, respawn_at: u64) -> bool {
         let hp = match target {
             Target::Ship(id) => {
@@ -56,6 +57,7 @@ impl World {
                 ship.hp = ship.hp.saturating_sub(amount);
                 if ship.hp == 0 {
                     ship.life = Life::Sunk { respawn_at };
+                    trade::lose_freight(ship);
                 }
                 ship.hp
             }

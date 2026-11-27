@@ -27,6 +27,7 @@ pub struct Welcome {
     pub gear: Vec<WireGear>,
     /// 조합 표입니다.
     pub recipes: Vec<WireRecipe>,
+    pub trades: Vec<WireTrade>,
     /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서이고, 선체마다 이 가운데 일부를 씁니다.
     pub skills: Vec<WireSkillSpec>,
     pub tower: WireStructureSpec,
@@ -38,6 +39,8 @@ pub struct Welcome {
     pub lanes: Vec<Vec<WireVec2>>,
     /// 배가 지나가지 못하는 섬입니다.
     pub islands: Vec<WireIsland>,
+    /// 교역항의 자리입니다.
+    pub ports: Vec<WireVec2>,
 }
 
 /// 원 모양의 섬입니다.
@@ -83,6 +86,15 @@ pub struct WireRecipe {
     pub parts: Vec<u16>,
     pub result: u16,
     pub price: u32,
+}
+
+/// 교역 하나입니다. `port`는 `Welcome::ports`의 자리입니다.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireTrade {
+    pub name: String,
+    pub price: u32,
+    pub reward: u32,
+    pub port: u16,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -207,6 +219,22 @@ impl Welcome {
                     result: recipe.result.0,
                     price: recipe.price,
                 })
+                .collect(),
+            trades: tuning
+                .trades
+                .iter()
+                .map(|trade| WireTrade {
+                    name: trade.name.to_string(),
+                    price: trade.price,
+                    reward: trade.reward,
+                    port: trade.port as u16,
+                })
+                .collect(),
+            ports: tuning
+                .map
+                .ports
+                .iter()
+                .map(|port| WireVec2::new(port.x, port.y))
                 .collect(),
             tower: structure(StructureKind::Tower),
             harbor: structure(StructureKind::Harbor),

@@ -1,4 +1,4 @@
-//! 상점 창에 보여 줄 줄입니다. 무기, 장비, 조합, 선체의 순서이고, 묶음마다 제목 줄이 있습니다.
+//! 상점 창에 보여 줄 줄입니다. 무기, 장비, 조합, 선체, 교역의 순서이고, 묶음마다 제목 줄이 있습니다.
 
 use warship_protocol::{Welcome, WireCommand};
 
@@ -83,6 +83,20 @@ pub fn shop_rows(welcome: &Welcome) -> Vec<ShopRow> {
         );
         let order = WireCommand::ChangeHull { hull: index as u16 };
         rows.push(ShopRow::item(label, order, None));
+    }
+    rows.push(ShopRow::heading("Trade (at your base)"));
+    for (index, trade) in welcome.trades.iter().enumerate() {
+        let label = format!(
+            "{}  {}g  (port {}, pays {}g)",
+            trade.name,
+            trade.price,
+            trade.port + 1,
+            trade.reward
+        );
+        let order = WireCommand::Contract {
+            trade: index as u16,
+        };
+        rows.push(ShopRow::item(label, order, Some(trade.price)));
     }
     rows
 }

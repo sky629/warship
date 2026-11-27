@@ -50,7 +50,7 @@ pub(crate) fn repair(world: &mut World, tuning: &Tuning, tick: u64) {
 }
 
 /// 상점을 쓸 수 있는 배를 돌려줍니다. 가라앉은 배와 상점에서 먼 배는 거절합니다.
-fn customer<'a>(
+pub(crate) fn customer<'a>(
     world: &'a mut World,
     tuning: &Tuning,
     id: ShipId,
@@ -113,7 +113,12 @@ fn keep_hp_share(ship: &mut Ship, tuning: &Tuning, before: u32) {
 }
 
 /// 값을 내고 아이템을 선체의 첫 빈 칸에 답니다. 빈 칸이 없거나 골드가 모자라면 거절합니다.
-fn mount_bought(ship: &mut Ship, tuning: &Tuning, item: Item, price: u32) -> Result<(), Refusal> {
+pub(crate) fn mount_bought(
+    ship: &mut Ship,
+    tuning: &Tuning,
+    item: Item,
+    price: u32,
+) -> Result<(), Refusal> {
     let usable = &mut ship.mounts[..tuning.hull(ship.hull).mounts];
     let free = usable.iter_mut().find(|mount| mount.is_none());
     let free = free.ok_or(Refusal::NoFreeMount)?;
@@ -139,6 +144,9 @@ pub(crate) fn sell(
     let price = match mount.item {
         Item::Weapon(weapon) => tuning.weapons[usize::from(weapon.0)].price,
         Item::Gear(gear) => tuning.gear_of(gear).map_or(0, |gear| gear.price),
+        Item::Contract(trade) | Item::Cargo(trade) => {
+            tuning.trade_of(trade).map_or(0, |trade| trade.price)
+        }
     };
     ship.gold += refund(price, tuning);
     keep_hp_share(ship, tuning, before);

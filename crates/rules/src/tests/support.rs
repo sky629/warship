@@ -3,7 +3,9 @@
 
 use crate::command::{Command, Refusal};
 use crate::creep::Creep;
-use crate::ids::{CreepId, GearId, HullId, RecipeId, ShipId, SkillId, StructureId, Team, WeaponId};
+use crate::ids::{
+    CreepId, GearId, HullId, RecipeId, ShipId, SkillId, StructureId, Team, TradeId, WeaponId,
+};
 use crate::input::{PlayerInput, PlayerInputs, Waypoint};
 use crate::math::Vec2;
 use crate::ship::{Item, Mount, Ship};
@@ -11,8 +13,8 @@ use crate::sim::Sim;
 use crate::structures::{Structure, StructureKind};
 use crate::tuning::{
     CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits, HullSpec, MapSpec, Recipe,
-    ShipTuning, ShopTuning, SkillEffect, SkillSpec, StructureSpec, StructureTable, Tuning,
-    WeaponSpec,
+    ShipTuning, ShopTuning, SkillEffect, SkillSpec, StructureSpec, StructureTable, TradeSpec,
+    Tuning, WeaponSpec,
 };
 
 /// 사거리 5, 피해 10, 쿨다운 10Tick이고 배와 건물을 쏘는 포입니다. 포탄은 한 Tick에 1타일을 납니다.
@@ -26,6 +28,8 @@ pub(crate) const PLANKING: GearId = GearId(0);
 pub(crate) const SAILS: GearId = GearId(1);
 pub(crate) const CREW: GearId = GearId(2);
 pub(crate) const PLATING: GearId = GearId(3);
+/// 값이 100이고 (30, 10)의 교역항에서 화물을 실어 오면 250골드를 받는 교역입니다.
+pub(crate) const TRADE: TradeId = TradeId(0);
 pub(crate) const BIG_HULL: HullId = HullId(1);
 pub(crate) const REPAIR: SkillId = SkillId(0);
 pub(crate) const SALVO: SkillId = SkillId(1);
@@ -50,6 +54,7 @@ impl Scenario {
     /// 선체는 HP 1000에 칸 2개인 0번(가격 0)과 HP 2000에 칸 4개인 1번(가격 400)입니다. 무기와 장비가 같은 칸을 씁니다.
     /// 장비의 가격은 200이고, 0번은 최대 HP 300, 1번은 속도 25%, 2번은 1초에 HP 5 회복, 3번은 받는 피해 20% 감소입니다.
     /// `GUN` 두 개와 50골드를 `BIG_GUN`(피해 30, 값 250) 하나로 조합할 수 있습니다.
+    /// 교역(`TRADE`)은 계약의 값이 100이고, (30, 10)의 교역항에서 5타일 안에 가면 화물을 싣고, 본진에 돌아오면 250골드를 받습니다.
     /// 누적 경험치 100에 2레벨, 300에 3레벨이 되고, 경험치는 10타일 안의 배가 나누어 받습니다.
     /// 스킬은 쿨다운 100Tick에 2단계까지이고, 0번은 단계마다 HP 100 회복, 1번(`SALVO`)은 4타일 안의 적에 단계마다 피해 30,
     /// 2번(`SPRINT`)은 20Tick 동안 단계마다 속도 50% 증가, 3번(`RELOAD`)은 모든 무기의 쿨다운 제거,
@@ -298,6 +303,12 @@ fn open_sea_tuning() -> Tuning {
             result: BIG_GUN,
             price: 50,
         }],
+        trades: vec![TradeSpec {
+            name: "trade",
+            price: 100,
+            reward: 250,
+            port: 0,
+        }],
         shop: ShopTuning {
             range: 5.0,
             refund_percent: 50,
@@ -332,6 +343,7 @@ fn open_sea_tuning() -> Tuning {
             lanes: Vec::new(),
             structures: Vec::new(),
             islands: Vec::new(),
+            ports: vec![Vec2::new(30.0, 10.0)],
         },
     }
 }

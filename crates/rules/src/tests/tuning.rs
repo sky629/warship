@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 34] = [
+    let broken: [fn(&mut Tuning); 38] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -79,6 +79,11 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.map.islands[1].center = Vec2::new(24.5, 24.0),
         |t| t.map.islands[1].center = Vec2::new(9.0, 22.0),
         |t| t.map.islands[1].center = Vec2::new(30.0, 34.0),
+        // 없는 교역항의 교역, 값보다 보상이 크지 않은 교역, 맵 밖의 교역항, 섬 위의 교역항입니다.
+        |t| t.trades[0].port = 9,
+        |t| t.trades[0].reward = t.trades[0].price,
+        |t| t.map.ports[0] = Vec2::new(65.0, 24.0),
+        |t| t.map.ports[0] = Vec2::new(32.0, 24.0),
     ];
     for adjust in broken {
         let mut tuning = Tuning::default();
