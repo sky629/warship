@@ -100,7 +100,7 @@ pub fn install(app: &mut App, launch: Result<LaunchOptions, String>) {
         });
 }
 
-/// 입장 요청으로 접속을 열고 방의 화면으로 갑니다. 기기가 그 방의 자리를 기억하면 그 표식을 냅니다.
+/// 입장 요청으로 접속을 열고 방의 화면으로 갑니다. 기기가 이 서버의 그 방의 자리를 기억하면 그 표식을 냅니다.
 /// 접속을 열지 못하면 그 이유로 끝난 접속 상태가 되고, 방의 화면이 이유를 보여 줍니다.
 pub fn open_room(world: &mut World) {
     let Some(Pending(request)) = world.remove_resource::<Pending>() else {
@@ -108,7 +108,7 @@ pub fn open_room(world: &mut World) {
     };
     let mut device = world.resource_mut::<Device>();
     let room = request.room.as_deref();
-    let token = device.memory.token_for(room);
+    let token = device.memory.token_for(&device.server, room);
     let mut session = Session::new(room, &request.name, token);
     info!(
         "connecting to {} ({})",
@@ -181,8 +181,11 @@ pub fn pump_network(
     }
     let seat = session.welcome().and_then(|welcome| {
         let room = RoomCode::parse(&welcome.room).ok()?;
-        let token = welcome.token;
-        Some(RememberedSeat { room, token })
+        Some(RememberedSeat {
+            server: device.server.clone(),
+            room,
+            token: welcome.token,
+        })
     });
     if seat.is_some() && seat != device.memory.seat {
         device.memory.room = seat.as_ref().map(|seat| seat.room.clone());

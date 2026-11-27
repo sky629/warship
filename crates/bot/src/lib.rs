@@ -146,7 +146,9 @@ fn front(sim: &Sim, ship: &Ship) -> Option<Vec2> {
     if map.lanes.is_empty() {
         return None;
     }
-    let lane = ship.id.0 as usize % map.lanes.len();
+    // 진영 안에서 번호가 몇 번째로 작은 배인지로 라인을 나눕니다. 그래서 한 진영의 배가 모든 라인에 고르게 갑니다.
+    let ahead = |other: &&Ship| other.team == ship.team && other.id < ship.id;
+    let lane = sim.ships().filter(ahead).count() % map.lanes.len();
     let entry = map.path_point(ship.team, lane, 0)?;
     let goal = map.base_of(ship.team.enemy()).unwrap_or(entry);
     let mine = sim
@@ -223,6 +225,23 @@ mod tests {
             assert!(weapons >= 2, "ship {id:?} carries {weapons} weapon(s)");
             assert_eq!(ship.skill_points(sim.tuning()), 0);
             assert_eq!(ship.refusal, None, "ship {id:?}");
+        }
+    }
+
+    #[test]
+    fn the_bots_of_a_team_split_over_the_lanes() {
+        let (mut sim, ships) = full_room();
+        // 첫 NPC 배가 나와서 두 진영이 라인의 가운데에서 만날 때까지 진행합니다.
+        play(&mut sim, &ships, 300);
+
+        let middle = sim.tuning().map.height / 2.0;
+        for team in Team::ALL {
+            let mine = sim.ships().filter(|ship| ship.team == team);
+            let north = mine.filter(|ship| ship.pos.y > middle).count();
+            assert!(
+                (2..=3).contains(&north),
+                "{team:?}: {north} of 5 in the north"
+            );
         }
     }
 

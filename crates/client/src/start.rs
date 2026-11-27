@@ -98,7 +98,7 @@ fn start_lines(form: &StartForm) -> String {
         }
     };
     let mut lines = format!(
-        "WARSHIP\n\n{}\n{}\n\nTab: next field   Enter: join   (an empty room code opens a new room)",
+        "WARSHIP\n\n{}\n{}\n\nTab: next field   Enter: join\nAn empty room code opens a new room",
         field("Name", &form.name, Field::Name),
         field("Room", &form.room, Field::Room),
     );

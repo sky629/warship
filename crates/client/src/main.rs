@@ -2,7 +2,7 @@
 //!
 //! PC: `cargo run -p warship_client` 또는 `cargo run -p warship_client -- --room duel --name Kang --server ws://127.0.0.1:7777`
 //! `--new-room`을 주면 서버가 만든 새 방에 들어가고, 화면 왼쪽 위에 그 방의 코드가 나옵니다.
-//! 웹: `cd crates/client && trunk serve` 뒤에 `http://127.0.0.1:8080/` 열기 (기본 서버와 기본 방에 들어갑니다)
+//! 웹: `cd crates/client && trunk serve` 뒤에 `http://127.0.0.1:8080/` 열기. 주소에 `?room=duel&name=Kang&server=ws://127.0.0.1:7777`을 붙이면 바로 입장합니다.
 //!
 //! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 위에서 내려다본 도형으로 그립니다.
 //! 오른쪽 클릭으로 배가 갈 지점을 정합니다. 무기는 스스로 쏩니다. 상점과 스킬은 단축키로 씁니다.
@@ -78,8 +78,10 @@ fn read_launch_options() -> Result<LaunchOptions, String> {
     LaunchOptions::parse(&args)
 }
 
-/// 웹에서는 기본 서버를 쓰고, 시작 화면에서 이름과 방 코드를 받습니다.
+/// 웹에서는 페이지 주소의 쿼리(`?room=duel&name=Kang&server=wss://example.test`)를 읽습니다.
+/// 쿼리가 없으면 기본 서버를 쓰고, 시작 화면에서 이름과 방 코드를 받습니다.
 #[cfg(target_arch = "wasm32")]
 fn read_launch_options() -> Result<LaunchOptions, String> {
-    Ok(LaunchOptions::default())
+    let search = web_sys::window().and_then(|window| window.location().search().ok());
+    LaunchOptions::from_query(&search.unwrap_or_default())
 }

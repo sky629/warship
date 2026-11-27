@@ -1,4 +1,4 @@
-//! 실행 인자를 해석합니다.
+//! 실행 인자를 해석합니다. PC는 명령줄의 인자를, 웹은 페이지 주소의 쿼리를 읽습니다. 두 쪽이 같은 검사를 거칩니다.
 
 use warship_protocol::PlayerName;
 
@@ -50,34 +50,87 @@ impl LaunchOptions {
                 continue;
             }
             let value = rest.next().ok_or(format!("{flag} needs a value"))?;
-            match flag.as_str() {
-                "--server" if value.starts_with("ws://") || value.starts_with("wss://") => {
-                    options.server = value.clone();
-                }
-                "--server" => {
-                    return Err(format!(
-                        "the server {value} must start with ws:// or wss://"
-                    ));
-                }
-                "--room" => options.room = RoomChoice::Code(value.clone()),
-                "--name" => {
-                    let name = PlayerName::parse(value).map_err(|err| err.to_string())?;
-                    options.name = Some(name.as_str().to_string());
-                }
-                // 파일 이름에 들어가므로 글자와 숫자만 받습니다.
-                "--profile" if value.chars().all(|c| c.is_ascii_alphanumeric()) => {
-                    options.profile = Some(value.clone());
-                }
-                "--profile" => {
-                    return Err(format!(
-                        "the profile {value} may use letters and digits only"
-                    ));
-                }
-                _ => return Err(format!("unknown option {flag}")),
+            let key = flag.strip_prefix("--");
+            let key = key.ok_or(format!("unknown option {flag}"))?;
+            options.set(key, value)?;
+        }
+        Ok(options)
+    }
+
+    /// 페이지 주소의 쿼리(`?room=duel&name=Kang&server=wss://example.test`)를 읽습니다. 주지 않은 값은 기본값입니다.
+    /// `room`을 주면 시작 화면 없이 바로 입장합니다. 값이 없는 `new-room`은 서버가 만든 새 방에 들어갑니다.
+    pub fn from_query(query: &str) -> Result<LaunchOptions, String> {
+        let mut options = LaunchOptions::default();
+        let pairs = query.trim_start_matches('?').split('&');
+        for pair in pairs.filter(|pair| !pair.is_empty()) {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            if key == "new-room" {
+                options.room = RoomChoice::New;
+            } else {
+                options.set(key, &decode(value))?;
             }
         }
         Ok(options)
     }
+
+    /// 이름이 `key`인 값 하나를 검사해서 넣습니다.
+    fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
+        match key {
+            "server" if value.starts_with("ws://") || value.starts_with("wss://") => {
+                self.server = value.to_string();
+            }
+            "server" => {
+                return Err(format!(
+                    "the server {value} must start with ws:// or wss://"
+                ));
+            }
+            "room" => self.room = RoomChoice::Code(value.to_string()),
+            "name" => {
+                let name = PlayerName::parse(value).map_err(|err| err.to_string())?;
+                self.name = Some(name.as_str().to_string());
+            }
+            // 파일 이름에 들어가므로 글자와 숫자만 받습니다.
+            "profile" if value.chars().all(|c| c.is_ascii_alphanumeric()) => {
+                self.profile = Some(value.to_string());
+            }
+            "profile" => {
+                return Err(format!(
+                    "the profile {value} may use letters and digits only"
+                ));
+            }
+            _ => return Err(format!("unknown option {key}")),
+        }
+        Ok(())
+    }
+}
+
+/// 쿼리의 값에서 `+`를 공백으로, `%`와 16진수 두 글자를 그 바이트로 바꿉니다. 16진수가 아닌 `%`는 그대로 둡니다.
+/// 바꾼 결과가 UTF-8이 아니면 잘못된 바이트를 대체 문자로 바꿉니다. 그 값은 이름이나 방 코드의 검사에서 걸립니다.
+fn decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = bytes.get(at + 1..at + 3).and_then(|pair| {
+            let pair = std::str::from_utf8(pair).ok()?;
+            u8::from_str_radix(pair, 16).ok()
+        });
+        match (bytes[at], hex) {
+            (b'%', Some(byte)) => {
+                decoded.push(byte);
+                at += 3;
+            }
+            (b'+', _) => {
+                decoded.push(b' ');
+                at += 1;
+            }
+            (byte, _) => {
+                decoded.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
 }
 
 #[cfg(test)]
@@ -119,11 +172,37 @@ mod tests {
     }
 
     #[test]
+    fn a_page_query_gives_the_same_options_as_the_arguments() {
+        assert_eq!(LaunchOptions::from_query(""), Ok(LaunchOptions::default()));
+        assert_eq!(LaunchOptions::from_query("?"), Ok(LaunchOptions::default()));
+
+        let query = "?room=duel&name=Kang+Lee&server=wss%3A%2F%2Fexample.test";
+        let options = LaunchOptions::from_query(query).unwrap();
+        assert_eq!(options.room, RoomChoice::Code("duel".to_string()));
+        assert_eq!(options.name.as_deref(), Some("Kang Lee"));
+        assert_eq!(options.server, "wss://example.test");
+
+        let options = LaunchOptions::from_query("?new-room&name=Kang%20Lee").unwrap();
+        assert_eq!(options.room, RoomChoice::New);
+        assert_eq!(options.name.as_deref(), Some("Kang Lee"));
+    }
+
+    #[test]
+    fn a_broken_page_query_is_refused() {
+        assert!(LaunchOptions::from_query("?name=K%40NG").is_err());
+        assert!(LaunchOptions::from_query("?server=http://example.test").is_err());
+        assert!(LaunchOptions::from_query("?volume=3").is_err());
+        // 16진수가 아닌 `%`는 그대로 남아서 이름의 검사에 걸립니다.
+        assert!(LaunchOptions::from_query("?name=100%").is_err());
+    }
+
+    #[test]
     fn broken_arguments_are_refused() {
         assert!(parse(&["--room"]).is_err());
         assert!(parse(&["--server", "http://example.test"]).is_err());
         assert!(parse(&["--name", "K@NG"]).is_err());
         assert!(parse(&["--profile", "../other"]).is_err());
         assert!(parse(&["--port", "7777"]).is_err());
+        assert!(parse(&["room", "duel"]).is_err());
     }
 }
