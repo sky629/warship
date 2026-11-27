@@ -180,18 +180,25 @@ fn draw_hp(gizmos: &mut Gizmos, center: Vec2, fraction: f32) {
     gizmos.line_2d(left, left + half * (2.0 * fraction.clamp(0.0, 1.0)), HP);
 }
 
-/// 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과, 방에 있는 사람의 이름을 화면 왼쪽 위에 글자로 보여 줍니다.
+/// 방 안에서 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과, 방에 있는 사람의 이름을 화면 왼쪽 위에 글자로 보여 줍니다.
 pub fn show_status(
-    net: NonSend<Net>,
+    net: Option<NonSend<Net>>,
     frame: Res<CurrentFrame>,
     mut text: Single<&mut Text, With<StatusText>>,
 ) {
-    let line = match (net.session.phase(), net.session.welcome()) {
+    let line = net.map_or(String::new(), |net| status_line(&net, frame.0.as_ref()));
+    if text.0 != line {
+        text.0 = line;
+    }
+}
+
+fn status_line(net: &Net, frame: Option<&Frame>) -> String {
+    match (net.session.phase(), net.session.welcome()) {
         (Phase::Connecting, _) => "Connecting...".to_string(),
         (Phase::Joining, _) => "Joining...".to_string(),
         (Phase::Playing, Some(welcome)) => {
             let mut line = format!("Room {}   Team {:?}", welcome.room, welcome.team);
-            if let Some(frame) = &frame.0 {
+            if let Some(frame) = frame {
                 let me = frame.me.as_ref();
                 line += &format!("   Gold {}", me.map_or(0, |me| me.gold));
                 line += &match (frame.outcome, me.and_then(|me| me.respawn_secs)) {
@@ -201,7 +208,7 @@ pub fn show_status(
                     (Some(WireOutcome::Victory(_)), _) => "   DEFEAT".to_string(),
                     (Some(WireOutcome::Draw), _) => "   DRAW".to_string(),
                     (None, Some(secs)) => format!("   Sunk: back in {secs:.0}s"),
-                    (None, None) => "   Right-click: sail".to_string(),
+                    (None, None) => "   Right-click: sail   Esc: leave".to_string(),
                 };
             }
             // 둘째 줄은 방에 있는 사람의 이름입니다. 접속이 끊긴 사람에는 표시를 붙입니다.
@@ -214,9 +221,6 @@ pub fn show_status(
         }
         (Phase::Reconnecting, _) => "Connection lost. Reconnecting...".to_string(),
         (Phase::Playing, None) => String::new(),
-        (Phase::Ended(reason), _) => format!("Disconnected: {reason}"),
-    };
-    if text.0 != line {
-        text.0 = line;
+        (Phase::Ended(reason), _) => format!("Disconnected: {reason}\nEsc: back to the start"),
     }
 }

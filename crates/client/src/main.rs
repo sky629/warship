@@ -6,14 +6,27 @@
 //!
 //! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 위에서 내려다본 도형으로 그립니다.
 //! 오른쪽 클릭으로 배가 갈 지점을 정합니다. 무기는 스스로 쏩니다. 상점과 스킬은 단축키로 씁니다.
-//! 읽는 순서는 `main`(한 프레임의 순서), `net`, `draw`, `hud`입니다.
+//! 실행 인자 없이 시작하면 시작 화면에서 이름과 방 코드를 받습니다. 방 안에서 Esc를 누르면 시작 화면으로 돌아옵니다.
+//! 기기는 마지막 이름과 방, 자리의 표식을 기억합니다. 그래서 다시 실행해서 같은 방에 들어가면 같은 배로 돌아갑니다.
+//! 읽는 순서는 `main`(한 프레임의 순서), `start`, `net`, `storage`, `draw`, `hud`입니다.
 
 mod draw;
 mod hud;
 mod net;
+mod start;
+mod storage;
 
 use bevy::prelude::*;
 use warship_client_core::LaunchOptions;
+
+/// 지금 보이는 화면입니다.
+#[derive(Resource, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    /// 이름과 방 코드를 받는 시작 화면입니다.
+    Start,
+    /// 방의 화면입니다. 접속 상태(`net::Net`)가 있습니다.
+    Room,
+}
 
 fn main() {
     let launch = read_launch_options();
@@ -29,18 +42,29 @@ fn main() {
         ..default()
     }));
     net::install(&mut app, launch);
+    let in_room = resource_equals(Screen::Room);
     app.insert_resource(ClearColor(draw::SEA))
-        .add_systems(Startup, (draw::setup, hud::setup))
+        .insert_resource(Screen::Start)
+        .add_systems(Startup, (draw::setup, hud::setup, start::setup))
         .add_systems(
             Update,
             (
-                net::pump_network,
-                net::order_moves,
-                hud::order_commands,
-                draw::center_camera,
-                draw::draw_room,
+                start::type_keys.run_if(resource_equals(Screen::Start)),
+                net::open_room.run_if(resource_exists::<start::Pending>),
+                (
+                    net::pump_network,
+                    net::order_moves,
+                    hud::order_commands,
+                    net::leave_room,
+                    draw::center_camera,
+                    draw::draw_room,
+                )
+                    .chain()
+                    .run_if(in_room),
+                net::close_room.run_if(resource_exists::<net::Closing>),
                 draw::show_status,
                 hud::show_hud,
+                start::show_start,
             )
                 .chain(),
         )
@@ -54,7 +78,7 @@ fn read_launch_options() -> Result<LaunchOptions, String> {
     LaunchOptions::parse(&args)
 }
 
-/// 웹에서는 기본 서버와 기본 방을 씁니다.
+/// 웹에서는 기본 서버를 쓰고, 시작 화면에서 이름과 방 코드를 받습니다.
 #[cfg(target_arch = "wasm32")]
 fn read_launch_options() -> Result<LaunchOptions, String> {
     Ok(LaunchOptions::default())

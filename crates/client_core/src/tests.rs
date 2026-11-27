@@ -118,7 +118,7 @@ fn snapshot(tick: u64, ships: Vec<WireShip>) -> ServerMsg {
 
 /// 입장을 마친 접속입니다.
 fn playing() -> Session {
-    let mut session = Session::new(Some("test"), "KANG");
+    let mut session = Session::new(Some("test"), "KANG", None);
     session.handle(ClientEvent::Connected, 0.0);
     session.handle(
         ClientEvent::Message(ServerMsg::Welcome(Box::new(welcome()))),
@@ -133,7 +133,7 @@ fn receive(session: &mut Session, at: f64, msg: ServerMsg) {
 
 #[test]
 fn a_session_joins_when_the_link_opens_and_plays_after_the_welcome() {
-    let mut session = Session::new(Some("test"), "KANG");
+    let mut session = Session::new(Some("test"), "KANG", None);
     assert_eq!(session.phase(), &Phase::Connecting);
     assert_eq!(session.sail_to(1.0, 1.0), None, "not in a room yet");
 
@@ -156,7 +156,7 @@ fn a_session_joins_when_the_link_opens_and_plays_after_the_welcome() {
 
 #[test]
 fn a_rejection_and_a_link_lost_before_the_welcome_end_the_session_with_the_reason() {
-    let mut session = Session::new(Some("test"), "KANG");
+    let mut session = Session::new(Some("test"), "KANG", None);
     session.handle(ClientEvent::Connected, 0.0);
     let reason = RejectReason::RoomFull { capacity: 10 };
     receive(&mut session, 0.0, ServerMsg::JoinRejected { reason });
@@ -165,7 +165,7 @@ fn a_rejection_and_a_link_lost_before_the_welcome_end_the_session_with_the_reaso
         &Phase::Ended("The room is full (10 ships)".to_string())
     );
 
-    let mut session = Session::new(Some("test"), "KANG");
+    let mut session = Session::new(Some("test"), "KANG", None);
     session.handle(ClientEvent::Connected, 0.0);
     let lost = ClientEvent::Disconnected {
         reason: "the server is gone".to_string(),
@@ -322,7 +322,7 @@ fn the_frame_shows_creeps_structures_gold_the_respawn_time_and_the_outcome() {
 
 #[test]
 fn every_command_carries_the_next_sequence_number() {
-    let mut session = Session::new(Some("test"), "KANG");
+    let mut session = Session::new(Some("test"), "KANG", None);
     assert_eq!(session.command(WireCommand::Sell { slot: 0 }), None);
     let mut session = playing();
 
@@ -387,7 +387,7 @@ fn lose_link(session: &mut Session, now: f64) {
 
 #[test]
 fn a_session_that_loses_its_link_in_a_room_comes_back_with_its_seat_token() {
-    let mut session = Session::new(None, "KANG");
+    let mut session = Session::new(None, "KANG", None);
     session.handle(ClientEvent::Connected, 0.0);
     receive(&mut session, 0.0, ServerMsg::Welcome(Box::new(welcome())));
 
@@ -419,7 +419,7 @@ fn a_session_that_loses_its_link_in_a_room_comes_back_with_its_seat_token() {
 
 #[test]
 fn a_session_keeps_trying_for_a_minute_and_then_ends() {
-    let mut session = Session::new(None, "KANG");
+    let mut session = Session::new(None, "KANG", None);
     session.handle(ClientEvent::Connected, 0.0);
     receive(&mut session, 0.0, ServerMsg::Welcome(Box::new(welcome())));
     lose_link(&mut session, 10.0);
@@ -437,11 +437,11 @@ fn a_session_keeps_trying_for_a_minute_and_then_ends() {
 
 #[test]
 fn a_session_that_never_joined_or_lost_its_seat_does_not_come_back() {
-    let mut early = Session::new(None, "KANG");
+    let mut early = Session::new(None, "KANG", None);
     lose_link(&mut early, 1.0);
     assert!(matches!(early.phase(), Phase::Ended(_)));
 
-    let mut replaced = Session::new(None, "KANG");
+    let mut replaced = Session::new(None, "KANG", None);
     replaced.handle(ClientEvent::Connected, 0.0);
     receive(&mut replaced, 0.0, ServerMsg::Welcome(Box::new(welcome())));
     receive(&mut replaced, 5.0, ServerMsg::SeatTakenOver);
@@ -452,7 +452,7 @@ fn a_session_that_never_joined_or_lost_its_seat_does_not_come_back() {
 
 #[test]
 fn a_session_in_a_room_pings_every_five_seconds_and_keeps_the_roster() {
-    let mut session = Session::new(None, "KANG");
+    let mut session = Session::new(None, "KANG", None);
     assert_eq!(session.ping(100.0), None, "not in a room");
     session.handle(ClientEvent::Connected, 0.0);
     receive(&mut session, 0.0, ServerMsg::Welcome(Box::new(welcome())));
@@ -468,4 +468,20 @@ fn a_session_in_a_room_pings_every_five_seconds_and_keeps_the_roster() {
     };
     receive(&mut session, 1.0, ServerMsg::Roster(vec![member.clone()]));
     assert_eq!(session.roster(), [member]);
+}
+
+#[test]
+fn a_session_sends_the_remembered_token_with_its_first_join_and_leaves_once() {
+    let mut session = Session::new(Some("test"), "KANG", Some(TOKEN));
+    let join = session.handle(ClientEvent::Connected, 0.0);
+    assert!(matches!(join, Some(ClientMsg::Join { token, .. }) if token == Some(TOKEN)));
+
+    // 입장 안내를 받기 전에 끊기면, 표식이 있어도 다시 접속하지 않습니다.
+    lose_link(&mut session, 1.0);
+    assert!(matches!(session.phase(), Phase::Ended(_)));
+
+    let mut session = playing();
+    assert_eq!(session.leave(), Some(ClientMsg::Leave));
+    assert_eq!(session.leave(), None);
+    assert!(matches!(session.phase(), Phase::Ended(_)));
 }

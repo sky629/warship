@@ -39,6 +39,8 @@ pub struct Session {
     name: String,
     /// 입장 안내로 받은 자리의 표식입니다. 다시 입장할 때 보냅니다.
     token: Option<SeatToken>,
+    /// 이 실행에서 입장 안내를 받은 적이 있는지입니다. 받은 뒤에 끊긴 접속만 다시 접속합니다.
+    joined: bool,
     phase: Phase,
     welcome: Option<Welcome>,
     roster: Vec<WireMember>,
@@ -56,12 +58,13 @@ pub struct Session {
 }
 
 impl Session {
-    /// `room`이 없으면 서버가 만든 새 방에 들어갑니다.
-    pub fn new(room: Option<&str>, name: &str) -> Session {
+    /// `room`이 없으면 서버가 만든 새 방에 들어갑니다. `token`은 기기가 기억하는 그 방의 자리의 표식입니다.
+    pub fn new(room: Option<&str>, name: &str, token: Option<SeatToken>) -> Session {
         Session {
             room: room.map(str::to_string),
             name: name.to_string(),
-            token: None,
+            token,
+            joined: false,
             phase: Phase::Connecting,
             welcome: None,
             roster: Vec::new(),
@@ -81,6 +84,13 @@ impl Session {
     /// 입장한 뒤에만 있습니다.
     pub fn welcome(&self) -> Option<&Welcome> {
         self.welcome.as_ref()
+    }
+
+    /// 스스로 방을 나가는 메시지입니다. 방 안에 있을 때만 만들어지고, 접속 상태는 끝납니다.
+    pub fn leave(&mut self) -> Option<ClientMsg> {
+        let playing = self.phase == Phase::Playing;
+        self.phase = Phase::Ended("You left the room".to_string());
+        playing.then_some(ClientMsg::Leave)
     }
 
     /// 방에 있는 사람의 명단입니다. 입장하기 전에는 비어 있습니다.
@@ -109,6 +119,7 @@ impl Session {
                 // 다시 입장하면 같은 방으로 갑니다. 서버는 새 접속의 순서 번호를 1부터 받습니다.
                 self.room = Some(welcome.room.clone());
                 self.token = Some(welcome.token);
+                self.joined = true;
                 self.welcome = Some(*welcome);
                 self.history = History::default();
                 self.last_seq = 0;
@@ -126,6 +137,7 @@ impl Session {
                 None
             }
             ClientEvent::Message(ServerMsg::SeatTakenOver) => {
+                self.joined = false;
                 self.phase = Phase::Ended("Another window took over this ship".to_string());
                 None
             }
@@ -133,9 +145,9 @@ impl Session {
                 self.history.push(now, *snapshot);
                 None
             }
-            // 자리의 표식이 있으면 돌아갈 자리가 있습니다. 없으면 입장하기 전에 끊긴 것이므로 끝냅니다.
+            // 방에 들어간 적이 있으면 돌아갈 자리가 있습니다. 없으면 입장하기 전에 끊긴 것이므로 끝냅니다.
             ClientEvent::Disconnected { reason } => {
-                if self.token.is_none() {
+                if !self.joined {
                     self.phase = Phase::Ended(reason);
                     return None;
                 }

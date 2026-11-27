@@ -94,12 +94,13 @@ pub fn order_commands(
 }
 
 pub fn show_hud(
-    net: NonSend<Net>,
+    net: Option<NonSend<Net>>,
     frame: Res<CurrentFrame>,
     mut text: Single<&mut Text, With<HudText>>,
 ) {
     let me = frame.0.as_ref().and_then(|frame| frame.me.as_ref());
-    let lines = match (net.session.welcome(), me) {
+    let welcome = net.as_ref().and_then(|net| net.session.welcome());
+    let lines = match (welcome, me) {
         (Some(welcome), Some(me)) => hud_lines(welcome, me),
         _ => String::new(),
     };

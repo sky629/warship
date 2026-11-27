@@ -5688,6 +5688,7 @@ dependencies = [
  "warship_protocol",
  "warship_rules",
  "warship_ws_client",
+ "web-sys",
 ]
 
 [[package]]
