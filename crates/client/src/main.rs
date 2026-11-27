@@ -4,14 +4,16 @@
 //! `--new-room`을 주면 서버가 만든 새 방에 들어가고, 화면 왼쪽 위에 그 방의 코드가 나옵니다.
 //! 웹: `cd crates/client && trunk serve` 뒤에 `http://127.0.0.1:8080/` 열기. 주소에 `?room=duel&name=Kang&server=ws://127.0.0.1:7777`을 붙이면 바로 입장합니다.
 //!
-//! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 비스듬히 내려다본 3D 도형으로 그립니다. 카메라는 내 배를 따라가고, 마우스 휠로 거리를 바꿉니다.
+//! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 비스듬히 내려다본 3D 도형으로 그립니다. 카메라는 내 배를 따라가고, 방향키나 창의 가장자리로 화면을 옮기고, Space로 내 배로 돌아오고, 마우스 휠로 거리를 바꿉니다. 오른쪽 아래에 미니맵이 있습니다.
 //! 오른쪽 클릭으로 배가 갈 지점을 정합니다. 무기는 스스로 쏩니다. 상점과 스킬은 단축키로 씁니다.
-//! 실행 인자 없이 시작하면 시작 화면에서 이름과 방 코드를 받습니다. 방 안에서 Esc를 누르면 시작 화면으로 돌아옵니다.
+//! 실행 인자 없이 시작하면 시작 화면에서 이름과 방 코드를 받습니다. 방 안에서 Esc를 누르면 나갈지 묻고, Enter로 확인하면 시작 화면으로 돌아옵니다.
 //! 기기는 마지막 이름과 방, 자리의 표식을 기억합니다. 그래서 다시 실행해서 같은 방에 들어가면 같은 배로 돌아갑니다.
-//! 읽는 순서는 `main`(한 프레임의 순서), `start`, `net`, `storage`, `draw`, `hud`입니다.
+//! 읽는 순서는 `main`(한 프레임의 순서), `start`, `net`, `storage`, `draw`, `camera`, `minimap`, `hud`입니다.
 
+mod camera;
 mod draw;
 mod hud;
+mod minimap;
 mod net;
 mod start;
 mod storage;
@@ -45,7 +47,12 @@ fn main() {
     let in_room = resource_equals(Screen::Room);
     app.insert_resource(ClearColor(draw::SEA))
         .insert_resource(Screen::Start)
-        .add_systems(Startup, (draw::setup, hud::setup, start::setup))
+        .init_resource::<camera::Rig>()
+        .init_resource::<net::LeavePrompt>()
+        .add_systems(
+            Startup,
+            (draw::setup, hud::setup, start::setup, minimap::setup),
+        )
         .add_systems(
             Update,
             (
@@ -58,7 +65,7 @@ fn main() {
                     net::leave_room,
                     draw::build_scenery,
                     draw::sync_pieces,
-                    draw::follow_camera,
+                    camera::steer_camera,
                     draw::draw_overlays,
                 )
                     .chain()
@@ -66,8 +73,10 @@ fn main() {
                 net::close_room.run_if(resource_exists::<net::Closing>),
                 draw::clear_room.run_if(resource_equals(Screen::Start)),
                 draw::show_status,
+                draw::show_prompt,
                 hud::show_hud,
                 start::show_start,
+                minimap::show_minimap,
             )
                 .chain(),
         )

@@ -62,6 +62,8 @@ pub struct ShipView {
     pub id: u32,
     pub team: WireTeam,
     pub pos: Vec2,
+    /// `Welcome::hulls`의 자리입니다. 큰 번호의 선체는 화면에 더 크게 그립니다.
+    pub hull: u16,
     /// 최대 HP에 대한 비율입니다(0 이상 1 이하).
     pub hp: f32,
     pub sunk: bool,
@@ -215,6 +217,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             id: ship.id,
             team: ship.team,
             pos,
+            hull: ship.hull,
             hp: ship.hp as f32 / max_hp(welcome, ship) as f32,
             sunk: ship.respawn_at.is_some(),
             mine: ship.id == welcome.ship,

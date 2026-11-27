@@ -2,17 +2,17 @@
 //!
 //! 게임은 수면 위의 평면에서 진행되므로, 높이는 화면에만 있습니다. 배, NPC 배, 건물, 포탄은 간단한 입체 도형이고,
 //! 스냅샷에 있는 개체마다 도형 하나를 두고 프레임마다 위치를 맞춥니다(`sync_pieces`).
-//! HP 막대, 사거리, 라인, 목적지는 선으로 그립니다(`draw_overlays`). 카메라는 내 배를 비스듬히 내려다보며 따라갑니다.
+//! HP 막대, 사거리, 라인, 목적지는 선으로 그립니다(`draw_overlays`). 카메라는 `camera`가 움직입니다.
 
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 
-use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use warship_client_core::{Frame, Phase};
 use warship_protocol::{WireOutcome, WireStructureKind, WireTeam};
 
-use crate::net::{CurrentFrame, Destination, Net};
+use crate::camera::{CAMERA_OFFSET, Rig};
+use crate::net::{CurrentFrame, Destination, LeavePrompt, Net};
 
 /// 맵 밖의 바다와 하늘의 색입니다.
 pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
@@ -27,10 +27,6 @@ const SUNK: Color = Color::srgb(0.35, 0.35, 0.35);
 const HP: Color = Color::srgb(0.4, 0.9, 0.4);
 const HP_BACK: Color = Color::srgb(0.35, 0.1, 0.1);
 
-/// 카메라가 보는 점에서 카메라까지의 방향과 거리입니다. 수면을 약 55도로 내려다봅니다.
-const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 30.0, 21.0);
-/// 마우스 휠로 바꾸는 카메라 거리의 배율의 범위입니다.
-const ZOOM_RANGE: (f32, f32) = (0.4, 2.5);
 /// 선으로 그리는 것을 수면에서 띄우는 높이입니다. 수면과 겹쳐서 깜빡이지 않게 합니다.
 const LINE_HEIGHT: f32 = 0.05;
 /// 섬의 높이입니다.
@@ -66,15 +62,13 @@ struct Wanted {
     at: Vec3,
     /// 움직인 방향으로 도형을 돌리는지입니다.
     turns: bool,
+    /// 도형의 크기의 배율입니다.
+    scale: f32,
 }
 
 /// 지금 화면에 놓인 개체와 그 엔티티입니다.
 #[derive(Resource, Default)]
 pub struct Pieces(HashMap<Piece, Entity>);
-
-/// 카메라 거리의 배율입니다. 마우스 휠로 바꿉니다.
-#[derive(Resource)]
-pub struct Zoom(f32);
 
 /// 도형과 재질입니다. 한 번 만들어서 모든 개체가 함께 씁니다.
 #[derive(Resource)]
@@ -107,6 +101,10 @@ impl Look {
 
 #[derive(Component)]
 pub struct StatusText;
+
+/// 방을 나갈지 묻는 확인창의 글자입니다.
+#[derive(Component)]
+pub struct PromptText;
 
 pub fn setup(
     mut commands: Commands,
@@ -153,8 +151,24 @@ pub fn setup(
         water: meshes.add(Plane3d::default().mesh().size(1.0, 1.0)),
     };
     commands.insert_resource(look);
-    commands.insert_resource(Zoom(1.0));
     commands.init_resource::<Pieces>();
+    commands.spawn((
+        PromptText,
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(22.0),
+            ..default()
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            top: percent(40),
+            left: percent(35),
+            padding: UiRect::all(px(16)),
+            display: Display::None,
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
+    ));
     commands.spawn((
         StatusText,
         Text::new(""),
@@ -214,12 +228,14 @@ pub fn build_scenery(
     }
 }
 
-/// 시작 화면으로 돌아오면 방에 놓았던 것을 모두 치웁니다.
+/// 시작 화면으로 돌아오면 방에 놓았던 것을 모두 치우고, 카메라가 보던 점을 잊습니다.
 pub fn clear_room(
     placed: Query<Entity, InRoom>,
     mut pieces: ResMut<Pieces>,
+    mut rig: ResMut<Rig>,
     mut commands: Commands,
 ) {
+    rig.0 = None;
     for entity in &placed {
         commands.entity(entity).despawn();
     }
@@ -240,12 +256,21 @@ pub fn sync_pieces(
     let mut wanted: Vec<Wanted> = Vec::new();
     let mut want = |piece, mesh: &Handle<Mesh>, material, at, turns| {
         let mesh = mesh.clone();
+        // 배는 선체의 번호가 클수록 크게 그립니다.
+        let scale = match piece {
+            Piece::Ship(id) => {
+                let ship = frame.ships.iter().find(|ship| ship.id == id);
+                1.0 + 0.35 * ship.map_or(0.0, |ship| f32::from(ship.hull))
+            }
+            _ => 1.0,
+        };
         wanted.push(Wanted {
             piece,
             mesh,
             material,
             at,
             turns,
+            scale,
         });
     };
     for site in &frame.structures {
@@ -296,6 +321,7 @@ pub fn sync_pieces(
         material,
         at,
         turns,
+        scale,
     } in wanted
     {
         seen.push(piece);
@@ -311,6 +337,7 @@ pub fn sync_pieces(
                     transform.rotation = Quat::from_rotation_y((-moved.z).atan2(moved.x));
                 }
                 transform.translation = at;
+                transform.scale = Vec3::splat(scale);
                 if shown.0 != material {
                     shown.0 = material;
                 }
@@ -320,7 +347,7 @@ pub fn sync_pieces(
                     piece,
                     Mesh3d(mesh),
                     MeshMaterial3d(material),
-                    Transform::from_translation(at),
+                    Transform::from_translation(at).with_scale(Vec3::splat(scale)),
                 );
                 pieces.0.insert(piece, commands.spawn(spawned).id());
             }
@@ -333,29 +360,6 @@ pub fn sync_pieces(
         }
         keep
     });
-}
-
-/// 카메라가 내 배를 따라갑니다. 내 배가 아직 없으면 맵의 한가운데를 봅니다. 마우스 휠로 거리를 바꿉니다.
-pub fn follow_camera(
-    net: NonSend<Net>,
-    frame: Res<CurrentFrame>,
-    scroll: Res<AccumulatedMouseScroll>,
-    mut zoom: ResMut<Zoom>,
-    mut camera: Single<&mut Transform, With<Camera3d>>,
-) {
-    let Some(welcome) = net.session.welcome() else {
-        return;
-    };
-    let (near, far) = ZOOM_RANGE;
-    zoom.0 = (zoom.0 * (1.0 - scroll.delta.y.clamp(-3.0, 3.0) * 0.1)).clamp(near, far);
-    let ships = frame.0.iter().flat_map(|frame| &frame.ships);
-    let mut mine = ships
-        .filter(|ship| ship.mine)
-        .map(|ship| on_water(ship.pos));
-    let center = Vec3::new(welcome.map_width / 2.0, 0.0, -welcome.map_height / 2.0);
-    let target = mine.next().unwrap_or(center);
-    **camera =
-        Transform::from_translation(target + CAMERA_OFFSET * zoom.0).looking_at(target, Vec3::Y);
 }
 
 /// 수면에 누운 원을 그립니다.
@@ -436,6 +440,23 @@ fn draw_hp(gizmos: &mut Gizmos, center: Vec3, fraction: f32) {
     gizmos.line(split, right, HP_BACK);
 }
 
+/// 방을 나갈지 묻는 동안 확인창을 보여 줍니다.
+pub fn show_prompt(
+    prompt: Res<LeavePrompt>,
+    window: Single<(&mut Node, &mut Text), With<PromptText>>,
+) {
+    let (mut node, mut text) = window.into_inner();
+    let (display, lines) = if prompt.0 {
+        (Display::Flex, "Leave the room?\n\nEnter: leave   Esc: stay")
+    } else {
+        (Display::None, "")
+    };
+    if node.display != display {
+        node.display = display;
+        text.0 = lines.to_string();
+    }
+}
+
 /// 방 안에서 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과, 방에 있는 사람의 이름을 화면 왼쪽 위에 글자로 보여 줍니다.
 pub fn show_status(
     net: Option<NonSend<Net>>,
@@ -464,7 +485,10 @@ fn status_line(net: &Net, frame: Option<&Frame>) -> String {
                     (Some(WireOutcome::Victory(_)), _) => "   DEFEAT".to_string(),
                     (Some(WireOutcome::Draw), _) => "   DRAW".to_string(),
                     (None, Some(secs)) => format!("   Sunk: back in {secs:.0}s"),
-                    (None, None) => "   Right-click: sail   Esc: leave".to_string(),
+                    (None, None) => {
+                        "   Right-click: sail   Arrows: view   Space: my ship   Esc: leave"
+                            .to_string()
+                    }
                 };
             }
             // 둘째 줄은 방에 있는 사람의 이름입니다. 접속이 끊긴 사람에는 표시를 붙입니다.

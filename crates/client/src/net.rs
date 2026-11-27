@@ -1,6 +1,7 @@
 //! 접속과 입력입니다. 입장 요청으로 접속을 열고, 접속 방식에 도착한 이벤트를 `Session`에 넘기고,
-//! 클릭을 이동 입력으로, 단축키의 명령을 서버로 보냅니다. Esc를 누르면 방을 나가서 시작 화면으로 돌아갑니다.
+//! 클릭을 이동 입력으로, 단축키의 명령을 서버로 보냅니다. Esc를 누르면 나갈지 묻고, Enter로 확인하면 방을 나가서 시작 화면으로 돌아갑니다.
 
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use warship_client_core::{
@@ -10,6 +11,7 @@ use warship_client_core::{
 use warship_protocol::{ClientEvent, ClientTransport, PlayerName, RoomCode, WireCommand};
 use warship_ws_client::WsClient;
 
+use crate::camera::minimap_under;
 use crate::start::{Pending, Start};
 use crate::{Screen, storage};
 
@@ -44,6 +46,33 @@ pub struct Device {
 impl Device {
     fn save(&self) {
         storage::save(self.profile.as_deref(), &self.memory.to_text());
+    }
+}
+
+/// 방을 나갈지 묻는 중인지입니다. 묻는 동안 화면 한가운데에 확인창이 보입니다.
+#[derive(Resource, Default)]
+pub struct LeavePrompt(pub bool);
+
+/// Esc와 Enter에 따라 나가기 확인이 다음에 할 일입니다.
+#[derive(Debug, PartialEq, Eq)]
+enum LeaveStep {
+    /// 아무 일도 없습니다.
+    Wait,
+    /// 확인창을 엽니다.
+    Ask,
+    /// 확인창을 닫고 방에 남습니다.
+    Stay,
+    /// 방을 나갑니다.
+    Leave,
+}
+
+/// 접속이 이미 끝났으면 Esc로 바로 나갑니다. 방 안에 있으면 Esc가 확인창을 열고, 확인창에서 Enter는 나가고 Esc는 남습니다.
+fn leave_step(asking: bool, ended: bool, esc: bool, enter: bool) -> LeaveStep {
+    match (asking, ended, esc, enter) {
+        (_, true, true, _) | (true, _, _, true) => LeaveStep::Leave,
+        (true, _, true, _) => LeaveStep::Stay,
+        (false, _, true, _) => LeaveStep::Ask,
+        _ => LeaveStep::Wait,
     }
 }
 
@@ -124,6 +153,7 @@ pub fn open_room(world: &mut World) {
     device.memory.name = PlayerName::parse(&request.name).ok();
     device.save();
     world.insert_non_send(Net { transport, session });
+    world.insert_resource(LeavePrompt(false));
     world.insert_resource(Screen::Room);
 }
 
@@ -145,6 +175,9 @@ pub fn close_room(world: &mut World) {
     start.0.notice = Some(notice);
     world.resource_mut::<CurrentFrame>().0 = None;
     world.resource_mut::<Destination>().0 = None;
+    world.resource_mut::<LeavePrompt>().0 = false;
+    // 방 안에서 누른 키(확인의 Enter 등)가 시작 화면의 칸에 들어가지 않게, 아직 읽지 않은 키 입력을 버립니다.
+    world.resource_mut::<Messages<KeyboardInput>>().clear();
     world.insert_resource(Screen::Start);
 }
 
@@ -194,20 +227,33 @@ pub fn pump_network(
     frame.0 = session.frame(now);
 }
 
-/// Esc를 누르면 방을 나갑니다. 접속이 이미 끝났으면 그 이유를, 아니면 스스로 나갔다는 문장을 시작 화면에 남깁니다.
+/// Esc를 누르면 방을 나갈지 묻고, 확인하면 나갑니다. 접속이 이미 끝났으면 묻지 않고 나갑니다.
+/// 접속이 끝난 이유나 스스로 나갔다는 문장을 시작 화면에 남깁니다.
 pub fn leave_room(
     keys: Res<ButtonInput<KeyCode>>,
     mut net: NonSendMut<Net>,
+    mut prompt: ResMut<LeavePrompt>,
     mut commands: Commands,
 ) {
-    if !keys.just_pressed(KeyCode::Escape) {
-        return;
-    }
     let Net { transport, session } = &mut *net;
     let ended = match session.phase() {
         Phase::Ended(reason) => Some(reason.clone()),
         _ => None,
     };
+    let esc = keys.just_pressed(KeyCode::Escape);
+    let enter = keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter);
+    match leave_step(prompt.0, ended.is_some(), esc, enter) {
+        LeaveStep::Wait => return,
+        LeaveStep::Ask => {
+            prompt.0 = true;
+            return;
+        }
+        LeaveStep::Stay => {
+            prompt.0 = false;
+            return;
+        }
+        LeaveStep::Leave => {}
+    }
     if let (Some(leave), Some(transport)) = (session.leave(), transport) {
         transport.send(&leave);
     }
@@ -215,7 +261,7 @@ pub fn leave_room(
     commands.insert_resource(Closing(notice));
 }
 
-/// 오른쪽 클릭한 수면의 자리로 배를 보냅니다.
+/// 오른쪽 클릭한 수면의 자리나 미니맵의 자리로 배를 보냅니다.
 pub fn order_moves(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
@@ -227,18 +273,50 @@ pub fn order_moves(
         return;
     }
     let (camera, camera_transform) = *camera;
-    // 커서를 지나는 시선이 수면(높이 0)과 만나는 점입니다. 시선이 수면과 나란하거나 위를 향하면 만나지 않습니다.
-    let clicked = window
-        .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
-        .filter(|ray| ray.direction.y < -1e-3)
-        .map(|ray| ray.origin + ray.direction * (-ray.origin.y / ray.direction.y));
-    let Some(point) = clicked.map(|water| Vec2::new(water.x, -water.z)) else {
+    // 미니맵 위를 눌렀으면 미니맵이 가리키는 자리이고, 아니면 커서를 지나는 시선이 수면(높이 0)과 만나는 점입니다.
+    // 시선이 수면과 나란하거나 위를 향하면 만나지 않습니다.
+    let on_minimap = net.session.welcome().and_then(|welcome| {
+        let (_, tile) = minimap_under(&window, welcome);
+        tile.map(|tile| Vec2::new(tile.x, tile.y))
+    });
+    let on_water = || {
+        let cursor = window.cursor_position()?;
+        let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
+        let hits = ray.direction.y < -1e-3;
+        let water = ray.origin + ray.direction * (-ray.origin.y / ray.direction.y);
+        hits.then_some(Vec2::new(water.x, -water.z))
+    };
+    let Some(point) = on_minimap.or_else(on_water) else {
         return;
     };
     let Net { transport, session } = &mut *net;
     if let (Some(order), Some(transport)) = (session.sail_to(point.x, point.y), transport) {
         transport.send(&order);
         destination.0 = Some(point);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_asks_first_and_enter_confirms() {
+        assert_eq!(leave_step(false, false, false, false), LeaveStep::Wait);
+        assert_eq!(leave_step(false, false, true, false), LeaveStep::Ask);
+        assert_eq!(
+            leave_step(false, false, false, true),
+            LeaveStep::Wait,
+            "nothing to confirm"
+        );
+        assert_eq!(leave_step(true, false, false, true), LeaveStep::Leave);
+        assert_eq!(leave_step(true, false, true, false), LeaveStep::Stay);
+        assert_eq!(leave_step(true, false, false, false), LeaveStep::Wait);
+    }
+
+    #[test]
+    fn escape_leaves_at_once_when_the_link_has_ended() {
+        assert_eq!(leave_step(false, true, true, false), LeaveStep::Leave);
+        assert_eq!(leave_step(false, true, false, false), LeaveStep::Wait);
     }
 }
