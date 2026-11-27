@@ -2,6 +2,7 @@
 
 use warship_protocol::{Welcome, WireScore, WireTeam};
 
+use crate::assets::{Icon, IconKind};
 use crate::interp::MyShip;
 
 /// 스킬 칸의 단축키입니다. 선체의 스킬의 순서입니다.
@@ -23,6 +24,7 @@ pub struct HudView {
 /// 스킬 칸 하나입니다.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SkillSlot {
+    pub icon: Icon,
     pub key: char,
     pub name: String,
     pub rank: u8,
@@ -66,6 +68,7 @@ pub fn hud_view(welcome: &Welcome, me: &MyShip) -> HudView {
         let state = me.skills.get(usize::from(id))?;
         let cooldown = spec.cooldown_ticks as f32 / welcome.tick_hz.max(1) as f32;
         Some(SkillSlot {
+            icon: Icon::new(IconKind::Skill, &spec.name),
             key,
             name: spec.name.clone(),
             rank: state.rank,

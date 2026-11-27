@@ -15,7 +15,10 @@ use warship_protocol::{
 };
 use warship_rules::Vec2;
 
-use crate::{BlastView, MountView, Phase, Session, SkillView, mount_views, score_lines, shop_list};
+use crate::{
+    BlastView, Icon, IconKind, MountView, Phase, Session, SkillView, first_tab, mount_views,
+    score_lines, shop_tabs, shops_near,
+};
 use crate::{HudView, SkillSlot, TopBar, hud_view, top_bar};
 
 const ME: u32 = 1;
@@ -45,6 +48,7 @@ fn welcome() -> Welcome {
         team: WireTeam::Red,
         tick_hz: 20,
         level_xp: vec![100, 300],
+        shop_range: 5.0,
         map_width: 40.0,
         map_height: 40.0,
         hulls: vec![
@@ -556,7 +560,7 @@ fn a_session_sends_the_remembered_token_with_its_first_join_and_leaves_once() {
 }
 
 #[test]
-fn the_shop_lists_what_each_shop_sells_under_its_name() {
+fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
     let mut welcome = welcome();
     welcome.weapons.push(WireWeapon {
         name: "twin".to_string(),
@@ -625,75 +629,76 @@ fn the_shop_lists_what_each_shop_sells_under_its_name() {
         },
     ];
 
-    let list = shop_list(&welcome);
-    // 첫째 열은 자기 진영의 상점이고, 둘째 열은 교역과 항구입니다.
-    assert_eq!(list.columns(), [8, 5]);
-    let rows = list.rows;
+    let tabs = shop_tabs(&welcome);
 
-    let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
+    // 자기 진영의 상점은 탭이 셋이고, 항구는 파는 것이 있는 항구만 탭이 됩니다.
+    let titles: Vec<(&str, usize)> = tabs
+        .iter()
+        .map(|tab| (tab.title.as_str(), tab.shop))
+        .collect();
     assert_eq!(
-        labels,
+        titles,
         [
-            "Base and harbors",
-            "  gun  100g",
-            "  mortar  400g",
-            "  planks  200g  (+250 HP)",
-            "  kit  80g  (+200 HP, one use)",
-            "  twin = 2 x gun + 150g",
-            "  small  0g  (1000 HP, 2 mounts)",
-            "  big  400g  (2000 HP, 4 mounts, trader, -15% damage)",
-            "Trade (a trader hull at your base)",
-            "  salt  60g  (south port, pays 90g)",
-            "north port",
-            "  Hire for the North lane  220g  (2 x creep)",
-            "south port",
+            ("Armory", 0),
+            ("Shipyard", 0),
+            ("Trade", 0),
+            ("north port", 1)
         ]
     );
-    // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
-    let gun = "damage 10, range 5, reload 0.5s";
-    let details: Vec<&str> = rows.iter().map(|row| row.detail.as_str()).collect();
+    let seen = |tab: usize| -> Vec<(String, String, u32)> {
+        let rows = tabs[tab].rows.iter();
+        rows.map(|row| (row.name.clone(), row.note.clone(), row.price))
+            .collect()
+    };
+    let row = |name: &str, note: &str, price| (name.to_string(), note.to_string(), price);
     assert_eq!(
-        details,
+        seen(0),
         [
-            "",
-            gun,
-            gun,
-            "",
-            "",
-            gun,
-            "skills: skill",
-            "skills: skill",
-            "",
-            "",
-            "",
-            "the creeps come out of your harbor on that lane",
-            "",
+            row("gun", "10 dmg, range 5, 0.5s", 100),
+            row("mortar", "10 dmg, range 5, 0.5s", 400),
+            row("planks", "+250 HP", 200),
+            row("kit", "+200 HP, one use", 80),
+            row("twin", "combine: 2 x gun", 150),
         ]
     );
-    let orders: Vec<Option<WireCommand>> = rows.iter().map(|row| row.order).collect();
+    assert_eq!(
+        seen(1),
+        [
+            row("small", "1000 HP, 2 mounts", 0),
+            row("big", "2000 HP, 4 mounts, trader, -15% damage", 400),
+        ]
+    );
+    assert_eq!(seen(2), [row("salt", "to south port, pays 90g", 60)]);
+    assert_eq!(seen(3), [row("Hire: North lane", "2 x creep", 220)]);
+
+    // 줄마다 명령과 드는 골드가 있습니다. 선체는 돌려받는 값이 있어서 드는 골드를 적지 않습니다.
+    let orders: Vec<WireCommand> = tabs
+        .iter()
+        .flat_map(|tab| &tab.rows)
+        .map(|row| row.order)
+        .collect();
     assert_eq!(
         orders,
         [
-            None,
-            Some(WireCommand::Buy { weapon: 0 }),
-            Some(WireCommand::Buy { weapon: 2 }),
-            Some(WireCommand::BuyGear { gear: 0 }),
-            Some(WireCommand::BuySupply { supply: 0 }),
-            Some(WireCommand::Combine { recipe: 0 }),
-            Some(WireCommand::ChangeHull { hull: 0 }),
-            Some(WireCommand::ChangeHull { hull: 1 }),
-            None,
-            Some(WireCommand::Contract { trade: 0 }),
-            None,
-            Some(WireCommand::Hire { lane: 0 }),
-            None,
+            WireCommand::Buy { weapon: 0 },
+            WireCommand::Buy { weapon: 2 },
+            WireCommand::BuyGear { gear: 0 },
+            WireCommand::BuySupply { supply: 0 },
+            WireCommand::Combine { recipe: 0 },
+            WireCommand::ChangeHull { hull: 0 },
+            WireCommand::ChangeHull { hull: 1 },
+            WireCommand::Contract { trade: 0 },
+            WireCommand::Hire { lane: 0 },
         ]
     );
-    let costs: Vec<Option<u32>> = rows.iter().map(|row| row.cost).collect();
+    let costs: Vec<Option<u32>> = tabs
+        .iter()
+        .flat_map(|tab| &tab.rows)
+        .map(|row| row.cost)
+        .collect();
     assert_eq!(
         costs,
         [
-            None,
             Some(100),
             Some(400),
             Some(200),
@@ -701,13 +706,75 @@ fn the_shop_lists_what_each_shop_sells_under_its_name() {
             Some(150),
             None,
             None,
-            None,
             Some(60),
-            None,
-            Some(220),
-            None,
+            Some(220)
         ]
     );
+    // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
+    assert_eq!(tabs[0].rows[4].detail, "damage 10, range 5, reload 0.5s");
+    assert_eq!(tabs[1].rows[0].detail, "skills: skill");
+    // 아이콘은 종류와 이름으로 정해집니다. 조합의 아이콘은 결과 무기의 아이콘입니다.
+    let icons: Vec<String> = tabs
+        .iter()
+        .flat_map(|tab| &tab.rows)
+        .map(|row| row.icon.path())
+        .collect();
+    assert_eq!(
+        icons,
+        [
+            "icons/weapons/gun.png",
+            "icons/weapons/mortar.png",
+            "icons/gear/planks.png",
+            "icons/supplies/kit.png",
+            "icons/weapons/twin.png",
+            "icons/hulls/small.png",
+            "icons/hulls/big.png",
+            "icons/trades/salt.png",
+            "icons/hire/creep.png",
+        ]
+    );
+}
+
+#[test]
+fn an_icon_has_a_file_named_after_it_and_initials_for_when_the_file_is_missing() {
+    let icon = Icon::new(IconKind::Hull, "Man-of-War");
+    assert_eq!(icon.path(), "icons/hulls/man_of_war.png");
+    assert_eq!(icon.initials(), "M");
+
+    let icon = Icon::new(IconKind::Weapon, "Twin Deck Guns");
+    assert_eq!(icon.path(), "icons/weapons/twin_deck_guns.png");
+    assert_eq!(icon.initials(), "TD");
+}
+
+#[test]
+fn the_shop_opens_on_the_tab_of_the_shop_the_ship_is_at() {
+    // 내 배는 (10, 10)에 있습니다. 첫 번째 항구는 (12, 10)에, 두 번째 항구는 (30, 10)에 있습니다. 상점 거리는 5입니다.
+    let mut welcome = welcome();
+    welcome.ports = vec![WireVec2::new(12.0, 10.0), WireVec2::new(30.0, 10.0)];
+    let mut session = Session::new(Some("test"), "KANG", None);
+    session.handle(ClientEvent::Connected, 0.0);
+    session.handle(
+        ClientEvent::Message(ServerMsg::Welcome(Box::new(welcome.clone()))),
+        0.0,
+    );
+    receive(&mut session, 1.0, snapshot(20, vec![ship(ME, 10.0)]));
+    let frame = session.frame(1.15).unwrap();
+
+    let near = shops_near(&welcome, &frame);
+
+    assert_eq!(
+        near,
+        [1],
+        "no home structure is near, and the far port is not"
+    );
+    let tab = |shop| crate::ShopTab {
+        title: String::new(),
+        shop,
+        rows: Vec::new(),
+    };
+    let tabs = [tab(0), tab(0), tab(1), tab(2)];
+    assert_eq!(first_tab(&tabs, &near), 2);
+    assert_eq!(first_tab(&tabs, &[]), 0);
 }
 
 #[test]
@@ -792,8 +859,22 @@ fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
         ]
     );
 
+    // 칸의 아이콘은 달린 아이템의 종류와 이름으로 정해지고, 빈 칸에는 없습니다.
+    let icons = mount_views(&welcome, &me).into_iter().map(|view| view.icon);
+    let paths: Vec<String> = icons.flatten().map(|icon| icon.path()).collect();
+    assert_eq!(
+        paths,
+        [
+            "icons/weapons/gun.png",
+            "icons/supplies/kit.png",
+            "icons/trades/salt.png",
+            "icons/trades/salt.png",
+        ]
+    );
+
     me.supply_secs = 11.2;
     me.mounts[2] = None;
+    assert_eq!(mount_views(&welcome, &me)[2].icon, None);
     assert_eq!(seen(&me)[1], text("kit", "wait 12s", true));
     assert_eq!(seen(&me)[2], text("-", "", false));
 }
@@ -876,6 +957,7 @@ fn the_ship_panel_shows_hp_the_xp_of_this_level_and_the_skill_slots() {
     let view = hud_view(session.welcome().unwrap(), frame.me.as_ref().unwrap());
 
     let slot = SkillSlot {
+        icon: Icon::new(IconKind::Skill, "skill"),
         key: 'Q',
         name: "skill".to_string(),
         rank: 1,

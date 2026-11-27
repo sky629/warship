@@ -3,10 +3,13 @@
 use warship_protocol::{Welcome, WireItem};
 
 use crate::MyShip;
+use crate::assets::{Icon, IconKind};
 
 /// 칸 하나에 보여 주는 것입니다.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MountView {
+    /// 달린 아이템의 아이콘입니다. 빈 칸에는 없습니다.
+    pub icon: Option<Icon>,
     /// 아이템의 이름입니다. 빈 칸은 `-`입니다.
     pub name: String,
     /// 이 아이템으로 할 일의 안내입니다. 없으면 빈 글입니다.
@@ -54,7 +57,14 @@ pub fn mount_views(welcome: &Welcome, me: &MyShip) -> Vec<MountView> {
                 )
             }
         };
+        let kind = item.map(|item| match item {
+            WireItem::Weapon(_) => IconKind::Weapon,
+            WireItem::Gear(_) => IconKind::Gear,
+            WireItem::Supply(_) => IconKind::Supply,
+            WireItem::Contract(_) | WireItem::Cargo(_) => IconKind::Trade,
+        });
         MountView {
+            icon: kind.map(|kind| Icon::new(kind, &name)),
             name,
             note,
             usable: matches!(item, Some(WireItem::Supply(_))),

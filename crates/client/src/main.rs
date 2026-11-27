@@ -20,6 +20,7 @@ mod shapes;
 mod shop;
 mod start;
 mod storage;
+mod ui;
 
 use bevy::prelude::*;
 use warship_client_core::LaunchOptions;
@@ -64,6 +65,8 @@ fn main() {
                 mounts::setup,
             ),
         )
+        .add_systems(PostStartup, ui::dress_panels)
+        .add_systems(PostUpdate, ui::dress_text)
         .add_systems(
             Update,
             (
@@ -90,7 +93,7 @@ fn main() {
                 draw::show_scores,
                 hud::show_top,
                 hud::show_hud,
-                hud::show_labels,
+                hud::show_labels.after(camera::steer_camera),
                 start::show_start,
                 minimap::show_minimap,
                 shop::show_shop,

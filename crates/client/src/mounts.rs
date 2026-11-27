@@ -9,11 +9,7 @@ use warship_client_core::{Frame, MountBar, mount_views};
 use warship_protocol::{WireCommand, WireItem};
 
 use crate::net::{CurrentFrame, Net};
-
-const BACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.7);
-const UNDER_CURSOR: Color = Color::srgba(0.25, 0.25, 0.25, 0.85);
-const NAME: Color = Color::WHITE;
-const NOTE: Color = Color::srgb(1.0, 0.85, 0.4);
+use crate::ui::{self, GOLD, LIT, SLOT, TEXT, words};
 
 /// 칸 줄의 바탕입니다.
 #[derive(Component)]
@@ -72,6 +68,7 @@ pub fn use_mounts(
 pub fn show_mounts(
     net: Option<NonSend<Net>>,
     frame: Res<CurrentFrame>,
+    assets: Res<AssetServer>,
     window: Single<&Window, With<PrimaryWindow>>,
     root: Single<(Entity, &mut Node), With<MountRoot>>,
     mut commands: Commands,
@@ -90,39 +87,34 @@ pub fn show_mounts(
     node.top = px(bar.top);
     node.width = px(bar.width());
     let lit = slot_under(&window, frame.0.as_ref());
-    let line = |text: String, color: Color| {
-        (
-            Text::new(text),
-            TextFont {
-                font_size: FontSize::Px(12.0),
-                ..default()
-            },
-            TextColor(color),
-        )
-    };
     commands.entity(root).with_children(|parent| {
         for (slot, view) in mount_views(welcome, me).into_iter().enumerate() {
-            let back = if lit == Some(slot) {
-                UNDER_CURSOR
-            } else {
-                BACK
-            };
+            let back = if lit == Some(slot) { LIT } else { SLOT };
             let cell = Node {
                 position_type: PositionType::Absolute,
                 left: px(bar.place(slot)),
                 top: px(0),
                 width: px(MountBar::SLOT.0),
                 height: px(MountBar::SLOT.1),
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::axes(px(4), px(2)),
+                padding: UiRect::all(px(3)),
+                column_gap: px(5),
+                align_items: AlignItems::Center,
                 overflow: Overflow::clip(),
                 ..default()
             };
             parent
                 .spawn((cell, BackgroundColor(back)))
                 .with_children(|cell| {
-                    cell.spawn(line(view.name, NAME));
-                    cell.spawn(line(format!("{}  {}", slot + 1, view.note), NOTE));
+                    ui::icon_tile(cell, &assets, view.icon.as_ref(), 28.0);
+                    let text = Node {
+                        flex_direction: FlexDirection::Column,
+                        overflow: Overflow::clip(),
+                        ..default()
+                    };
+                    cell.spawn(text).with_children(|text| {
+                        text.spawn(words(view.name, 12.0, TEXT));
+                        text.spawn(words(format!("{}  {}", slot + 1, view.note), 11.0, GOLD));
+                    });
                 });
         }
     });

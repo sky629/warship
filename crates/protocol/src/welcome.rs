@@ -22,6 +22,8 @@ pub struct Welcome {
     pub tick_hz: u32,
     /// 2레벨부터 차례로, 그 레벨이 되는 데 필요한 누적 경험치입니다.
     pub level_xp: Vec<u32>,
+    /// 상점에서 이 거리 안에 있는 배가 사고팔 수 있습니다.
+    pub shop_range: f32,
     pub map_width: f32,
     pub map_height: f32,
     /// 선체 표입니다. 스냅샷의 선체 번호가 이 목록의 자리입니다.
@@ -299,6 +301,7 @@ impl Welcome {
             team: sim.ship(ship)?.team.into(),
             tick_hz: tuning.tick_hz,
             level_xp: tuning.growth.level_xp.clone(),
+            shop_range: tuning.shop.range,
             map_width: tuning.map.width,
             map_height: tuning.map.height,
             hulls: tuning

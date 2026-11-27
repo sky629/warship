@@ -1192,7 +1192,7 @@ impl Default for Tuning {
                         },
                     },
                     Port {
-                        name: "North Isle Gunsmith",
+                        name: "Gunsmith Isle",
                         pos: Vec2::new(48.0, 36.0),
                         stock: Stock {
                             weapons: [2, 4, 9, 10, 11].map(WeaponId).to_vec(),
@@ -1201,7 +1201,7 @@ impl Default for Tuning {
                         },
                     },
                     Port {
-                        name: "South Isle Outfitter",
+                        name: "Rigging Isle",
                         pos: Vec2::new(48.0, 28.0),
                         stock: Stock {
                             gear: vec![GearId(2), GearId(3)],

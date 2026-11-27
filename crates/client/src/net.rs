@@ -178,7 +178,7 @@ pub fn close_room(world: &mut World) {
     world.resource_mut::<CurrentFrame>().0 = None;
     world.resource_mut::<Destination>().0 = None;
     world.resource_mut::<LeavePrompt>().0 = false;
-    world.resource_mut::<ShopOpen>().0 = false;
+    world.resource_mut::<ShopOpen>().open = false;
     // 방 안에서 누른 키(확인의 Enter 등)가 시작 화면의 칸에 들어가지 않게, 아직 읽지 않은 키 입력을 버립니다.
     world.resource_mut::<Messages<KeyboardInput>>().clear();
     world.insert_resource(Screen::Start);
