@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
-use warship_client_core::{Frame, Phase, score_lines};
-use warship_protocol::{WireOutcome, WireShot, WireStructureKind, WireTeam};
+use warship_client_core::{Frame, Phase};
+use warship_protocol::{WireShot, WireStructureKind, WireTeam};
 
 use crate::camera::{CAMERA_OFFSET, Rig};
 use crate::net::{CurrentFrame, Destination, LeavePrompt, Net};
@@ -129,10 +129,6 @@ pub struct StatusText;
 #[derive(Component)]
 pub struct PromptText;
 
-/// 점수판의 글자입니다.
-#[derive(Component)]
-pub struct ScoreText;
-
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -199,23 +195,6 @@ pub fn setup(
             ..default()
         },
         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
-    ));
-    commands.spawn((
-        ScoreText,
-        Text::new(""),
-        TextFont {
-            font_size: FontSize::Px(16.0),
-            ..default()
-        },
-        Node {
-            position_type: PositionType::Absolute,
-            top: percent(22),
-            left: percent(28),
-            padding: UiRect::all(px(16)),
-            display: Display::None,
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
     ));
     commands.spawn((
         StatusText,
@@ -571,43 +550,6 @@ pub fn show_prompt(
     if node.display != display {
         node.display = display;
         text.0 = lines.to_string();
-    }
-}
-
-/// Tab을 누르고 있는 동안 점수판을 보여 줍니다. 대전이 끝나면 결과와 함께 계속 보여 줍니다.
-pub fn show_scores(
-    keys: Res<ButtonInput<KeyCode>>,
-    net: Option<NonSend<Net>>,
-    frame: Res<CurrentFrame>,
-    window: Single<(&mut Node, &mut Text), With<ScoreText>>,
-) {
-    let (mut node, mut text) = window.into_inner();
-    let welcome = net.as_ref().and_then(|net| net.session.welcome());
-    let lines = match (welcome, net.as_ref(), frame.0.as_ref()) {
-        (Some(welcome), Some(net), Some(frame))
-            if frame.outcome.is_some() || keys.pressed(KeyCode::Tab) =>
-        {
-            let result = match frame.outcome {
-                Some(WireOutcome::Victory(winner)) if winner == welcome.team => "VICTORY\n\n",
-                Some(WireOutcome::Victory(_)) => "DEFEAT\n\n",
-                Some(WireOutcome::Draw) => "DRAW\n\n",
-                None => "",
-            };
-            let scores = score_lines(&frame.scores, net.session.roster(), welcome.ship);
-            format!("{result}{scores}")
-        }
-        _ => String::new(),
-    };
-    let display = if lines.is_empty() {
-        Display::None
-    } else {
-        Display::Flex
-    };
-    if node.display != display {
-        node.display = display;
-    }
-    if text.0 != lines {
-        text.0 = lines;
     }
 }
 

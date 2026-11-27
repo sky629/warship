@@ -32,7 +32,7 @@ pub use interp::{
 pub use launch::{DEFAULT_NAME, DEFAULT_SERVER, LaunchOptions, RoomChoice};
 pub use memory::{Memory, RememberedSeat};
 pub use mounts::{MountView, mount_views};
-pub use score::score_lines;
+pub use score::{ScoreRow, ScoreTeam, score_table};
 pub use session::{Phase, Session};
 pub use shop::{ShopRow, ShopTab, first_tab, shop_tabs, shops_near};
 pub use start::{Field, FormKey, JoinRequest, StartForm};

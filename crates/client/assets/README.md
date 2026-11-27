@@ -22,10 +22,12 @@ A missing icon is drawn as a square in the color of its kind with the initials o
 
 | File | Use |
 |---|---|
-| `ui/panel.png` | Background of the top bar, the ship panel and the shop window. Nine-slice: the outer 12 pixels on each side are the border and are not stretched. |
+| `ui/panel.png` | Background of the top bar, the ship panel, the shop window, the scoreboard and the start panel. Nine-slice: the outer 12 pixels on each side are the border and are not stretched. |
+| `ui/start.png` | Full-screen picture behind the start panel. It is stretched to the window. |
+| `ui/logo.png` | Title picture at the top of the start panel, 96 pixels high. |
 | `fonts/ui.ttf` | Font of all text. |
 
-Without these files, panels are a flat dark color and the text uses the built-in font.
+Without these files, panels are a flat dark color, the start screen has no picture and shows the title as text, and the text uses the built-in font.
 
 ## Sizes on screen
 

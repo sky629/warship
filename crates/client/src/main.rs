@@ -16,6 +16,7 @@ mod hud;
 mod minimap;
 mod mounts;
 mod net;
+mod scores;
 mod shapes;
 mod shop;
 mod start;
@@ -63,6 +64,7 @@ fn main() {
                 minimap::setup,
                 shop::setup,
                 mounts::setup,
+                scores::setup,
             ),
         )
         .add_systems(PostStartup, ui::dress_panels)
@@ -90,7 +92,7 @@ fn main() {
                 draw::clear_room.run_if(resource_equals(Screen::Start)),
                 draw::show_status,
                 draw::show_prompt,
-                draw::show_scores,
+                scores::show_scores,
                 hud::show_top,
                 hud::show_hud,
                 hud::show_labels.after(camera::steer_camera),

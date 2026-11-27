@@ -17,9 +17,9 @@ use warship_rules::Vec2;
 
 use crate::{
     BlastView, Icon, IconKind, MountView, Phase, Session, SkillView, first_tab, mount_views,
-    score_lines, shop_tabs, shops_near,
+    score_table, shop_tabs, shops_near,
 };
-use crate::{HudView, SkillSlot, TopBar, hud_view, top_bar};
+use crate::{HudView, ScoreRow, ScoreTeam, SkillSlot, TopBar, hud_view, top_bar};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -169,16 +169,29 @@ fn the_scoreboard_lists_each_team_with_the_best_ship_first() {
         connected: true,
     }];
 
-    let lines = score_lines(&scores, &roster, 3);
+    let table = score_table(&scores, &roster, 3);
 
-    assert_eq!(
-        lines,
-        "Red                Lv    K    D  Creeps\n\
-         > KANG              3    4    1      14\n\
-         \x20 Bot 1             3    0    2      14\n\
-         Blue               Lv    K    D  Creeps\n\
-         \x20 Bot 2             3    1    0      14"
-    );
+    let row = |name: &str, mine, kills, deaths| ScoreRow {
+        name: name.to_string(),
+        mine,
+        level: 3,
+        kills,
+        deaths,
+        creep_kills: 14,
+    };
+    let expected = [
+        ScoreTeam {
+            team: WireTeam::Red,
+            kills: 4,
+            rows: vec![row("KANG", true, 4, 1), row("Bot 1", false, 0, 2)],
+        },
+        ScoreTeam {
+            team: WireTeam::Blue,
+            kills: 1,
+            rows: vec![row("Bot 2", false, 1, 0)],
+        },
+    ];
+    assert_eq!(table, expected);
 }
 
 /// 입장을 마친 접속입니다.

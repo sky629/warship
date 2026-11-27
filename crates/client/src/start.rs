@@ -1,4 +1,4 @@
-//! 시작 화면입니다. 이름과 방 코드를 글자로 받고, Enter를 누르면 입장을 요청합니다.
+//! 시작 화면입니다. 화면 가운데의 패널에서 이름과 방 코드를 글자로 받고, Enter를 누르면 입장을 요청합니다.
 //!
 //! 칸의 글자와 검사는 `warship_client_core::StartForm`이 맡고, 이 모듈은 눌린 키를 읽어서 넘기고 칸을 화면에 그립니다.
 //! 글자는 `KeyboardInput`의 `text`(Shift가 반영된 글자)를 씁니다.
@@ -6,9 +6,11 @@
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::ui::widget::NodeImageMode;
 use warship_client_core::{Field, FormKey, JoinRequest, StartForm};
 
 use crate::Screen;
+use crate::ui::{self, BAD, DIM, GOLD, LIT, Panel, SLOT, TEXT, words};
 
 /// 시작 화면의 두 칸입니다.
 #[derive(Resource)]
@@ -18,24 +20,40 @@ pub struct Start(pub StartForm);
 #[derive(Resource)]
 pub struct Pending(pub JoinRequest);
 
+/// 시작 화면 전체입니다. 가운데에 패널이 있습니다.
 #[derive(Component)]
-pub struct StartText;
+pub struct StartRoot;
 
-pub fn setup(mut commands: Commands) {
-    commands.spawn((
-        StartText,
-        Text::new(""),
-        TextFont {
-            font_size: FontSize::Px(20.0),
-            ..default()
-        },
-        Node {
-            position_type: PositionType::Absolute,
-            top: percent(30),
-            left: percent(30),
-            ..default()
-        },
-    ));
+/// 시작 화면의 패널입니다. 제목, 두 칸, 안내가 들어갑니다.
+#[derive(Component)]
+pub struct StartPanel;
+
+/// 시작 화면의 바탕 그림과 제목 그림입니다. 에셋 폴더에 있으면 씁니다.
+const BACKGROUND: &str = "ui/start.png";
+const LOGO: &str = "ui/logo.png";
+
+pub fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+    let root = Node {
+        position_type: PositionType::Absolute,
+        width: percent(100),
+        height: percent(100),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    };
+    let panel = Node {
+        width: px(420),
+        padding: UiRect::all(px(28)),
+        row_gap: px(10),
+        flex_direction: FlexDirection::Column,
+        ..default()
+    };
+    let panel = (StartPanel, Panel, panel, BackgroundColor(ui::PANEL));
+    let mut root = commands.spawn((StartRoot, root, children![panel]));
+    if ui::has(BACKGROUND) {
+        let image = ImageNode::new(assets.load(BACKGROUND)).with_mode(NodeImageMode::Stretch);
+        root.insert(image);
+    }
 }
 
 /// 눌린 키 하나를 시작 화면의 키로 바꿉니다. 뗀 키와 글자가 없는 키는 없습니다.
@@ -74,38 +92,65 @@ pub fn type_keys(
 }
 
 /// 시작 화면을 글자로 그립니다. 방 안에서는 비웁니다.
+/// 시작 화면을 그립니다. 방 안에서는 숨깁니다.
 pub fn show_start(
     screen: Res<Screen>,
     start: Res<Start>,
-    mut text: Single<&mut Text, With<StartText>>,
+    assets: Res<AssetServer>,
+    mut root: Single<&mut Node, With<StartRoot>>,
+    panel: Single<Entity, With<StartPanel>>,
+    mut commands: Commands,
 ) {
-    let lines = match *screen {
-        Screen::Start => start_lines(&start.0),
-        Screen::Room => String::new(),
-    };
-    if text.0 != lines {
-        text.0 = lines;
+    commands.entity(*panel).despawn_children();
+    if *screen != Screen::Start {
+        root.display = Display::None;
+        return;
     }
+    root.display = Display::Flex;
+    let form = &start.0;
+    commands.entity(*panel).with_children(|parent| {
+        if ui::has(LOGO) {
+            let logo = Node {
+                height: px(96),
+                ..default()
+            };
+            parent.spawn((logo, ImageNode::new(assets.load(LOGO))));
+        } else {
+            parent.spawn(words("WARSHIP", 44.0, GOLD));
+        }
+        for (label, field) in [("Name", Field::Name), ("Room code", Field::Room)] {
+            parent.spawn(words(label, 13.0, DIM));
+            let focused = form.focus == field;
+            let boxed = Node {
+                height: px(36),
+                padding: UiRect::horizontal(px(10)),
+                align_items: AlignItems::Center,
+                overflow: Overflow::clip(),
+                ..default()
+            };
+            let back = if focused { LIT } else { SLOT };
+            parent
+                .spawn((boxed, BackgroundColor(back)))
+                .with_children(|boxed| {
+                    boxed.spawn(words(field_text(form, field), 18.0, TEXT));
+                });
+        }
+        parent.spawn(words("Tab: next field   Enter: join", 12.0, DIM));
+        parent.spawn(words("An empty room code opens a new room", 12.0, DIM));
+        if let Some(notice) = &form.notice {
+            parent.spawn(words(notice.clone(), 14.0, BAD));
+        }
+    });
 }
 
-fn start_lines(form: &StartForm) -> String {
-    // 입력을 받는 칸의 앞에 표시를 하고, 글자 뒤에 커서를 붙입니다.
-    let field = |label: &str, value: &str, field: Field| {
-        if form.focus == field {
-            format!("> {label}: {value}_")
-        } else {
-            format!("  {label}: {value}")
-        }
+/// 칸에 보여 주는 글자입니다. 입력을 받는 칸은 글자 뒤에 커서가 붙습니다.
+fn field_text(form: &StartForm, field: Field) -> String {
+    let value = match field {
+        Field::Name => &form.name,
+        Field::Room => &form.room,
     };
-    let mut lines = format!(
-        "WARSHIP\n\n{}\n{}\n\nTab: next field   Enter: join\nAn empty room code opens a new room",
-        field("Name", &form.name, Field::Name),
-        field("Room", &form.room, Field::Room),
-    );
-    if let Some(notice) = &form.notice {
-        lines += &format!("\n\n{notice}");
-    }
-    lines
+    let cursor = if form.focus == field { "_" } else { "" };
+    format!("{value}{cursor}")
 }
 
 #[cfg(test)]
@@ -155,14 +200,11 @@ mod tests {
     }
 
     #[test]
-    fn the_start_screen_marks_the_focused_field_and_shows_the_notice() {
+    fn the_focused_field_shows_a_cursor_after_its_text() {
         let mut form = StartForm::new("Kang", "duel");
         form.focus = Field::Room;
-        form.notice = Some("The room is full".to_string());
 
-        let lines = start_lines(&form);
-
-        assert!(lines.contains("  Name: Kang\n> Room: duel_"), "{lines}");
-        assert!(lines.ends_with("The room is full"));
+        assert_eq!(field_text(&form, Field::Name), "Kang");
+        assert_eq!(field_text(&form, Field::Room), "duel_");
     }
 }
