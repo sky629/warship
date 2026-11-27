@@ -733,10 +733,11 @@ impl Default for Tuning {
                 recipe([4, 2], 8, 400),
             ],
             trades: vec![
-                trade("Timber", 60, 90, 0),
-                trade("Salt", 60, 90, 1),
-                trade("Spice", 300, 360, 0),
-                trade("Silk", 300, 360, 1),
+                // 교역선 한 척이 1분에 남기는 이익이 전투하는 배의 보상(1분에 약 65골드)과 비슷하거나 조금 많게 맞춘 값입니다.
+                trade("Timber", 60, 75, 0),
+                trade("Salt", 60, 75, 1),
+                trade("Spice", 300, 325, 0),
+                trade("Silk", 300, 325, 1),
             ],
             gear: vec![
                 gear("Oak Planking", 200, GearEffect::Planking { max_hp: 250 }),

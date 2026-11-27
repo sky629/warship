@@ -61,7 +61,8 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     let max_hp = ship.max_hp(tuning);
     let below = |percent: u32| ship.hp * 100 < max_hp * percent;
     let hurt = below(RETREAT_PERCENT) || (sim.at_dock(id) && below(REJOIN_PERCENT));
-    let purchase = wish(ship, tuning).filter(|(_, cost)| ship.gold >= *cost);
+    let purchase =
+        wish(ship, tuning, rank_in_team(sim, ship)).filter(|(_, cost)| ship.gold >= *cost);
     if sim.at_shop(id)
         && let Some((command, _)) = purchase
     {
@@ -102,7 +103,7 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
 /// 2. 빈 칸이 있으면 아이템을 삽니다. 칸 셋마다 둘은 무기, 하나는 장비입니다.
 ///    무기와 장비는 이미 단 수에 따라 표를 돌아가며 골라서, 여러 종류를 섞어 답니다.
 /// 3. 더 비싼 전투용 선체로 바꿉니다.
-fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
+fn wish(ship: &Ship, tuning: &Tuning, rank: usize) -> Option<(Command, u32)> {
     let hull = tuning.hull(ship.hull);
     let mounted = || ship.mounts.iter().flatten();
     let carried: Vec<WeaponId> = mounted().filter_map(|mount| mount.weapon()).collect();
@@ -134,7 +135,7 @@ fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
         let weapon = WeaponId(index as u16);
         return Some((Command::Buy(weapon), tuning.weapons[index].price));
     }
-    // 지금 선체보다 비싼 전투용 선체 가운데 가장 싼 값의 선체로 바꿉니다. 그 값의 선체가 여럿이면 배마다 다른 것을 고릅니다.
+    // 지금 선체보다 비싼 전투용 선체 가운데 가장 싼 값의 선체로 바꿉니다. 그 값의 선체가 여럿이면 진영 안의 순서에 따라 다른 것을 골라서, 두 진영이 같은 구성이 됩니다.
     let fits =
         |spec: &&HullSpec| !spec.trader && spec.price > hull.price && spec.mounts >= hull.mounts;
     let price = tuning
@@ -146,7 +147,7 @@ fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
     let choices: Vec<usize> = (0..tuning.hulls.len())
         .filter(|index| fits(&&tuning.hulls[*index]) && tuning.hulls[*index].price == price)
         .collect();
-    let index = choices[ship.id.0 as usize % choices.len()];
+    let index = choices[rank % choices.len()];
     let (next, spec) = (HullId(index as u16), &tuning.hulls[index]);
     let refund = u64::from(hull.price) * u64::from(tuning.shop.refund_percent) / 100;
     let cost = spec.price.saturating_sub(refund as u32);
@@ -191,6 +192,12 @@ fn nearest_shop(sim: &Sim, ship: &Ship) -> Option<Vec2> {
     nearest.map(|site| site.pos)
 }
 
+/// 진영 안에서 번호가 몇 번째로 작은 배인지입니다. 가장 작은 배가 0입니다.
+fn rank_in_team(sim: &Sim, ship: &Ship) -> usize {
+    let ahead = |other: &&Ship| other.team == ship.team && other.id < ship.id;
+    sim.ships().filter(ahead).count()
+}
+
 /// 배가 싸우러 갈 자리입니다. 맡은 라인에서 적의 본진에 가장 가까운 아군 NPC 배의 자리입니다.
 /// 아군 NPC 배가 없으면 그 라인에 서 있는 적의 건물 가운데 가장 가까운 건물로 가고, 그 라인의 건물이 모두 파괴되었으면 적의 본진으로 갑니다.
 /// 라인이 없는 맵이면 없습니다.
@@ -199,9 +206,8 @@ fn front(sim: &Sim, ship: &Ship) -> Option<Vec2> {
     if map.lanes.is_empty() {
         return None;
     }
-    // 진영 안에서 번호가 몇 번째로 작은 배인지로 라인을 나눕니다. 그래서 한 진영의 배가 모든 라인에 고르게 갑니다.
-    let ahead = |other: &&Ship| other.team == ship.team && other.id < ship.id;
-    let lane = sim.ships().filter(ahead).count() % map.lanes.len();
+    // 진영 안의 순서로 라인을 나눕니다. 그래서 한 진영의 배가 모든 라인에 고르게 갑니다.
+    let lane = rank_in_team(sim, ship) % map.lanes.len();
     let entry = map.path_point(ship.team, lane, 0)?;
     let goal = map.base_of(ship.team.enemy()).unwrap_or(entry);
     let nearest_to =
