@@ -4,7 +4,7 @@
 //! `--new-room`을 주면 서버가 만든 새 방에 들어가고, 화면 왼쪽 위에 그 방의 코드가 나옵니다.
 //! 웹: `cd crates/client && trunk serve` 뒤에 `http://127.0.0.1:8080/` 열기. 주소에 `?room=duel&name=Kang&server=ws://127.0.0.1:7777`을 붙이면 바로 입장합니다.
 //!
-//! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 위에서 내려다본 도형으로 그립니다.
+//! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 비스듬히 내려다본 3D 도형으로 그립니다. 카메라는 내 배를 따라가고, 마우스 휠로 거리를 바꿉니다.
 //! 오른쪽 클릭으로 배가 갈 지점을 정합니다. 무기는 스스로 쏩니다. 상점과 스킬은 단축키로 씁니다.
 //! 실행 인자 없이 시작하면 시작 화면에서 이름과 방 코드를 받습니다. 방 안에서 Esc를 누르면 시작 화면으로 돌아옵니다.
 //! 기기는 마지막 이름과 방, 자리의 표식을 기억합니다. 그래서 다시 실행해서 같은 방에 들어가면 같은 배로 돌아갑니다.
@@ -56,12 +56,15 @@ fn main() {
                     net::order_moves,
                     hud::order_commands,
                     net::leave_room,
-                    draw::center_camera,
-                    draw::draw_room,
+                    draw::build_scenery,
+                    draw::sync_pieces,
+                    draw::follow_camera,
+                    draw::draw_overlays,
                 )
                     .chain()
                     .run_if(in_room),
                 net::close_room.run_if(resource_exists::<net::Closing>),
+                draw::clear_room.run_if(resource_equals(Screen::Start)),
                 draw::show_status,
                 hud::show_hud,
                 start::show_start,

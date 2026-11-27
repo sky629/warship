@@ -10,7 +10,6 @@ use warship_client_core::{
 use warship_protocol::{ClientEvent, ClientTransport, PlayerName, RoomCode, WireCommand};
 use warship_ws_client::WsClient;
 
-use crate::draw::TILE_PX;
 use crate::start::{Pending, Start};
 use crate::{Screen, storage};
 
@@ -216,7 +215,7 @@ pub fn leave_room(
     commands.insert_resource(Closing(notice));
 }
 
-/// 오른쪽 클릭한 자리로 배를 보냅니다.
+/// 오른쪽 클릭한 수면의 자리로 배를 보냅니다.
 pub fn order_moves(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
@@ -228,10 +227,13 @@ pub fn order_moves(
         return;
     }
     let (camera, camera_transform) = *camera;
+    // 커서를 지나는 시선이 수면(높이 0)과 만나는 점입니다. 시선이 수면과 나란하거나 위를 향하면 만나지 않습니다.
     let clicked = window
         .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world_2d(camera_transform, cursor).ok());
-    let Some(point) = clicked.map(|world| world / TILE_PX) else {
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .filter(|ray| ray.direction.y < -1e-3)
+        .map(|ray| ray.origin + ray.direction * (-ray.origin.y / ray.direction.y));
+    let Some(point) = clicked.map(|water| Vec2::new(water.x, -water.z)) else {
         return;
     };
     let Net { transport, session } = &mut *net;

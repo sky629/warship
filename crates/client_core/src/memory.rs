@@ -53,7 +53,9 @@ impl Memory {
         if let Some(room) = &self.room {
             text += &format!("room={room}\n");
         }
-        if let Some(seat) = &self.seat {
+        // 서버 주소에 줄바꿈이 있으면 다른 줄로 읽히므로, 그런 자리는 저장하지 않습니다.
+        let one_line = |seat: &&RememberedSeat| !seat.server.contains(char::is_control);
+        if let Some(seat) = self.seat.as_ref().filter(one_line) {
             let token = seat.token.to_hex();
             text += &format!("seat={} {token} {}\n", seat.room, seat.server);
         }
@@ -104,6 +106,19 @@ mod tests {
             Memory::parse(&Memory::default().to_text()),
             Memory::default()
         );
+    }
+
+    #[test]
+    fn a_seat_whose_server_holds_a_line_break_is_not_written() {
+        let mut memory = remembered();
+        if let Some(seat) = &mut memory.seat {
+            seat.server = "wss://home.test\nname=Mallory".to_string();
+        }
+
+        let read = Memory::parse(&memory.to_text());
+
+        assert_eq!(read.seat, None);
+        assert_eq!(read.name, memory.name, "no line was slipped in");
     }
 
     #[test]

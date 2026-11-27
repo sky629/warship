@@ -76,6 +76,10 @@ impl LaunchOptions {
     /// 이름이 `key`인 값 하나를 검사해서 넣습니다.
     fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
         match key {
+            // 서버 주소는 기기의 기억에 한 줄로 저장하므로, 공백과 제어 문자가 있는 주소는 받지 않습니다.
+            "server" if value.chars().any(|c| c.is_whitespace() || c.is_control()) => {
+                return Err("the server address must not contain spaces".to_string());
+            }
             "server" if value.starts_with("ws://") || value.starts_with("wss://") => {
                 self.server = value.to_string();
             }
@@ -192,6 +196,9 @@ mod tests {
         assert!(LaunchOptions::from_query("?name=K%40NG").is_err());
         assert!(LaunchOptions::from_query("?server=http://example.test").is_err());
         assert!(LaunchOptions::from_query("?volume=3").is_err());
+        // 줄바꿈이 든 서버 주소는 기억 파일에 다른 줄을 끼워 넣을 수 있으므로 거절합니다.
+        assert!(LaunchOptions::from_query("?server=ws://a.test%0Aname=X").is_err());
+        assert!(LaunchOptions::from_query("?server=ws://a.test+b").is_err());
         // 16진수가 아닌 `%`는 그대로 남아서 이름의 검사에 걸립니다.
         assert!(LaunchOptions::from_query("?name=100%").is_err());
     }
