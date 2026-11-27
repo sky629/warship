@@ -18,6 +18,25 @@ Put a file here with the name below and build again. The client uses every file 
 
 A missing icon is drawn as a square in the color of its kind with the initials of the name.
 
+## 3D models
+
+`models/<folder>/<name>.glb` (binary glTF 2.0). The name follows the same rule as icons.
+
+| Folder | One file for each | Built-in size to match |
+|---|---|---|
+| `models/hulls/` | hull (`sloop.glb`, `man_of_war.glb`, ...) | about 1.3 long. The game makes hulls with more HP larger. |
+| `models/creeps/` | creep kind (`cutter.glb`, `brig.glb`, `sea_raider.glb`) | about 0.7 long. The game makes kinds with more HP larger. |
+| `models/structures/` | `tower.glb`, `harbor.glb`, `base.glb`, `port.glb` | tower 1 wide and 2 high, harbor 2 x 2, base 2.4 x 2.4, port 1.6 x 1.6 |
+
+Rules for every model:
+
+- The bow points along +X, up is +Y, and the bottom is at Y = 0 (the water).
+- The origin is the middle of the model on the water.
+- A material named `team` is replaced by the color of the team (red, blue, the neutral color, or gray for a sunk ship). Every other material keeps its own look.
+- The first scene of the file is used.
+
+A missing model is drawn with the built-in shape.
+
 ## Panels and font
 
 | File | Use |

@@ -7,13 +7,15 @@
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 
+use bevy::gltf::{GltfAssetLabel, GltfMaterialName};
 use bevy::prelude::*;
-use warship_client_core::{Frame, Phase};
+use bevy::world_serialization::WorldAssetRoot;
+use warship_client_core::{Frame, ModelKind, Phase, model_path};
 use warship_protocol::{WireShot, WireStructureKind, WireTeam};
 
 use crate::camera::{CAMERA_OFFSET, Rig};
 use crate::net::{CurrentFrame, Destination, LeavePrompt, Net};
-use crate::shapes;
+use crate::{shapes, ui};
 
 /// 맵 밖의 바다와 하늘의 색입니다.
 pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
@@ -67,10 +69,35 @@ pub struct Scenery;
 /// 방에 놓은 모든 것을 고르는 조건입니다.
 type InRoom = Or<(With<Piece>, With<Scenery>)>;
 
-/// 화면에 놓을 도형 하나입니다.
+/// 개체의 모양입니다. 에셋 폴더에 그 개체의 모형 파일이 있으면 그 모형이고, 없으면 기본 도형을 합친 모양입니다.
+#[derive(Component, Clone, PartialEq)]
+pub enum Shape {
+    Mesh(Handle<Mesh>),
+    /// 에셋 폴더 안의 모형 파일의 경로입니다.
+    Model(String),
+}
+
+impl Shape {
+    /// `model`의 파일이 있으면 그 모형이고, 없으면 `mesh`입니다.
+    fn of(model: Option<String>, mesh: &Handle<Mesh>) -> Shape {
+        match model.filter(|path| ui::has(path)) {
+            Some(path) => Shape::Model(path),
+            None => Shape::Mesh(mesh.clone()),
+        }
+    }
+}
+
+/// 개체의 색을 정하는 재질입니다. 기본 도형은 이 재질로 그리고, 모형은 이름이 `team`인 재질을 이 재질로 바꿉니다.
+#[derive(Component, Clone, PartialEq)]
+pub struct Tint(Handle<StandardMaterial>);
+
+/// 모형 안에서 진영의 색으로 바꾸는 재질의 이름입니다.
+const TEAM_MATERIAL: &str = "team";
+
+/// 화면에 놓을 개체 하나입니다.
 struct Wanted {
     piece: Piece,
-    mesh: Handle<Mesh>,
+    shape: Shape,
     material: Handle<StandardMaterial>,
     /// 도형의 중심이 놓일 자리입니다.
     at: Vec3,
@@ -255,12 +282,14 @@ pub fn build_scenery(
             )),
         ));
     }
+    let port_model = Some(model_path(ModelKind::Structure, "port"));
     for port in &welcome.ports {
         commands.spawn((
             Scenery,
-            Mesh3d(look.port.clone()),
-            MeshMaterial3d(look.neutral.clone()),
+            Shape::of(port_model.clone(), &look.port),
+            Tint(look.neutral.clone()),
             Transform::from_xyz(port.x, 0.0, -port.y),
+            Visibility::default(),
         ));
     }
 }
@@ -285,23 +314,18 @@ pub fn sync_pieces(
     frame: Res<CurrentFrame>,
     look: Res<Look>,
     mut pieces: ResMut<Pieces>,
-    mut placed: Query<(
-        &mut Transform,
-        &mut MeshMaterial3d<StandardMaterial>,
-        &mut Mesh3d,
-    )>,
+    mut placed: Query<(&mut Transform, &mut Tint, &mut Shape)>,
     mut commands: Commands,
 ) {
     let Some(frame) = &frame.0 else {
         return;
     };
-    let hulls = net
-        .session
-        .welcome()
-        .map_or(&[][..], |welcome| &welcome.hulls);
+    let welcome = net.session.welcome();
+    let hulls = welcome.map_or(&[][..], |welcome| &welcome.hulls);
+    let creeps = welcome.map_or(&[][..], |welcome| &welcome.creeps);
     let mut wanted: Vec<Wanted> = Vec::new();
-    let mut want = |piece, mesh: &Handle<Mesh>, material, at, turns| {
-        let mesh = mesh.clone();
+    let mut want = |piece, model: Option<String>, mesh: &Handle<Mesh>, material, at, turns| {
+        let shape = Shape::of(model, mesh);
         // 배는 선체의 최대 HP가 클수록 크게 그립니다. 시작 선체의 크기가 1입니다.
         let scale = match piece {
             Piece::Ship(id) => {
@@ -323,7 +347,7 @@ pub fn sync_pieces(
         };
         wanted.push(Wanted {
             piece,
-            mesh,
+            shape,
             material,
             at,
             turns,
@@ -331,14 +355,15 @@ pub fn sync_pieces(
         });
     };
     for site in &frame.structures {
-        let mesh = match site.kind {
-            WireStructureKind::Tower => &look.tower,
-            WireStructureKind::Harbor => &look.harbor,
-            WireStructureKind::Base => &look.base,
+        let (name, mesh) = match site.kind {
+            WireStructureKind::Tower => ("tower", &look.tower),
+            WireStructureKind::Harbor => ("harbor", &look.harbor),
+            WireStructureKind::Base => ("base", &look.base),
         };
         let at = on_water(site.pos);
         want(
             Piece::Structure(site.id),
+            Some(model_path(ModelKind::Structure, name)),
             mesh,
             look.team(site.team),
             at,
@@ -348,7 +373,16 @@ pub fn sync_pieces(
     for creep in &frame.creeps {
         let at = on_water(creep.pos);
         let material = look.team(creep.team);
-        want(Piece::Creep(creep.id), &look.creep, material, at, true);
+        let model = creeps.get(usize::from(creep.kind));
+        let model = model.map(|spec| model_path(ModelKind::Creep, &spec.name));
+        want(
+            Piece::Creep(creep.id),
+            model,
+            &look.creep,
+            material,
+            at,
+            true,
+        );
     }
     for ship in &frame.ships {
         // 가라앉은 배는 회색이고 수면 아래로 내려가서 돛만 보입니다.
@@ -359,15 +393,16 @@ pub fn sync_pieces(
         };
         let at = on_water(ship.pos) + Vec3::Y * lift;
         // 칸이 3개까지는 돛대 1개, 5개까지는 2개, 그보다 많으면 3개입니다.
-        let mounts = hulls
-            .get(usize::from(ship.hull))
-            .map_or(0, |hull| hull.mounts);
+        let hull = hulls.get(usize::from(ship.hull));
+        let mounts = hull.map_or(0, |hull| hull.mounts);
+        let model = hull.map(|hull| model_path(ModelKind::Hull, &hull.name));
         let masts = match mounts {
             0..=3 => 0,
             4..=5 => 1,
             _ => 2,
         };
-        want(Piece::Ship(ship.id), &look.ships[masts], material, at, true);
+        let mesh = &look.ships[masts];
+        want(Piece::Ship(ship.id), model, mesh, material, at, true);
     }
     for (index, shot) in frame.shots.iter().enumerate() {
         let at = on_water(shot.pos) + Vec3::Y * shot.lift;
@@ -383,14 +418,21 @@ pub fn sync_pieces(
         };
         for (pellet, offset) in pellets.iter().enumerate() {
             let piece = Piece::Shot(index * SCATTER.len() + pellet);
-            want(piece, &look.shot, material.clone(), at + *offset, false);
+            want(
+                piece,
+                None,
+                &look.shot,
+                material.clone(),
+                at + *offset,
+                false,
+            );
         }
     }
 
     let mut seen = Vec::with_capacity(wanted.len());
     for Wanted {
         piece,
-        mesh,
+        shape,
         material,
         at,
         turns,
@@ -403,10 +445,10 @@ pub fn sync_pieces(
             .get(&piece)
             .and_then(|entity| placed.get_mut(*entity).ok());
         match found {
-            Some((mut transform, mut shown, mut shape)) => {
+            Some((mut transform, mut tint, mut shown)) => {
                 // 선체를 바꾼 배는 모양이 바뀝니다.
-                if shape.0 != mesh {
-                    shape.0 = mesh;
+                if *shown != shape {
+                    *shown = shape;
                 }
                 // 움직인 방향으로 뱃머리를 돌립니다. 멈춘 배는 마지막 방향을 유지합니다.
                 let moved = at - transform.translation;
@@ -415,16 +457,17 @@ pub fn sync_pieces(
                 }
                 transform.translation = at;
                 transform.scale = Vec3::splat(scale);
-                if shown.0 != material {
-                    shown.0 = material;
+                if tint.0 != material {
+                    tint.0 = material;
                 }
             }
             None => {
                 let spawned = (
                     piece,
-                    Mesh3d(mesh),
-                    MeshMaterial3d(material),
+                    shape,
+                    Tint(material),
                     Transform::from_translation(at).with_scale(Vec3::splat(scale)),
+                    Visibility::default(),
                 );
                 pieces.0.insert(piece, commands.spawn(spawned).id());
             }
@@ -437,6 +480,59 @@ pub fn sync_pieces(
         }
         keep
     });
+}
+
+/// 모양이 정해지거나 바뀐 개체에 그 모양을 입힙니다. 기본 도형은 개체에 바로 입히고, 모형은 개체의 아래에 둡니다.
+/// 색이 바뀐 기본 도형은 새 재질로 그립니다.
+pub fn dress_pieces(
+    assets: Res<AssetServer>,
+    reshaped: Query<(Entity, &Shape, &Tint), Changed<Shape>>,
+    mut recolored: Query<(&Tint, &mut MeshMaterial3d<StandardMaterial>), Changed<Tint>>,
+    mut commands: Commands,
+) {
+    for (tint, mut material) in &mut recolored {
+        if material.0 != tint.0 {
+            material.0 = tint.0.clone();
+        }
+    }
+    for (entity, shape, tint) in &reshaped {
+        let mut piece = commands.entity(entity);
+        piece
+            .despawn_children()
+            .remove::<(Mesh3d, MeshMaterial3d<StandardMaterial>)>();
+        match shape {
+            Shape::Mesh(mesh) => {
+                piece.insert((Mesh3d(mesh.clone()), MeshMaterial3d(tint.0.clone())));
+            }
+            Shape::Model(path) => {
+                let scene = GltfAssetLabel::Scene(0).from_asset(path.clone());
+                piece.with_child(WorldAssetRoot(assets.load(scene)));
+            }
+        }
+    }
+}
+
+/// 모형 안에서 이름이 `team`인 재질을 그 개체의 색의 재질로 바꿉니다. 가라앉아서 색이 바뀐 배도 여기서 따라 바뀝니다.
+pub fn tint_models(
+    mut parts: Query<(
+        Entity,
+        &GltfMaterialName,
+        &mut MeshMaterial3d<StandardMaterial>,
+    )>,
+    parents: Query<&ChildOf>,
+    tints: Query<&Tint>,
+) {
+    for (entity, name, mut material) in &mut parts {
+        if name.0 != TEAM_MATERIAL {
+            continue;
+        }
+        let tint = parents
+            .iter_ancestors(entity)
+            .find_map(|above| tints.get(above).ok());
+        if let Some(tint) = tint.filter(|tint| material.0 != tint.0) {
+            material.0 = tint.0.clone();
+        }
+    }
 }
 
 /// 수면에 누운 원을 그립니다.

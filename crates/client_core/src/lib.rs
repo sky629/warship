@@ -24,7 +24,7 @@ mod shop;
 mod start;
 mod view;
 
-pub use assets::{Icon, IconKind};
+pub use assets::{Icon, IconKind, ModelKind, model_path};
 pub use hud::{HudView, SkillSlot, TopBar, hud_view, top_bar};
 pub use interp::{
     BlastView, CreepView, Frame, MyShip, ShipView, ShotView, SkillView, StructureView,

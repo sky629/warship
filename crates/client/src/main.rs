@@ -83,6 +83,8 @@ fn main() {
                     net::leave_room,
                     draw::build_scenery,
                     draw::sync_pieces,
+                    draw::dress_pieces,
+                    draw::tint_models,
                     camera::steer_camera,
                     draw::draw_overlays,
                 )

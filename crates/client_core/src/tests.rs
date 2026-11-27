@@ -757,6 +757,12 @@ fn an_icon_has_a_file_named_after_it_and_initials_for_when_the_file_is_missing()
     let icon = Icon::new(IconKind::Weapon, "Twin Deck Guns");
     assert_eq!(icon.path(), "icons/weapons/twin_deck_guns.png");
     assert_eq!(icon.initials(), "TD");
+
+    // 모형의 파일도 같은 규칙으로 이름을 짓습니다.
+    let path = crate::model_path(crate::ModelKind::Hull, "Ship of the Line");
+    assert_eq!(path, "models/hulls/ship_of_the_line.glb");
+    let path = crate::model_path(crate::ModelKind::Structure, "tower");
+    assert_eq!(path, "models/structures/tower.glb");
 }
 
 #[test]

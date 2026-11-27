@@ -92,6 +92,8 @@ pub struct ShipView {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CreepView {
     pub id: u32,
+    /// `Welcome::creeps`의 자리입니다.
+    pub kind: u16,
     pub team: WireTeam,
     pub pos: Vec2,
     /// 모양의 크기의 배율입니다. 최대 HP가 큰 종류가 큽니다.
@@ -326,6 +328,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             .map_or(spec.max_hp, |first| first.max_hp);
         creeps.push(CreepView {
             id: creep.id,
+            kind: u16::from(creep.kind),
             team: creep.team,
             pos,
             size: (spec.max_hp as f32 / smallest as f32).sqrt(),
