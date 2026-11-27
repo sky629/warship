@@ -162,6 +162,30 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             Some(trade.price),
         ));
     }
+    let hired = welcome.creeps.get(usize::from(welcome.hire.creep));
+    let hired = hired.map_or("?", |creep| creep.name.as_str());
+    rows.push(ShopRow::heading("Hire (creeps join a lane)"));
+    for (index, lane) in welcome.lanes.iter().enumerate() {
+        // 라인의 이름은 맵에서 라인이 있는 자리(북쪽, 가운데, 남쪽)입니다.
+        let y = lane.iter().map(|point| point.y).sum::<f32>() / lane.len().max(1) as f32;
+        let place = match y / welcome.map_height {
+            share if share > 2.0 / 3.0 => "North",
+            share if share < 1.0 / 3.0 => "South",
+            _ => "Middle",
+        };
+        let label = format!(
+            "{place} lane  {}g  ({} x {hired})",
+            welcome.hire.price, welcome.hire.count
+        );
+        let order = WireCommand::Hire { lane: index as u8 };
+        let detail = "the creeps come out of your harbor on that lane".to_string();
+        rows.push(ShopRow::item(
+            label,
+            detail,
+            order,
+            Some(welcome.hire.price),
+        ));
+    }
     ShopList {
         rows,
         second_column,

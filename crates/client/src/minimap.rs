@@ -18,6 +18,7 @@ const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
 const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
 const RED: Color = Color::srgb(0.9, 0.3, 0.25);
 const BLUE: Color = Color::srgb(0.3, 0.55, 1.0);
+const WILD: Color = Color::srgb(0.85, 0.85, 0.75);
 const MINE: Color = Color::srgb(1.0, 1.0, 1.0);
 
 /// 카메라가 보는 범위를 나타내는 테두리의 크기(타일)입니다. 카메라 거리의 배율이 1일 때의 대략적인 값입니다.
@@ -63,6 +64,7 @@ fn team_color(team: WireTeam) -> Color {
     match team {
         WireTeam::Red => RED,
         WireTeam::Blue => BLUE,
+        WireTeam::Wild => WILD,
     }
 }
 

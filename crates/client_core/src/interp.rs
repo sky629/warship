@@ -88,6 +88,8 @@ pub struct CreepView {
     pub id: u32,
     pub team: WireTeam,
     pub pos: Vec2,
+    /// 모양의 크기의 배율입니다. 최대 HP가 큰 종류가 큽니다.
+    pub size: f32,
     /// 최대 HP에 대한 비율입니다(0 이상 1 이하).
     pub hp: f32,
 }
@@ -311,10 +313,16 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             None,
             creep.ready_at,
         ));
+        // NPC 배는 최대 HP가 클수록 크게 그립니다. 첫 번째 종류의 크기가 1입니다.
+        let smallest = welcome
+            .creeps
+            .first()
+            .map_or(spec.max_hp, |first| first.max_hp);
         creeps.push(CreepView {
             id: creep.id,
             team: creep.team,
             pos,
+            size: (spec.max_hp as f32 / smallest as f32).sqrt(),
             hp: creep.hp as f32 / spec.max_hp as f32,
         });
     }

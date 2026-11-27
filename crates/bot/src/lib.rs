@@ -245,7 +245,7 @@ fn front(sim: &Sim, ship: &Ship) -> Option<Vec2> {
         |from: Vec2| move |a: &Vec2, b: &Vec2| a.distance(from).total_cmp(&b.distance(from));
     let mine = sim
         .creeps()
-        .filter(|creep| creep.team == ship.team && creep.lane == lane);
+        .filter(|creep| creep.team == ship.team && creep.lane == Some(lane));
     let leader = mine.map(|creep| creep.pos).min_by(nearest_to(goal));
     // 라인은 동서로 뻗어 있으므로, 라인의 입구와 남북으로 가까운 건물이 그 라인의 건물입니다.
     let on_lane = sim.structures().filter(|site| {

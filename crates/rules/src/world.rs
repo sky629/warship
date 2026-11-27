@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::creep::Creep;
+use crate::creep::{CampState, Creep};
 use crate::ids::{CreepId, ShipId, StructureId, Team};
 use crate::math::Vec2;
 use crate::ship::{Life, Ship};
@@ -17,6 +17,10 @@ pub(crate) struct World {
     pub structures: BTreeMap<StructureId, Structure>,
     /// 쏘았지만 아직 표적에 닿지 않은 포탄의 피해입니다.
     pub impacts: Vec<Impact>,
+    /// 중립 몬스터의 자리의 상태입니다. 순서는 `MapSpec::camps`의 순서입니다.
+    pub camps: Vec<CampState>,
+    /// 고용했지만 아직 나오지 않은 용병의 진영과 라인입니다.
+    pub hires: Vec<(Team, usize)>,
 }
 
 impl World {

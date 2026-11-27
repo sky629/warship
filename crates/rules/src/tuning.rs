@@ -30,6 +30,8 @@ pub struct Tuning {
     pub supplies: Vec<SupplySpec>,
     /// 교역 표입니다. `TradeId`가 이 표의 행 번호입니다. 본진이 이 교역의 계약을 모두 팝니다.
     pub trades: Vec<TradeSpec>,
+    /// 상점에서 고용하는 용병입니다.
+    pub hire: HireSpec,
     pub shop: ShopTuning,
     pub growth: GrowthTuning,
     pub structures: StructureTable,
@@ -72,6 +74,15 @@ pub struct HullSpec {
     pub repair_per_sec: u32,
     /// 교역선인지입니다. 교역선만 교역의 계약을 사고 화물을 싣습니다.
     pub trader: bool,
+}
+
+/// 용병의 고용입니다. 값을 내면 NPC 배 `count`척이 고른 라인의 자기 진영 항구에서 나와서 그 라인을 따라갑니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HireSpec {
+    pub price: u32,
+    /// `Tuning::creeps`의 행 번호입니다.
+    pub creep: usize,
+    pub count: u8,
 }
 
 /// 상점에 관한 수치입니다. 자기 진영의 서 있는 본진과 항구가 상점입니다. 수리는 본진에서만 받습니다.
@@ -313,8 +324,20 @@ pub struct MapSpec {
     pub structures: Vec<StructureSite>,
     /// 배가 지나가지 못하는 섬입니다.
     pub islands: Vec<Island>,
-    /// 교역항의 자리입니다. 어느 진영의 것도 아니고, 상점 거리 안에 온 배의 계약을 화물로 바꿉니다.
+    /// 교역항의 자리입니다. 어느 진영의 것도 아니고, 상점 거리 안에 온 배의 계약을 화물로 바꿉니다. 어느 진영의 배나 여기서 상점을 씁니다.
     pub ports: Vec<Vec2>,
+    /// 중립 몬스터가 지키는 자리입니다.
+    pub camps: Vec<Camp>,
+}
+
+/// 중립 몬스터 하나가 지키는 자리입니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Camp {
+    pub pos: Vec2,
+    /// `Tuning::creeps`의 행 번호입니다.
+    pub creep: usize,
+    /// 중립 몬스터가 가라앉은 뒤 다시 나올 때까지의 Tick 수입니다.
+    pub respawn_ticks: u32,
 }
 
 /// 원 모양의 섬입니다.
@@ -469,6 +492,12 @@ impl Tuning {
                 ));
             }
         }
+        if self.hire.creep >= self.creeps.len() || self.hire.count == 0 || self.hire.price == 0 {
+            return Err(
+                "a hire names a creep of the table, has a price and brings at least one creep"
+                    .to_string(),
+            );
+        }
         for trade in &self.trades {
             if trade.port >= self.map.ports.len() || trade.reward <= trade.price {
                 return Err(format!(
@@ -568,6 +597,17 @@ impl Tuning {
                 return Err(format!("start weapon {} is not in the weapon table", id.0));
             }
         }
+        for camp in &self.map.camps {
+            if camp.creep >= self.creeps.len() {
+                return Err(format!(
+                    "camp creep {} is not in the creep table",
+                    camp.creep
+                ));
+            }
+            if camp.respawn_ticks == 0 {
+                return Err("camp respawn_ticks must be at least 1".to_string());
+            }
+        }
         for wave in &self.waves {
             if wave.creep >= self.creeps.len() {
                 return Err(format!(
@@ -596,9 +636,12 @@ impl MapSpec {
             .chain(self.spawns)
             .chain(lane_points)
             .chain(self.ports.iter().copied())
+            .chain(self.camps.iter().map(|camp| camp.pos))
             .all(|p| self.contains(p))
         {
-            return Err("spawns, lanes, structures and ports must be inside the map".to_string());
+            return Err(
+                "spawns, lanes, structures, ports and camps must be inside the map".to_string(),
+            );
         }
         if self.lanes.iter().any(|lane| lane.len() < 2) {
             return Err("a lane needs at least two points".to_string());
@@ -641,12 +684,14 @@ impl MapSpec {
         }
         let sites = self.structures.iter().map(|site| site.pos);
         let ports = self.ports.iter().copied();
+        let camps = self.camps.iter().map(|camp| camp.pos);
         if !sites
             .chain(self.spawns)
             .chain(ports)
+            .chain(camps)
             .all(|p| nav::is_open(self, p))
         {
-            return Err("spawns, structures and ports must be off the islands".to_string());
+            return Err("spawns, structures, ports and camps must be off the islands".to_string());
         }
         // NPC 배는 길을 찾지 않으므로, 항구에서 적의 본진까지 가는 길의 모든 구간이 섬을 지나지 않아야 합니다.
         for site in &self.structures {
@@ -929,6 +974,11 @@ impl Default for Tuning {
                 ),
                 skill("Night Run", 900, SkillEffect::Cloak { ticks_per_rank: 80 }),
             ],
+            hire: HireSpec {
+                price: 220,
+                creep: 1,
+                count: 2,
+            },
             shop: ShopTuning {
                 range: 5.0,
                 refund_percent: 50,
@@ -976,6 +1026,15 @@ impl Default for Tuning {
                     weapon: gun("Brig Gun", 16, 5.5, 30, 14.0, both),
                     bounty: 50,
                 },
+                // 자리를 지키는 중립 몬스터입니다. 일정에 없으므로 항구에서 나오지 않습니다.
+                CreepSpec {
+                    name: "Sea Raider",
+                    max_hp: 700,
+                    speed: 1.0,
+                    vision: 6.0,
+                    weapon: gun("Raider Gun", 22, 4.5, 24, 14.0, both),
+                    bounty: 150,
+                },
             ],
             waves: vec![
                 Wave {
@@ -1022,6 +1081,15 @@ impl Default for Tuning {
                 .collect(),
                 // 두 진영의 본진에서 같은 거리에 있는, 바깥쪽 섬의 안쪽입니다. 바깥쪽 라인보다 더 바깥입니다.
                 ports: vec![Vec2::new(48.0, 56.0), Vec2::new(48.0, 8.0)],
+                // 라인과 라인 사이, 섬과 섬 사이의 물길입니다. 라인의 NPC 배의 시야 밖입니다.
+                camps: [(40.0, 42.0), (56.0, 42.0), (40.0, 22.0), (56.0, 22.0)]
+                    .into_iter()
+                    .map(|(x, y)| Camp {
+                        pos: Vec2::new(x, y),
+                        creep: 2,
+                        respawn_ticks: 2400,
+                    })
+                    .collect(),
             },
         }
     }

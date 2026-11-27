@@ -31,6 +31,8 @@ pub struct Welcome {
     pub recipes: Vec<WireRecipe>,
     pub supplies: Vec<WireSupply>,
     pub trades: Vec<WireTrade>,
+    /// 상점에서 고용하는 용병입니다.
+    pub hire: WireHire,
     /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서이고, 선체마다 이 가운데 일부를 씁니다.
     pub skills: Vec<WireSkillSpec>,
     pub tower: WireStructureSpec,
@@ -99,6 +101,14 @@ pub struct WireSupply {
     pub name: String,
     pub price: u32,
     pub effect: String,
+}
+
+/// 용병의 고용입니다. `creep`은 `Welcome::creeps`의 자리이고, 그 NPC 배 `count`척이 고른 라인의 항구에서 나옵니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireHire {
+    pub price: u32,
+    pub creep: u16,
+    pub count: u8,
 }
 
 /// 교역 하나입니다. `port`는 `Welcome::ports`의 자리입니다.
@@ -316,6 +326,11 @@ impl Welcome {
                     port: trade.port as u16,
                 })
                 .collect(),
+            hire: WireHire {
+                price: tuning.hire.price,
+                creep: tuning.hire.creep as u16,
+                count: tuning.hire.count,
+            },
             ports: tuning
                 .map
                 .ports

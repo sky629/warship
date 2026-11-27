@@ -12,6 +12,7 @@ use crate::math::Vec2;
 use crate::ship::{Item, Mount, Ship};
 use crate::sim::Sim;
 use crate::structures::{Structure, StructureKind};
+use crate::tuning::HireSpec;
 use crate::tuning::{
     CreepSpec, EconomyTuning, GearEffect, GearSpec, GrowthTuning, Hits, HullSpec, MapSpec, Recipe,
     ShipTuning, ShopTuning, Shot, SkillEffect, SkillSpec, StructureSpec, StructureTable,
@@ -142,7 +143,7 @@ impl Scenario {
             id,
             team,
             kind: 0,
-            lane: 0,
+            lane: Some(0),
             leg: 0,
             pos: Vec2::new(x, y),
             hp: max_hp,
@@ -379,6 +380,11 @@ fn open_sea_tuning() -> Tuning {
             reward: 250,
             port: 0,
         }],
+        hire: HireSpec {
+            price: 100,
+            creep: 0,
+            count: 2,
+        },
         shop: ShopTuning {
             range: 5.0,
             refund_percent: 50,
@@ -415,6 +421,7 @@ fn open_sea_tuning() -> Tuning {
             structures: Vec::new(),
             islands: Vec::new(),
             ports: vec![Vec2::new(30.0, 10.0)],
+            camps: Vec::new(),
         },
     }
 }

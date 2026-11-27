@@ -9,8 +9,8 @@ use crate::world::World;
 /// 한 Tick에 진영마다 보이는 적입니다. 기본값은 아무도 보이지 않는 상태입니다.
 #[derive(Default)]
 pub(crate) struct Sight {
-    /// `Team::index` 자리의 진영에 보이는 적입니다. 순서는 `World::targets`의 순서입니다.
-    seen: [Vec<(Target, Vec2)>; 2],
+    /// `Team::index` 자리의 쪽에 보이는 적입니다. 순서는 `World::targets`의 순서입니다.
+    seen: [Vec<(Target, Vec2)>; 3],
 }
 
 impl Sight {
@@ -47,8 +47,8 @@ fn vision_of(world: &World, tuning: &Tuning, watcher: Target) -> f32 {
 /// 적은 아군의 떠 있는 배, NPC 배, 서 있는 건물 가운데 하나의 시야 거리 안에 있으면 보입니다.
 /// 은신한 배는 건물의 시야 거리 안에 있을 때만 보입니다.
 pub(crate) fn look(world: &World, tuning: &Tuning, tick: u64) -> Sight {
-    let mut seen = [Vec::new(), Vec::new()];
-    for team in Team::ALL {
+    let mut seen = [Vec::new(), Vec::new(), Vec::new()];
+    for team in [Team::RED, Team::BLUE, Team::WILD] {
         // 시야를 주는 개체의 자리, 시야 거리, 은신한 배도 보는지입니다.
         let eyes: Vec<(Vec2, f32, bool)> = world
             .targets()

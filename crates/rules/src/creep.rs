@@ -1,5 +1,6 @@
-//! 라인을 따라가는 NPC 배입니다. 항구에서 일정에 따라 나오고, 라인의 지점을 차례로 지나 적의 본진으로 갑니다.
+//! NPC 배입니다. 라인의 NPC 배는 항구에서 일정에 따라 나오고, 라인의 지점을 차례로 지나 적의 본진으로 갑니다.
 //! 쏠 수 있는 적이 사거리 안에 있으면 멈춰서 싸우고, 없으면 다시 나아갑니다. 사격은 배의 무기와 같은 규칙입니다.
+//! 중립 몬스터(`Team::WILD`)는 맵에 적힌 자리(`MapSpec::camps`)를 지키고, 가라앉으면 정해진 시간 뒤에 다시 나옵니다.
 
 use crate::ids::{CreepId, Team};
 use crate::math::Vec2;
@@ -15,7 +16,8 @@ pub struct Creep {
     pub team: Team,
     /// `Tuning::creeps`의 행 번호입니다.
     pub kind: usize,
-    pub lane: usize,
+    /// 따라가는 라인의 번호입니다. 자리를 지키는 중립 몬스터에는 없습니다.
+    pub lane: Option<usize>,
     /// 지금 향하는 지점이 길에서 몇 번째인지입니다(`MapSpec::path_point`).
     pub leg: usize,
     pub pos: Vec2,
@@ -52,7 +54,7 @@ pub(crate) fn spawn(world: &mut World, tuning: &Tuning, tick: u64, next_id: &mut
                 id,
                 team,
                 kind: wave.creep,
-                lane,
+                lane: Some(lane),
                 leg: 0,
                 pos,
                 hp: tuning.creeps[wave.creep].max_hp,
@@ -61,6 +63,88 @@ pub(crate) fn spawn(world: &mut World, tuning: &Tuning, tick: u64, next_id: &mut
             };
             world.creeps.insert(id, creep);
         }
+    }
+}
+
+/// 용병이 서로 겹치지 않게 항구의 남북으로 벌려 놓는 간격입니다.
+const HIRED_GAP: f32 = 0.8;
+
+/// 고용한 용병을 그 라인의 항구에서 내보냅니다. 그사이에 항구가 파괴되었으면 나오지 않습니다.
+pub(crate) fn spawn_hired(world: &mut World, tuning: &Tuning, next_id: &mut u32) {
+    let spec = tuning.hire;
+    for (team, lane) in std::mem::take(&mut world.hires) {
+        let harbor = world.structures.values().find(|site| {
+            site.kind == StructureKind::Harbor
+                && site.hp > 0
+                && site.team == team
+                && site.lane == Some(lane)
+        });
+        let Some(pos) = harbor.map(|harbor| harbor.pos) else {
+            continue;
+        };
+        for nth in 0..spec.count {
+            let id = CreepId(*next_id);
+            *next_id += 1;
+            let offset = (f32::from(nth) - f32::from(spec.count - 1) / 2.0) * HIRED_GAP;
+            let creep = Creep {
+                id,
+                team,
+                kind: spec.creep,
+                lane: Some(lane),
+                leg: 0,
+                pos: pos + Vec2::new(0.0, offset),
+                hp: tuning.creeps[spec.creep].max_hp,
+                ready_at: 0,
+                target: None,
+            };
+            world.creeps.insert(id, creep);
+        }
+    }
+}
+
+/// 중립 몬스터의 자리 하나의 상태입니다.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct CampState {
+    /// 지금 그 자리를 지키는 중립 몬스터입니다.
+    pub creep: Option<CreepId>,
+    /// 자리가 비어 있을 때, 이 Tick에 다음 중립 몬스터가 나옵니다.
+    pub ready_at: u64,
+}
+
+/// 중립 몬스터가 가라앉은 자리에 다시 나올 Tick을 정하고, 그 Tick이 된 자리에 중립 몬스터를 내보냅니다.
+pub(crate) fn spawn_camps(world: &mut World, tuning: &Tuning, tick: u64, next_id: &mut u32) {
+    world
+        .camps
+        .resize(tuning.map.camps.len(), CampState::default());
+    for (index, camp) in tuning.map.camps.iter().enumerate() {
+        let state = world.camps[index];
+        if let Some(id) = state.creep {
+            if !world.creeps.contains_key(&id) {
+                world.camps[index] = CampState {
+                    creep: None,
+                    ready_at: tick + u64::from(camp.respawn_ticks),
+                };
+            }
+            continue;
+        }
+        if tick < state.ready_at {
+            continue;
+        }
+        let id = CreepId(*next_id);
+        *next_id += 1;
+        let creep = Creep {
+            id,
+            team: Team::WILD,
+            kind: camp.creep,
+            lane: None,
+            leg: 0,
+            pos: camp.pos,
+            hp: tuning.creeps[camp.creep].max_hp,
+            ready_at: 0,
+            target: None,
+        };
+        world.creeps.insert(id, creep);
+        world.camps[index].creep = Some(id);
     }
 }
 
@@ -77,7 +161,10 @@ pub(crate) fn move_creeps(world: &mut World, sight: &Sight, tuning: &Tuning) {
         if fighting {
             continue;
         }
-        let Some(point) = tuning.map.path_point(creep.team, creep.lane, creep.leg) else {
+        let point = creep
+            .lane
+            .and_then(|lane| tuning.map.path_point(creep.team, lane, creep.leg));
+        let Some(point) = point else {
             continue;
         };
         let step = spec.speed / tuning.tick_hz as f32;

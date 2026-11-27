@@ -105,7 +105,7 @@ impl Sim {
 
     /// Tick 하나를 실행합니다. 대전이 끝난 뒤에는 아무 일도 하지 않습니다.
     ///
-    /// 가라앉았던 배가 다시 나타나고, 항구가 NPC 배를 내보내고, 배와 NPC 배가 움직이고, 진영별 시야를 정하고,
+    /// 가라앉았던 배가 다시 나타나고, 항구가 NPC 배를 내보내고, 빈 자리에 중립 몬스터가 나오고, 고용한 용병이 나오고, 배와 NPC 배가 움직이고, 진영별 시야를 정하고,
     /// 쏠 수 있는 무기가 쏘고, 닿을 때가 된 포탄이 피해를 주고, 보상과 수입을 주고, 교역의 화물을 싣고 내리고, 상점의 배를 수리하고, 선원 장비가 배를 수리하고, 사라진 것을 지우고, 승패를 판정합니다.
     /// 무기는 이번 Tick의 피해가 들어가기 전의 상태를 보고 쏘므로, 같은 Tick에 가라앉는 배도 그 Tick의 사격은 마칩니다.
     pub fn step(&mut self, inputs: &PlayerInputs) {
@@ -116,6 +116,8 @@ impl Sim {
         let (world, tuning) = (&mut self.world, &self.tuning);
         ship::respawn(world, tuning, self.tick);
         creep::spawn(world, tuning, self.tick, &mut self.next_creep);
+        creep::spawn_camps(world, tuning, self.tick, &mut self.next_creep);
+        creep::spawn_hired(world, tuning, &mut self.next_creep);
         ship::move_ships(world, inputs, tuning, self.tick);
         creep::move_creeps(world, &self.sight, tuning);
         self.sight = vision::look(world, tuning, self.tick);

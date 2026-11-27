@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 45] = [
+    let broken: [fn(&mut Tuning); 51] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -84,6 +84,14 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.trades[0].reward = t.trades[0].price,
         |t| t.map.ports[0] = Vec2::new(97.0, 24.0),
         |t| t.map.ports[0] = Vec2::new(48.0, 42.0),
+        // 없는 NPC 배의 자리, 다시 나오는 시간이 없는 자리, 섬 위의 자리입니다.
+        |t| t.map.camps[0].creep = 9,
+        |t| t.map.camps[0].respawn_ticks = 0,
+        |t| t.map.camps[0].pos = Vec2::new(48.0, 42.0),
+        // 없는 NPC 배를 부르는 고용, 한 척도 부르지 않는 고용, 값이 없는 고용입니다.
+        |t| t.hire.creep = 9,
+        |t| t.hire.count = 0,
+        |t| t.hire.price = 0,
         // 범위가 없는 폭탄과, 이어지는 시간이 없는 화염입니다.
         |t| t.weapons[4].shot = Shot::Bomb { radius: 0.0 },
         |t| {

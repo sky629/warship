@@ -35,6 +35,7 @@ const BORDER: Color = Color::srgb(0.35, 0.55, 0.65);
 const LANE: Color = Color::srgb(0.2, 0.36, 0.45);
 const RED: Color = Color::srgb(0.9, 0.3, 0.25);
 const BLUE: Color = Color::srgb(0.3, 0.55, 1.0);
+const WILD: Color = Color::srgb(0.85, 0.85, 0.75);
 const MINE: Color = Color::srgb(1.0, 1.0, 1.0);
 const SUNK: Color = Color::srgb(0.35, 0.35, 0.35);
 const HP: Color = Color::srgb(0.4, 0.9, 0.4);
@@ -100,6 +101,8 @@ pub struct Look {
     water: Handle<Mesh>,
     red: Handle<StandardMaterial>,
     blue: Handle<StandardMaterial>,
+    /// 중립 몬스터의 재질입니다.
+    wild: Handle<StandardMaterial>,
     sunk: Handle<StandardMaterial>,
     land: Handle<StandardMaterial>,
     sea: Handle<StandardMaterial>,
@@ -114,6 +117,7 @@ impl Look {
         match team {
             WireTeam::Red => self.red.clone(),
             WireTeam::Blue => self.blue.clone(),
+            WireTeam::Wild => self.wild.clone(),
         }
     }
 }
@@ -156,6 +160,7 @@ pub fn setup(
     let look = Look {
         red: matte(RED),
         blue: matte(BLUE),
+        wild: matte(WILD),
         sunk: matte(SUNK),
         land: matte(ISLAND),
         sea: matte(WATER),
@@ -211,6 +216,7 @@ fn team_color(team: WireTeam) -> Color {
     match team {
         WireTeam::Red => RED,
         WireTeam::Blue => BLUE,
+        WireTeam::Wild => WILD,
     }
 }
 
@@ -308,6 +314,10 @@ pub fn sync_pieces(
                 let pellet = matches!(shot.kind, WireShot::Scatter { .. });
                 shot.size * if pellet { 0.5 } else { 1.0 }
             }),
+            Piece::Creep(id) => {
+                let creep = frame.creeps.iter().find(|creep| creep.id == id);
+                creep.map_or(1.0, |creep| creep.size)
+            }
             _ => 1.0,
         };
         wanted.push(Wanted {
@@ -487,7 +497,11 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
         flat_circle(gizmos, on_water(blast.pos), blast.radius * blast.age, color);
     }
     for creep in &frame.creeps {
-        draw_hp(gizmos, on_water(creep.pos) + Vec3::Y * 0.7, creep.hp);
+        draw_hp(
+            gizmos,
+            on_water(creep.pos) + Vec3::Y * 0.7 * creep.size,
+            creep.hp,
+        );
     }
     for ship in frame.ships.iter().filter(|ship| !ship.sunk) {
         let center = on_water(ship.pos);

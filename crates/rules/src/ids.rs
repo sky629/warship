@@ -44,7 +44,7 @@ pub struct SupplyId(pub u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TradeId(pub u16);
 
-/// 개체가 편들어 싸우는 쪽입니다. 진영은 둘뿐이고, 이 타입의 값은 `RED`와 `BLUE`만 있습니다.
+/// 개체가 편들어 싸우는 쪽입니다. 플레이어의 진영은 `RED`와 `BLUE`이고, `WILD`는 두 진영 모두와 싸우는 중립 몬스터의 쪽입니다.
 ///
 /// 「누가 누구를 공격할 수 있는가」는 `is_hostile_to`로 판정합니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,18 +53,21 @@ pub struct Team(u8);
 impl Team {
     pub const RED: Team = Team(0);
     pub const BLUE: Team = Team(1);
+    /// 어느 진영의 편도 아닌 중립 몬스터의 쪽입니다. 배와 건물은 이 쪽에 속하지 않습니다.
+    pub const WILD: Team = Team(2);
+    /// 플레이어의 진영입니다.
     pub const ALL: [Team; 2] = [Team::RED, Team::BLUE];
 
     pub fn is_hostile_to(self, other: Team) -> bool {
         self != other
     }
 
-    /// 상대 진영입니다.
+    /// 플레이어의 진영의 상대 진영입니다.
     pub fn enemy(self) -> Team {
         Team(1 - self.0)
     }
 
-    /// 진영마다 하나씩 있는 배열의 자리입니다.
+    /// 쪽마다 하나씩 있는 배열의 자리입니다. 플레이어의 진영이 앞의 두 자리입니다.
     pub fn index(self) -> usize {
         usize::from(self.0)
     }

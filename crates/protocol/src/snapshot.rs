@@ -96,6 +96,7 @@ pub enum WireRefusal {
     NotUsable,
     NotATrader,
     CarryingFreight,
+    NoHarbor,
 }
 
 impl From<Refusal> for WireRefusal {
@@ -120,6 +121,7 @@ impl From<Refusal> for WireRefusal {
             Refusal::NotUsable => WireRefusal::NotUsable,
             Refusal::NotATrader => WireRefusal::NotATrader,
             Refusal::CarryingFreight => WireRefusal::CarryingFreight,
+            Refusal::NoHarbor => WireRefusal::NoHarbor,
         }
     }
 }

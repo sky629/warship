@@ -2,20 +2,20 @@
 
 use crate::command::Refusal;
 use crate::ids::{GearId, HullId, RecipeId, ShipId, SkillId, SupplyId, WeaponId};
+use crate::math::Vec2;
 use crate::ship::{Boost, Item, Mount, Ship};
 use crate::structures::StructureKind;
 use crate::trade;
 use crate::tuning::{SupplyEffect, Tuning};
 use crate::world::World;
 
-/// 배가 자기 진영의 서 있는 본진이나 항구에서 상점 거리 안에 있는지입니다.
+/// 배가 상점 거리 안에 있는지입니다. 자기 진영의 서 있는 본진과 항구, 그리고 어느 진영의 배나 쓰는 교역항이 상점입니다.
 pub(crate) fn at_shop(world: &World, tuning: &Tuning, ship: &Ship) -> bool {
-    world.structures.values().any(|site| {
-        site.kind != StructureKind::Tower
-            && site.hp > 0
-            && site.team == ship.team
-            && site.pos.distance(ship.pos) <= tuning.shop.range
-    })
+    let near = |pos: Vec2| pos.distance(ship.pos) <= tuning.shop.range;
+    let own = world.structures.values().any(|site| {
+        site.kind != StructureKind::Tower && site.hp > 0 && site.team == ship.team && near(site.pos)
+    });
+    own || tuning.map.ports.iter().any(|port| near(*port))
 }
 
 /// 배가 자기 진영의 서 있는 본진에서 상점 거리 안에 있는지입니다. 여기에 떠 있는 배가 수리를 받습니다.
@@ -270,5 +270,34 @@ pub(crate) fn change_hull(
             skill.rank = 0;
         }
     }
+    Ok(())
+}
+
+/// 용병을 고용합니다. 값을 내면 다음 Tick에 그 라인의 자기 진영 항구에서 용병이 나옵니다.
+pub(crate) fn hire(
+    world: &mut World,
+    tuning: &Tuning,
+    id: ShipId,
+    lane: usize,
+) -> Result<(), Refusal> {
+    if lane >= tuning.map.lanes.len() {
+        return Err(Refusal::UnknownItem);
+    }
+    let team = customer(world, tuning, id)?.team;
+    let harbor = world.structures.values().any(|site| {
+        site.kind == StructureKind::Harbor
+            && site.hp > 0
+            && site.team == team
+            && site.lane == Some(lane)
+    });
+    if !harbor {
+        return Err(Refusal::NoHarbor);
+    }
+    let ship = world.ships.get_mut(&id).ok_or(Refusal::Sunk)?;
+    if ship.gold < tuning.hire.price {
+        return Err(Refusal::NotEnoughGold);
+    }
+    ship.gold -= tuning.hire.price;
+    world.hires.push((team, lane));
     Ok(())
 }

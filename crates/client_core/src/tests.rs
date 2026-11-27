@@ -9,7 +9,9 @@ use warship_protocol::{
     WireStructure, WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2,
     WireWeapon,
 };
-use warship_protocol::{SeatToken, WireMember, WireRecipe, WireShot, WireSupply, WireTrade};
+use warship_protocol::{
+    SeatToken, WireHire, WireMember, WireRecipe, WireShot, WireSupply, WireTrade,
+};
 use warship_rules::Vec2;
 
 use crate::{BlastView, MountView, Phase, Session, SkillView, mount_views, shop_list};
@@ -83,6 +85,11 @@ fn welcome() -> Welcome {
         islands: Vec::new(),
         supplies: Vec::new(),
         trades: Vec::new(),
+        hire: WireHire {
+            price: 220,
+            creep: 0,
+            count: 2,
+        },
         ports: Vec::new(),
     }
 }
@@ -546,9 +553,13 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
         effect: "+200 HP".to_string(),
     });
 
+    // 맵의 높이가 40이므로, y가 30인 라인은 북쪽 라인입니다.
+    let lane = vec![WireVec2::new(5.0, 30.0), WireVec2::new(35.0, 30.0)];
+    welcome.lanes.push(lane);
+
     let list = shop_list(&welcome);
     // 둘째 열은 선체에서 시작합니다.
-    assert_eq!(list.columns(), [9, 5]);
+    assert_eq!(list.columns(), [9, 7]);
     let rows = list.rows;
 
     // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
@@ -570,6 +581,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             "skills: skill",
             "",
             "",
+            "",
+            "the creeps come out of your harbor on that lane",
         ]
     );
 
@@ -591,6 +604,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             "  big  400g  (2000 HP, 4 mounts, trader, -15% damage)",
             "Trade (a trader hull at your base)",
             "  salt  60g  (port 2, pays 90g)",
+            "Hire (creeps join a lane)",
+            "  North lane  220g  (2 x creep)",
         ]
     );
     let orders: Vec<Option<WireCommand>> = rows.iter().map(|row| row.order).collect();
@@ -611,6 +626,8 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             Some(WireCommand::ChangeHull { hull: 1 }),
             None,
             Some(WireCommand::Contract { trade: 0 }),
+            None,
+            Some(WireCommand::Hire { lane: 0 }),
         ]
     );
     let costs: Vec<Option<u32>> = rows.iter().map(|row| row.cost).collect();
@@ -630,7 +647,9 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
             None,
             None,
             None,
-            Some(60)
+            Some(60),
+            None,
+            Some(220),
         ]
     );
 }

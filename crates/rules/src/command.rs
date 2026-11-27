@@ -26,6 +26,8 @@ pub enum Command {
     ChangeHull(HullId),
     /// 교역의 계약을 사서 첫 빈 칸에 답니다. 자기 진영의 본진에서만 삽니다.
     Contract(TradeId),
+    /// 용병을 고용해서 이 번호의 라인에 보냅니다.
+    Hire { lane: u8 },
     /// 스킬 포인트 하나를 이 스킬에 넣습니다.
     Learn(SkillId),
     /// 스킬을 씁니다.
@@ -37,7 +39,7 @@ pub enum Command {
 pub enum Refusal {
     /// 배가 가라앉아 있습니다.
     Sunk,
-    /// 자기 진영의 본진이나 항구가 가까이에 없습니다.
+    /// 자기 진영의 본진이나 항구도, 교역항도 가까이에 없습니다.
     NoShopInRange,
     /// 표에 없는 무기, 선체, 스킬입니다.
     UnknownItem,
@@ -70,6 +72,8 @@ pub enum Refusal {
     NotATrader,
     /// 교역의 계약이나 화물을 단 채로는 교역선이 아닌 선체로 바꾸지 못합니다.
     CarryingFreight,
+    /// 그 라인에 자기 진영의 서 있는 항구가 없어서 용병이 나올 곳이 없습니다.
+    NoHarbor,
 }
 
 /// 배의 명령 하나를 처리합니다. 없는 배의 명령과 이미 처리한 순서 번호의 명령은 무시합니다.
@@ -99,6 +103,7 @@ pub(crate) fn apply(
         Command::Combine(recipe) => shop::combine(world, tuning, id, recipe),
         Command::ChangeHull(hull) => shop::change_hull(world, tuning, id, hull),
         Command::Contract(which) => trade::contract(world, tuning, id, which),
+        Command::Hire { lane } => shop::hire(world, tuning, id, usize::from(lane)),
         Command::Learn(which) => skill::learn(world, tuning, id, which),
         Command::Cast(which) => skill::cast(world, tuning, tick, id, which),
     };
