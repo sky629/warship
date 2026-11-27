@@ -1,40 +1,25 @@
 //! 내 배의 상태를 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이, 칸의 아이템은 칸 줄(`mounts`)이 보여 줍니다.
 //!
-//! 숫자 키는 상점의 그 번호의 무기를 사고, Alt와 숫자 키는 그 번호의 장비를 삽니다. 무기와 장비는 같은 칸에 달립니다.
-//! Shift와 숫자 키는 그 번호의 칸의 아이템을 팔고, Ctrl과 숫자 키는 그 번호의 칸의 소모품을 씁니다.
-//! Z, X, C, V는 조합 표의 차례대로 무기를 조합합니다. F1부터의 키는 선체를 바꿉니다.
-//! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Ctrl과 함께 누르면 스킬 포인트를 넣습니다. 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
+//! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Shift와 함께 누르면 스킬 포인트를 넣습니다.
+//! 숫자 키는 그 번호의 칸의 소모품을 씁니다. 사고파는 일은 상점 창과 칸 줄의 클릭으로 합니다.
+//! Ctrl과 글자, Ctrl과 숫자, F키는 브라우저의 기능(새로 고침, 탭 닫기, 탭 바꾸기)이므로 단축키로 쓰지 않습니다.
+//! 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
-use warship_client_core::{MyShip, weapons_for_sale};
+use warship_client_core::MyShip;
 use warship_protocol::{Welcome, WireCommand, WireRefusal};
 
 use crate::net::{CurrentFrame, Net};
 
-const DIGITS: [KeyCode; 9] = [
+/// 칸의 번호의 키입니다. 가장 큰 선체의 칸이 6개입니다.
+const MOUNT_KEYS: [KeyCode; 6] = [
     KeyCode::Digit1,
     KeyCode::Digit2,
     KeyCode::Digit3,
     KeyCode::Digit4,
     KeyCode::Digit5,
     KeyCode::Digit6,
-    KeyCode::Digit7,
-    KeyCode::Digit8,
-    KeyCode::Digit9,
 ];
-const HULL_KEYS: [KeyCode; 10] = [
-    KeyCode::F1,
-    KeyCode::F2,
-    KeyCode::F3,
-    KeyCode::F4,
-    KeyCode::F5,
-    KeyCode::F6,
-    KeyCode::F7,
-    KeyCode::F8,
-    KeyCode::F9,
-    KeyCode::F10,
-];
-const RECIPE_KEYS: [KeyCode; 4] = [KeyCode::KeyZ, KeyCode::KeyX, KeyCode::KeyC, KeyCode::KeyV];
 const SKILL_KEYS: [(KeyCode, char); 4] = [
     (KeyCode::KeyQ, 'Q'),
     (KeyCode::KeyW, 'W'),
@@ -68,40 +53,11 @@ pub fn order_commands(
     frame: Res<CurrentFrame>,
     mut net: NonSendMut<Net>,
 ) {
-    let held = |pair: [KeyCode; 2]| keys.any_pressed(pair);
-    let shift = held([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-    let ctrl = held([KeyCode::ControlLeft, KeyCode::ControlRight]);
-    let alt = held([KeyCode::AltLeft, KeyCode::AltRight]);
-    let welcome = net.session.welcome();
-    // 숫자 키의 번호는 상점이 파는 무기의 순서입니다. 조합으로만 얻는 무기는 건너뜁니다.
-    let for_sale: Vec<u16> =
-        welcome.map_or(Vec::new(), |welcome| weapons_for_sale(welcome).collect());
-    let recipes = welcome.map_or(0, |welcome| welcome.recipes.len());
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let mut orders = Vec::new();
-    for (index, key) in DIGITS.into_iter().enumerate() {
-        if !keys.just_pressed(key) {
-            continue;
-        }
-        let slot = index as u8;
-        let order = match (shift, ctrl, alt) {
-            (true, _, _) => Some(WireCommand::Sell { slot }),
-            (false, true, _) => Some(WireCommand::Use { slot }),
-            (false, false, true) => Some(WireCommand::BuyGear { gear: index as u16 }),
-            (false, false, false) => for_sale
-                .get(index)
-                .map(|&weapon| WireCommand::Buy { weapon }),
-        };
-        orders.extend(order);
-    }
-    for (index, key) in RECIPE_KEYS.into_iter().enumerate().take(recipes) {
+    for (slot, key) in MOUNT_KEYS.into_iter().enumerate() {
         if keys.just_pressed(key) {
-            let recipe = index as u16;
-            orders.push(WireCommand::Combine { recipe });
-        }
-    }
-    for (index, key) in HULL_KEYS.into_iter().enumerate() {
-        if keys.just_pressed(key) {
-            orders.push(WireCommand::ChangeHull { hull: index as u16 });
+            orders.push(WireCommand::Use { slot: slot as u8 });
         }
     }
     let me = frame.0.as_ref().and_then(|frame| frame.me.as_ref());
@@ -111,7 +67,7 @@ pub fn order_commands(
     };
     for (&skill, (key, _)) in hull_skills.iter().zip(SKILL_KEYS) {
         if keys.just_pressed(key) {
-            orders.push(if ctrl {
+            orders.push(if shift {
                 WireCommand::Learn { skill }
             } else {
                 WireCommand::Cast { skill }
@@ -163,8 +119,8 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
             lines += &format!(" ({:.0}s)", skill.ready_secs.ceil());
         }
     }
-    lines += "\nB: shop   Number: buy weapon   Alt+number: buy gear   Z, X, C, V: combine   F1-F10: hull";
-    lines += "\nMount: click to use a supply, right-click to sell   Ctrl+key: learn skill";
+    lines += "\nB: shop (click a row to buy)   Shift+key: learn skill   Number: use a supply";
+    lines += "\nMount: click to use a supply, right-click to sell";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
     }

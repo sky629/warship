@@ -36,7 +36,7 @@ impl ShopRow {
 }
 
 /// 상점이 파는 무기의 번호입니다. 무기 표의 순서이고, 조합으로만 얻는 무기는 건너뜁니다.
-pub fn weapons_for_sale(welcome: &Welcome) -> impl Iterator<Item = u16> + '_ {
+fn weapons_for_sale(welcome: &Welcome) -> impl Iterator<Item = u16> + '_ {
     let weapons = welcome.weapons.iter().enumerate();
     weapons
         .filter(|(_, weapon)| weapon.buyable)
@@ -58,7 +58,7 @@ impl ShopList {
     }
 }
 
-/// 상점 창의 줄을 위에서부터 차례로 만듭니다. 묶음 안의 번호는 그 묶음의 단축키의 순서입니다.
+/// 상점 창의 줄을 위에서부터 차례로 만듭니다.
 pub fn shop_list(welcome: &Welcome) -> ShopList {
     let weapon_name = |id: u16| {
         let weapon = welcome.weapons.get(usize::from(id));
@@ -76,9 +76,9 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
         })
     };
     let mut rows = vec![ShopRow::heading("Weapons")];
-    for (index, weapon) in weapons_for_sale(welcome).enumerate() {
+    for weapon in weapons_for_sale(welcome) {
         let price = welcome.weapons[usize::from(weapon)].price;
-        let label = format!("{}  {}  {price}g", index + 1, weapon_name(weapon));
+        let label = format!("{}  {price}g", weapon_name(weapon));
         rows.push(ShopRow::item(
             label,
             weapon_detail(weapon),
@@ -89,7 +89,7 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
     rows.push(ShopRow::heading("Gear"));
     for (index, gear) in welcome.gear.iter().enumerate() {
         let (name, price, effect) = (&gear.name, gear.price, &gear.effect);
-        let label = format!("{}  {name}  {price}g  ({effect})", index + 1);
+        let label = format!("{name}  {price}g  ({effect})");
         let order = WireCommand::BuyGear { gear: index as u16 };
         rows.push(ShopRow::item(label, String::new(), order, Some(price)));
     }
@@ -106,7 +106,7 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
     for (index, recipe) in welcome.recipes.iter().enumerate() {
         let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
         let (result, parts) = (weapon_name(recipe.result), parts.join(" + "));
-        let label = format!("{}  {result} = {parts} + {}g", index + 1, recipe.price);
+        let label = format!("{result} = {parts} + {}g", recipe.price);
         let order = WireCommand::Combine {
             recipe: index as u16,
         };
@@ -121,12 +121,8 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             traits => format!(", {traits}"),
         };
         let label = format!(
-            "{}  {}  {}g  ({} HP, {} mounts{traits})",
-            index + 1,
-            hull.name,
-            hull.price,
-            hull.max_hp,
-            hull.mounts
+            "{}  {}g  ({} HP, {} mounts{traits})",
+            hull.name, hull.price, hull.max_hp, hull.mounts
         );
         let order = WireCommand::ChangeHull { hull: index as u16 };
         let skills = hull.skills.iter().map(|skill| {

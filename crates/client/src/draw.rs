@@ -474,7 +474,7 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
             flat_circle(gizmos, center, 0.5, SLOWED);
         }
         if ship.cloaked {
-            flat_circle(gizmos, center, 0.65, CLOAKED);
+            flat_circle(gizmos, center, 1.0, CLOAKED);
         }
         draw_hp(gizmos, center + Vec3::Y * 1.3, ship.hp);
     }

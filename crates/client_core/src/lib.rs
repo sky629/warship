@@ -23,7 +23,7 @@ pub use launch::{DEFAULT_NAME, DEFAULT_SERVER, LaunchOptions, RoomChoice};
 pub use memory::{Memory, RememberedSeat};
 pub use mounts::{MountView, mount_views};
 pub use session::{Phase, Session};
-pub use shop::{ShopList, ShopRow, shop_list, weapons_for_sale};
+pub use shop::{ShopList, ShopRow, shop_list};
 pub use start::{Field, FormKey, JoinRequest, StartForm};
 pub use view::{CameraRig, Minimap, MountBar, ShopWindow};
 

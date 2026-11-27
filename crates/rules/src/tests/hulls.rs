@@ -98,3 +98,19 @@ fn only_a_trader_hull_trades() {
     assert_eq!(s.command(ship, Command::ChangeHull(HullId(0))), None);
     assert_eq!(s.command(ship, Command::Contract(TRADE)), None);
 }
+
+#[test]
+fn the_default_corvette_learns_and_casts_its_fourth_skill() {
+    let mut s = Scenario::open_sea();
+    s.sim = crate::sim::Sim::new(crate::tuning::Tuning::default());
+    let ship = s.sim.add_ship(Team::RED);
+    s.set_gold(ship, 600);
+    assert_eq!(s.command(ship, Command::ChangeHull(HullId(3))), None);
+
+    assert_eq!(
+        s.command(ship, Command::Learn(crate::ids::SkillId(7))),
+        None
+    );
+    assert_eq!(s.command(ship, Command::Cast(crate::ids::SkillId(7))), None);
+    assert!(s.ship(ship).cloaked(s.sim.tick()));
+}
