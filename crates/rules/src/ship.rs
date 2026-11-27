@@ -33,6 +33,8 @@ pub struct Ship {
     pub snare: Option<Boost>,
     /// 이 Tick까지 은신합니다. 은신하지 않은 배는 0입니다.
     pub cloaked_until: u64,
+    /// 이 Tick부터 소모품을 다시 쓸 수 있습니다.
+    pub supply_ready_at: u64,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
     pub route: Vec<Vec2>,
     /// 아이템을 다는 칸입니다. 무기와 장비가 같은 칸을 나누어 씁니다. 빈 칸은 `None`입니다.
@@ -153,6 +155,7 @@ impl Ship {
             brace: None,
             snare: None,
             cloaked_until: 0,
+            supply_ready_at: 0,
             route: Vec::new(),
             mounts,
             last_input_seq: 0,

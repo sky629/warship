@@ -125,7 +125,7 @@ pub(crate) fn buy_supply(
     mount_bought(ship, tuning, Item::Supply(supply), spec.price)
 }
 
-/// 칸의 소모품을 씁니다. 효과를 내고 칸을 비웁니다. 떠 있는 배는 어디에서나 씁니다.
+/// 칸의 소모품을 씁니다. 효과를 내고 칸을 비웁니다. 떠 있는 배는 어디에서나 쓰고, 쓴 뒤에는 정해진 시간 동안 다른 소모품을 쓰지 못합니다.
 pub(crate) fn use_supply(
     world: &mut World,
     tuning: &Tuning,
@@ -143,6 +143,9 @@ pub(crate) fn use_supply(
         return Err(Refusal::NotUsable);
     };
     let spec = tuning.supply_of(supply).ok_or(Refusal::UnknownItem)?;
+    if ship.supply_ready_at > tick {
+        return Err(Refusal::OnCooldown);
+    }
     let lasting = |percent: u32, ticks: u32| Boost {
         until: tick + u64::from(ticks),
         percent,
@@ -153,6 +156,7 @@ pub(crate) fn use_supply(
         SupplyEffect::Brace { percent, ticks } => ship.brace = Some(lasting(percent, ticks)),
     }
     ship.mounts[slot] = None;
+    ship.supply_ready_at = tick + u64::from(tuning.shop.supply_cooldown_ticks);
     Ok(())
 }
 

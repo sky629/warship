@@ -110,3 +110,25 @@ fn a_supply_sells_for_half() {
 
     assert_eq!(s.ship(ship).gold, 1975);
 }
+
+#[test]
+fn a_ship_waits_between_two_supplies() {
+    let mut s = Scenario::with_tuning(|tuning| tuning.shop.supply_cooldown_ticks = 40);
+    s.structure_at(StructureKind::Base, Team::RED, 10.0, 10.0);
+    let ship = s.ship_at(Team::RED, 11.0, 10.0);
+    s.set_gold(ship, 2000);
+    s.command(ship, Command::BuySupply(KIT));
+    s.command(ship, Command::BuySupply(SANDBAGS));
+    s.set_ship_hp(ship, 100);
+
+    assert_eq!(s.command(ship, Command::Use { slot: 0 }), None);
+    assert_eq!(
+        s.command(ship, Command::Use { slot: 1 }),
+        Some(Refusal::OnCooldown),
+        "the wait is shared by every supply"
+    );
+    assert_eq!(item(&s, ship, 1), Some(Item::Supply(SANDBAGS)));
+
+    s.run_ticks(40);
+    assert_eq!(s.command(ship, Command::Use { slot: 1 }), None);
+}

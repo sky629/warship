@@ -4,13 +4,14 @@
 //!
 //! 봇이 하는 일은 네 가지입니다.
 //! - 스킬 포인트가 있으면 지금 선체의 스킬 가운데 단계가 가장 낮은 스킬에 넣습니다.
-//! - 사고 싶은 것(조합, 빈 칸에 달 무기나 장비, 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
+//! - 사고 싶은 것(조합, 수리하는 소모품, 빈 칸에 달 무기나 장비, 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
+//! - HP가 적으면 수리 스킬과 수리하는 소모품을 씁니다.
 //! - HP가 적으면 본진으로 돌아가서 수리를 받습니다.
 //! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 그 라인의 적 건물을 치러 갑니다.
 
 use warship_rules::{
-    Command, GearId, HullId, HullSpec, RecipeId, Ship, ShipId, Sim, SkillEffect, StructureKind,
-    Target, Team, Tuning, Vec2, WeaponId,
+    Command, GearId, HullId, HullSpec, Item, RecipeId, Ship, ShipId, Sim, SkillEffect,
+    StructureKind, SupplyEffect, SupplyId, Target, Team, Tuning, Vec2, WeaponId,
 };
 
 /// HP가 최대 HP의 이 백분율보다 적으면 본진으로 돌아갑니다.
@@ -19,6 +20,8 @@ const RETREAT_PERCENT: u32 = 35;
 const REJOIN_PERCENT: u32 = 90;
 /// HP가 이 백분율보다 적으면 수리 스킬을 씁니다.
 const REPAIR_PERCENT: u32 = 60;
+/// 칸이 이 수 이상인 선체에서 칸 하나를 수리하는 소모품에 씁니다.
+const KIT_MOUNTS: usize = 4;
 /// 라인의 입구에서 남북으로 이 거리 안에 있는 건물을 그 라인의 건물로 봅니다.
 const LANE_WIDTH: f32 = 4.0;
 
@@ -61,8 +64,8 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     let max_hp = ship.max_hp(tuning);
     let below = |percent: u32| ship.hp * 100 < max_hp * percent;
     let hurt = below(RETREAT_PERCENT) || (sim.at_dock(id) && below(REJOIN_PERCENT));
-    let purchase =
-        wish(ship, tuning, rank_in_team(sim, ship)).filter(|(_, cost)| ship.gold >= *cost);
+    let wish = wish(ship, tuning, rank_in_team(sim, ship), sim.at_shop(id));
+    let purchase = wish.filter(|(_, cost)| ship.gold >= *cost);
     if sim.at_shop(id)
         && let Some((command, _)) = purchase
     {
@@ -83,6 +86,17 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
             commands.push(Command::Cast(id));
         }
     }
+    // HP가 적으면 수리하는 소모품을 하나 씁니다.
+    let kit = ship.mounts.iter().position(|mount| {
+        let supply = mount.and_then(|mount| match mount.item {
+            Item::Supply(supply) => tuning.supply_of(supply),
+            _ => None,
+        });
+        supply.is_some_and(|supply| matches!(supply.effect, SupplyEffect::Repair { .. }))
+    });
+    if let Some(slot) = kit.filter(|_| below(REPAIR_PERCENT)) {
+        commands.push(Command::Use { slot: slot as u8 });
+    }
     // 수리는 본진에서만 받습니다. 본진이 없는 맵에서는 물러나지 않습니다.
     let dock = tuning.map.base_of(ship.team).filter(|_| hurt);
     let destination = if dock.is_some() {
@@ -100,10 +114,11 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
 
 /// 봇이 다음에 사려는 것과 그 값입니다. 다음 순서로 고릅니다. 더 살 것이 없으면 없습니다.
 /// 1. 재료를 모두 단 조합이 있으면 조합합니다.
-/// 2. 빈 칸이 있으면 아이템을 삽니다. 칸 셋마다 둘은 무기, 하나는 장비입니다.
+/// 2. 칸이 넷 이상인 선체에서 빈 칸이 하나 남았고 소모품이 없으면, 상점에 있을 때 수리하는 소모품을 삽니다.
+/// 3. 빈 칸이 있으면 아이템을 삽니다. 칸 셋마다 둘은 무기, 하나는 장비입니다.
 ///    무기와 장비는 이미 단 수에 따라 표를 돌아가며 골라서, 여러 종류를 섞어 답니다.
-/// 3. 더 비싼 전투용 선체로 바꿉니다.
-fn wish(ship: &Ship, tuning: &Tuning, rank: usize) -> Option<(Command, u32)> {
+/// 4. 더 비싼 전투용 선체로 바꿉니다.
+fn wish(ship: &Ship, tuning: &Tuning, rank: usize, at_shop: bool) -> Option<(Command, u32)> {
     let hull = tuning.hull(ship.hull);
     let mounted = || ship.mounts.iter().flatten();
     let carried: Vec<WeaponId> = mounted().filter_map(|mount| mount.weapon()).collect();
@@ -120,7 +135,23 @@ fn wish(ship: &Ship, tuning: &Tuning, rank: usize) -> Option<(Command, u32)> {
     let for_sale: Vec<usize> = (0..tuning.weapons.len())
         .filter(|index| tuning.weapons[*index].buyable)
         .collect();
-    let free = carried.len() + gear < hull.mounts;
+    let supplies = mounted().filter(|mount| matches!(mount.item, Item::Supply(_)));
+    let supplies = supplies.count();
+    let free = hull.mounts.saturating_sub(carried.len() + gear + supplies);
+    // 칸이 넷 이상인 선체에서는 마지막 빈 칸을 수리하는 소모품에 씁니다.
+    let kit = tuning
+        .supplies
+        .iter()
+        .position(|supply| matches!(supply.effect, SupplyEffect::Repair { .. }));
+    let reserved = free == 1 && supplies == 0 && hull.mounts >= KIT_MOUNTS;
+    if let Some(index) = kit.filter(|_| reserved && at_shop) {
+        return Some((
+            Command::BuySupply(SupplyId(index as u16)),
+            tuning.supplies[index].price,
+        ));
+    }
+    // 소모품을 사러 상점까지 가지는 않습니다. 그 칸은 다음에 상점에 들를 때까지 비워 둡니다.
+    let free = free > 0 && !(reserved && kit.is_some());
     // 무기 둘에 장비 하나의 비율을 넘지 않는 동안에는 장비를 삽니다.
     let wants_gear = !tuning.gear.is_empty() && gear * 2 < carried.len();
     if free && wants_gear {
@@ -291,6 +322,28 @@ mod tests {
             assert_eq!(ship.skill_points(sim.tuning()), 0);
             assert_eq!(ship.refusal, None, "ship {id:?}");
         }
+    }
+
+    #[test]
+    fn a_bot_with_four_mounts_buys_a_repair_kit_and_uses_it() {
+        let (mut sim, ships) = full_room();
+        let kits = |sim: &Sim| {
+            let items = sim.ships().flat_map(|ship| ship.mounts.iter().flatten());
+            items
+                .filter(|mount| matches!(mount.item, Item::Supply(_)))
+                .count()
+        };
+
+        // 10분이면 칸이 넷인 선체를 가진 봇이 있습니다. 소모품을 가진 봇의 수는 사고 쓰는 것에 따라 바뀝니다.
+        let mut seen = Vec::new();
+        for _ in 0..12 {
+            play(&mut sim, &ships, 1_000);
+            seen.push(kits(&sim));
+        }
+
+        assert!(seen.iter().any(|count| *count > 0), "kits held: {seen:?}");
+        let used = seen.windows(2).any(|pair| pair[1] < pair[0]);
+        assert!(used, "kits held: {seen:?}");
     }
 
     #[test]

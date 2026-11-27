@@ -83,6 +83,8 @@ pub struct ShopTuning {
     pub refund_percent: u32,
     /// 자기 진영의 본진 가까이에 떠 있는 배가 1초마다 회복하는, 최대 HP에 대한 백분율입니다.
     pub repair_percent_per_sec: u32,
+    /// 소모품 하나를 쓴 배가 다음 소모품을 쓸 때까지 기다리는 Tick 수입니다. 소모품의 종류와 관계없이 함께 기다립니다.
+    pub supply_cooldown_ticks: u32,
 }
 
 /// 레벨에 관한 수치입니다.
@@ -862,6 +864,7 @@ impl Default for Tuning {
                 range: 5.0,
                 refund_percent: 50,
                 repair_percent_per_sec: 5,
+                supply_cooldown_ticks: 600,
             },
             growth: GrowthTuning {
                 level_xp: vec![100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200],

@@ -212,7 +212,7 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::NoSkillPoint => "no skill point",
         WireRefusal::MaxRank => "the skill is at its highest rank",
         WireRefusal::NotLearned => "learn the skill first",
-        WireRefusal::OnCooldown => "the skill is not ready",
+        WireRefusal::OnCooldown => "not ready yet",
         WireRefusal::NotOnThisHull => "this hull does not have that skill",
         WireRefusal::NotForSale => "that weapon is made by combining, not sold",
         WireRefusal::MissingParts => "mount every part of the recipe first",
