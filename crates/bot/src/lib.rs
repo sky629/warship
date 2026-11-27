@@ -6,7 +6,7 @@
 //! - 스킬 포인트가 있으면 지금 선체의 스킬 가운데 단계가 가장 낮은 스킬에 넣습니다.
 //! - 사고 싶은 것(빈 칸에 달 무기, 칸이 다 찼으면 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
 //! - HP가 적으면 상점으로 돌아가서 수리를 받습니다.
-//! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 라인의 입구에서 기다립니다.
+//! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 그 라인의 적 건물을 치러 갑니다.
 
 use warship_rules::{
     Command, HullId, Ship, ShipId, Sim, SkillEffect, StructureKind, Target, Team, Tuning, Vec2,
@@ -19,6 +19,8 @@ const RETREAT_PERCENT: u32 = 35;
 const REJOIN_PERCENT: u32 = 90;
 /// HP가 이 백분율보다 적으면 수리 스킬을 씁니다.
 const REPAIR_PERCENT: u32 = 60;
+/// 라인의 입구에서 남북으로 이 거리 안에 있는 건물을 그 라인의 건물로 봅니다.
+const LANE_WIDTH: f32 = 4.0;
 
 /// 봇이 이번에 하려는 일입니다.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -139,8 +141,9 @@ fn nearest_shop(sim: &Sim, ship: &Ship) -> Option<Vec2> {
     nearest.map(|site| site.pos)
 }
 
-/// 배가 싸우러 갈 자리입니다. 맡은 라인에서 적의 본진에 가장 가까운 아군 NPC 배의 자리이고,
-/// 아군 NPC 배가 없으면 라인의 입구입니다. 라인이 없는 맵이면 없습니다.
+/// 배가 싸우러 갈 자리입니다. 맡은 라인에서 적의 본진에 가장 가까운 아군 NPC 배의 자리입니다.
+/// 아군 NPC 배가 없으면 그 라인에 서 있는 적의 건물 가운데 가장 가까운 건물로 가고, 그 라인의 건물이 모두 파괴되었으면 적의 본진으로 갑니다.
+/// 라인이 없는 맵이면 없습니다.
 fn front(sim: &Sim, ship: &Ship) -> Option<Vec2> {
     let map = &sim.tuning().map;
     if map.lanes.is_empty() {
@@ -151,14 +154,20 @@ fn front(sim: &Sim, ship: &Ship) -> Option<Vec2> {
     let lane = sim.ships().filter(ahead).count() % map.lanes.len();
     let entry = map.path_point(ship.team, lane, 0)?;
     let goal = map.base_of(ship.team.enemy()).unwrap_or(entry);
+    let nearest_to =
+        |from: Vec2| move |a: &Vec2, b: &Vec2| a.distance(from).total_cmp(&b.distance(from));
     let mine = sim
         .creeps()
         .filter(|creep| creep.team == ship.team && creep.lane == lane);
-    let leader = mine.min_by(|a, b| {
-        let (a, b) = (a.pos.distance(goal), b.pos.distance(goal));
-        a.total_cmp(&b)
+    let leader = mine.map(|creep| creep.pos).min_by(nearest_to(goal));
+    // 라인은 동서로 뻗어 있으므로, 라인의 입구와 남북으로 가까운 건물이 그 라인의 건물입니다.
+    let on_lane = sim.structures().filter(|site| {
+        site.team != ship.team
+            && site.kind != StructureKind::Base
+            && (site.pos.y - entry.y).abs() <= LANE_WIDTH
     });
-    Some(leader.map_or(entry, |creep| creep.pos))
+    let objective = on_lane.map(|site| site.pos).min_by(nearest_to(entry));
+    Some(leader.or(objective).unwrap_or(goal))
 }
 
 #[cfg(test)]

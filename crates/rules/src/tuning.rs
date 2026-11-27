@@ -583,13 +583,13 @@ impl Default for Tuning {
                     bounty: 300,
                 },
                 harbor: StructureSpec {
-                    max_hp: 5000,
+                    max_hp: 7000,
                     vision: 9.0,
                     weapon: None,
                     bounty: 500,
                 },
                 base: StructureSpec {
-                    max_hp: 8000,
+                    max_hp: 12000,
                     vision: 11.0,
                     weapon: Some(gun("Citadel Battery", 45, 9.0, 20, 16.0, Hits::ShipsOnly)),
                     bounty: 0,
