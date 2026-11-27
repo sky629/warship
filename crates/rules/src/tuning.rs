@@ -862,6 +862,7 @@ impl Default for Tuning {
                     trader: true,
                     ..hull("Lugger", 150, 220, 4.6, 4, &[sail])
                 },
+                hull("Cutter", 250, 450, 4.8, 3, &[sail, night]),
                 hull("Brig", 500, 650, 3.8, 4, &[patch, grape, sail]),
                 hull("Corvette", 500, 480, 4.6, 4, &[grape, sail, chain, night]),
                 hull("Frigate", 1100, 950, 3.6, 5, &[patch, grape, broadside]),
@@ -869,6 +870,7 @@ impl Default for Tuning {
                     repair_per_sec: 4,
                     ..hull("Tender", 1100, 800, 3.7, 5, &[patch, rally, sail])
                 },
+                hull("Xebec", 1100, 780, 4.4, 5, &[grape, sail, chain, night]),
                 HullSpec {
                     trader: true,
                     ..hull("Merchantman", 1500, 500, 4.2, 6, &[patch, sail])
@@ -878,6 +880,7 @@ impl Default for Tuning {
                     armor_percent: 15,
                     ..hull("Bulwark", 2000, 1400, 2.9, 6, &[patch, iron, chain])
                 },
+                hull("Bomb Ketch", 2000, 1250, 3.1, 6, &[grape, broadside, sail]),
                 hull(
                     "Man-of-War",
                     3500,
@@ -885,6 +888,14 @@ impl Default for Tuning {
                     3.0,
                     6,
                     &[patch, grape, broadside, iron],
+                ),
+                hull(
+                    "Ship of the Line",
+                    5000,
+                    3400,
+                    2.8,
+                    6,
+                    &[patch, broadside, iron, rally],
                 ),
             ],
             weapons: vec![
@@ -933,12 +944,36 @@ impl Default for Tuning {
                         gun("Fire Pot", 15, 5.0, 50, 10.0, Hits::ShipsOnly),
                     ),
                 ),
+                // 섬의 무기 상점이 파는 큰 포와, 멀리 흩어지는 로켓입니다.
+                sold(550, gun("Culverin", 55, 8.0, 34, 13.0, both)),
+                sold(
+                    450,
+                    with(
+                        Shot::Scatter { radius: 1.8 },
+                        gun("Rocket Rack", 28, 9.0, 45, 16.0, Hits::ShipsOnly),
+                    ),
+                ),
+                made(
+                    1000,
+                    with(
+                        Shot::Fire {
+                            damage_per_sec: 14,
+                            secs: 6,
+                        },
+                        gun("Greek Fire", 30, 6.0, 45, 10.0, Hits::ShipsOnly),
+                    ),
+                ),
+                made(900, gun("Long Twelve", 70, 13.0, 25, 12.0, Hits::ShipsOnly)),
+                made(1100, gun("Grand Battery", 110, 6.0, 30, 14.0, both)),
             ],
             recipes: vec![
                 recipe([0, 0], 5, 150),
                 recipe([1, 1], 6, 200),
                 recipe([3, 0], 7, 250),
                 recipe([4, 2], 8, 400),
+                recipe([9, 9], 12, 300),
+                recipe([2, 2], 13, 300),
+                recipe([5, 5], 14, 400),
             ],
             supplies: vec![
                 supply("Repair Kit", 80, SupplyEffect::Repair { hp: 200 }),
@@ -1028,7 +1063,7 @@ impl Default for Tuning {
                 weapons: vec![WeaponId(0), WeaponId(1), WeaponId(3)],
                 gear: vec![GearId(0), GearId(1)],
                 supplies: supplies.clone(),
-                recipes: vec![RecipeId(0), RecipeId(1), RecipeId(2)],
+                recipes: vec![RecipeId(0), RecipeId(1), RecipeId(2), RecipeId(6)],
                 hulls: true,
                 hire: false,
             },
@@ -1144,7 +1179,6 @@ impl Default for Tuning {
                         name: "North Port",
                         pos: Vec2::new(48.0, 56.0),
                         stock: Stock {
-                            supplies: supplies.clone(),
                             hire: true,
                             ..Stock::default()
                         },
@@ -1153,7 +1187,6 @@ impl Default for Tuning {
                         name: "South Port",
                         pos: Vec2::new(48.0, 8.0),
                         stock: Stock {
-                            supplies: supplies.clone(),
                             hire: true,
                             ..Stock::default()
                         },
@@ -1162,8 +1195,8 @@ impl Default for Tuning {
                         name: "North Isle Gunsmith",
                         pos: Vec2::new(48.0, 36.0),
                         stock: Stock {
-                            weapons: vec![WeaponId(2), WeaponId(4), WeaponId(9)],
-                            recipes: vec![RecipeId(3)],
+                            weapons: [2, 4, 9, 10, 11].map(WeaponId).to_vec(),
+                            recipes: [3, 4, 5].map(RecipeId).to_vec(),
                             ..Stock::default()
                         },
                     },

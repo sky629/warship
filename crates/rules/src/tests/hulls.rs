@@ -102,10 +102,13 @@ fn only_a_trader_hull_trades() {
 #[test]
 fn the_default_corvette_learns_and_casts_its_fourth_skill() {
     let mut s = Scenario::open_sea();
-    s.sim = crate::sim::Sim::new(crate::tuning::Tuning::default());
+    let tuning = crate::tuning::Tuning::default();
+    let corvette = tuning.hulls.iter().position(|hull| hull.name == "Corvette");
+    let corvette = HullId(corvette.expect("the default table has a Corvette") as u16);
+    s.sim = crate::sim::Sim::new(tuning);
     let ship = s.sim.add_ship(Team::RED);
     s.set_gold(ship, 600);
-    assert_eq!(s.command(ship, Command::ChangeHull(HullId(3))), None);
+    assert_eq!(s.command(ship, Command::ChangeHull(corvette)), None);
 
     assert_eq!(
         s.command(ship, Command::Learn(crate::ids::SkillId(7))),

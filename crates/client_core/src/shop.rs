@@ -117,8 +117,20 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             let Some(recipe) = welcome.recipes.get(usize::from(index)) else {
                 continue;
             };
-            let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
-            let (result, parts) = (weapon_name(recipe.result), parts.join(" + "));
+            // 같은 재료가 여럿이면 수를 앞에 적어서 줄을 짧게 합니다.
+            let mut parts: Vec<(usize, u16)> = Vec::new();
+            for &part in &recipe.parts {
+                match parts.iter_mut().find(|(_, id)| *id == part) {
+                    Some((count, _)) => *count += 1,
+                    None => parts.push((1, part)),
+                }
+            }
+            let parts = parts.iter().map(|&(count, part)| match count {
+                1 => weapon_name(part).to_string(),
+                count => format!("{count} x {}", weapon_name(part)),
+            });
+            let parts = parts.collect::<Vec<_>>().join(" + ");
+            let result = weapon_name(recipe.result);
             let label = format!("{result} = {parts} + {}g", recipe.price);
             let order = WireCommand::Combine { recipe: index };
             let detail = weapon_detail(recipe.result);
@@ -165,12 +177,13 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             ));
         }
     };
-    // 첫째 열은 자기 진영의 상점과 교역이고, 둘째 열은 어느 진영의 것도 아닌 항구입니다.
+    // 첫째 열은 자기 진영의 상점이고, 둘째 열은 교역과 어느 진영의 것도 아닌 항구입니다.
     let mut rows = Vec::new();
     let mut shops = welcome.shops.iter();
     if let Some(home) = shops.next() {
         stock_rows(home, &mut rows);
     }
+    let second_column = rows.len();
     rows.push(ShopRow::heading("Trade (a trader hull at your base)"));
     for (index, trade) in welcome.trades.iter().enumerate() {
         let port = welcome.shops.get(usize::from(trade.port) + 1);
@@ -189,7 +202,6 @@ pub fn shop_list(welcome: &Welcome) -> ShopList {
             Some(trade.price),
         ));
     }
-    let second_column = rows.len();
     for shop in shops {
         stock_rows(shop, &mut rows);
     }

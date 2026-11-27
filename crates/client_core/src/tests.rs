@@ -624,8 +624,8 @@ fn the_shop_lists_what_each_shop_sells_under_its_name() {
     ];
 
     let list = shop_list(&welcome);
-    // 첫째 열은 자기 진영의 상점과 교역이고, 둘째 열은 항구입니다.
-    assert_eq!(list.columns(), [10, 3]);
+    // 첫째 열은 자기 진영의 상점이고, 둘째 열은 교역과 항구입니다.
+    assert_eq!(list.columns(), [8, 5]);
     let rows = list.rows;
 
     let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
@@ -637,7 +637,7 @@ fn the_shop_lists_what_each_shop_sells_under_its_name() {
             "  mortar  400g",
             "  planks  200g  (+250 HP)",
             "  kit  80g  (+200 HP, one use)",
-            "  twin = gun + gun + 150g",
+            "  twin = 2 x gun + 150g",
             "  small  0g  (1000 HP, 2 mounts)",
             "  big  400g  (2000 HP, 4 mounts, trader, -15% damage)",
             "Trade (a trader hull at your base)",

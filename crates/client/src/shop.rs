@@ -122,6 +122,8 @@ pub fn show_shop(
                 ..default()
             },
             TextColor(color),
+            // 줄마다 높이가 정해져 있으므로, 긴 글자는 다음 줄로 넘기지 않습니다.
+            TextLayout::default().with_no_wrap(),
             Node {
                 position_type: PositionType::Absolute,
                 left: px(at.0),
