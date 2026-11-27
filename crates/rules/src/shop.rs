@@ -1,7 +1,7 @@
 //! 상점입니다. 자기 진영의 서 있는 본진과 항구 가까이에 떠 있는 배가 무기를 사고팔고 선체를 바꾸고, 수리를 받습니다.
 
 use crate::command::Refusal;
-use crate::ids::{HullId, ShipId, WeaponId};
+use crate::ids::{HullId, ShipId, SkillId, WeaponId};
 use crate::ship::{Mount, Ship};
 use crate::structures::StructureKind;
 use crate::tuning::Tuning;
@@ -96,6 +96,7 @@ pub(crate) fn sell(
 }
 
 /// 선체를 바꿉니다. 지금 선체의 가격의 일부를 돌려받고 새 선체의 가격을 냅니다. HP는 최대 HP에 대한 비율을 유지합니다.
+/// 새 선체에 없는 스킬은 배우지 않은 스킬이 되고, 그 스킬 포인트는 다시 쓸 수 있습니다.
 pub(crate) fn change_hull(
     world: &mut World,
     tuning: &Tuning,
@@ -119,5 +120,11 @@ pub(crate) fn change_hull(
     ship.gold = funds - new.price;
     ship.hp = (u64::from(ship.hp) * u64::from(new.max_hp)).div_ceil(u64::from(old.max_hp)) as u32;
     ship.hull = hull;
+    // 새 선체에 없는 스킬에 넣은 스킬 포인트는 돌아옵니다.
+    for (index, skill) in ship.skills.iter_mut().enumerate() {
+        if !new.skills.contains(&SkillId(index as u16)) {
+            skill.rank = 0;
+        }
+    }
     Ok(())
 }

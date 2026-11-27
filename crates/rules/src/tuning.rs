@@ -3,7 +3,7 @@
 //! 거리의 단위는 타일이고, 시간의 단위는 수치마다 적혀 있습니다(초 또는 Tick).
 //! 기본 수치(`Tuning::default`)는 프로토타입용 값이고, 배와 무기의 이름과 맵의 배치는 이 게임에서 새로 지은 것입니다.
 
-use crate::ids::{HullId, Team, WeaponId};
+use crate::ids::{HullId, SkillId, Team, WeaponId};
 use crate::math::Vec2;
 use crate::nav;
 use crate::ship::MOUNTS;
@@ -56,6 +56,8 @@ pub struct HullSpec {
     pub vision: f32,
     /// 무기를 달 수 있는 칸의 수입니다. 앞에서부터 이 수만큼의 칸을 씁니다.
     pub mounts: usize,
+    /// 이 선체의 배가 배우고 쓸 수 있는 스킬입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
+    pub skills: Vec<SkillId>,
 }
 
 /// 상점에 관한 수치입니다. 자기 진영의 서 있는 본진과 항구가 상점입니다.
@@ -98,6 +100,10 @@ pub enum SkillEffect {
     Salvo { damage_per_rank: u32, radius: f32 },
     /// `ticks` 동안 자기 배의 속도를 백분율만큼 올립니다.
     Sprint { percent_per_rank: u32, ticks: u32 },
+    /// 자기 배의 모든 무기를 바로 쏠 수 있게 합니다. 단계가 올라도 효과는 같습니다.
+    Reload,
+    /// `ticks` 동안 자기 배가 받는 피해를 백분율만큼 줄입니다.
+    Brace { percent_per_rank: u32, ticks: u32 },
 }
 
 /// 무기 한 종류의 수치입니다. 무기마다 다른 점은 모두 이 구조체의 값입니다.
@@ -294,6 +300,14 @@ impl Tuning {
             if hull.mounts == 0 || hull.mounts > MOUNTS {
                 return Err(format!("hull {}: mounts must be 1 to {MOUNTS}", hull.name));
             }
+            let known = |skill: &SkillId| usize::from(skill.0) < self.skills.len();
+            let repeated = |(nth, skill): (usize, &SkillId)| hull.skills[..nth].contains(skill);
+            if !hull.skills.iter().all(known) || hull.skills.iter().enumerate().any(repeated) {
+                return Err(format!(
+                    "hull {}: skills must be distinct rows of the skill table",
+                    hull.name
+                ));
+            }
         }
         if !is_positive(self.shop.range) || self.shop.refund_percent > 100 {
             return Err(
@@ -307,13 +321,19 @@ impl Tuning {
             return Err("level_xp must increase with every level".to_string());
         }
         for skill in &self.skills {
-            let radius_fits = match skill.effect {
+            let effect_fits = match skill.effect {
                 SkillEffect::Salvo { radius, .. } => is_positive(radius),
-                SkillEffect::Repair { .. } | SkillEffect::Sprint { .. } => true,
+                // 가장 높은 단계에서도 피해가 음수가 되지 않아야 합니다.
+                SkillEffect::Brace {
+                    percent_per_rank, ..
+                } => percent_per_rank * u32::from(skill.max_rank) <= 100,
+                SkillEffect::Repair { .. } | SkillEffect::Sprint { .. } | SkillEffect::Reload => {
+                    true
+                }
             };
-            if skill.cooldown_ticks == 0 || skill.max_rank == 0 || !radius_fits {
+            if skill.cooldown_ticks == 0 || skill.max_rank == 0 || !effect_fits {
                 return Err(format!(
-                    "skill {}: cooldown_ticks, max_rank and radius must be positive",
+                    "skill {}: cooldown_ticks, max_rank and radius must be positive, and a brace takes at most 100 percent",
                     skill.name
                 ));
             }
@@ -464,13 +484,15 @@ impl Default for Tuning {
             price: 0,
         };
         let sold = |price, weapon: WeaponSpec| WeaponSpec { price, ..weapon };
-        let hull = |name, price, max_hp, speed, vision, mounts| HullSpec {
+        // 모든 선체가 0번과 1번 스킬을 쓰고, 선체마다 고유한 스킬이 하나씩 있습니다.
+        let hull = |name, price, max_hp, speed, vision, mounts, own_skill| HullSpec {
             name,
             price,
             max_hp,
             speed,
             vision,
             mounts,
+            skills: vec![SkillId(0), SkillId(1), SkillId(own_skill)],
         };
         let skill = |name, cooldown_ticks, effect| SkillSpec {
             name,
@@ -505,14 +527,16 @@ impl Default for Tuning {
                 bounty: 200,
             },
             hulls: vec![
-                hull("Sloop", 0, 400, 4.0, 9.0, 3),
-                hull("Frigate", 600, 800, 3.6, 9.5, 5),
-                hull("Galleon", 1500, 1500, 3.0, 10.0, 6),
+                hull("Sloop", 0, 400, 4.0, 9.0, 3, 2),
+                hull("Frigate", 600, 800, 3.6, 9.5, 5, 3),
+                hull("Galleon", 1500, 1500, 3.0, 10.0, 6, 4),
             ],
             weapons: vec![
                 sold(100, gun("Deck Gun", 20, 5.5, 30, 14.0, both)),
                 sold(150, gun("Swivel Gun", 4, 3.5, 3, 18.0, both)),
                 sold(300, gun("Long Nine", 30, 12.0, 25, 12.0, Hits::ShipsOnly)),
+                sold(250, gun("Carronade", 45, 3.5, 40, 14.0, both)),
+                sold(400, gun("Mortar", 50, 9.0, 60, 7.0, both)),
             ],
             skills: vec![
                 skill("Patch Up", 600, SkillEffect::Repair { hp_per_rank: 80 }),
@@ -530,6 +554,15 @@ impl Default for Tuning {
                     SkillEffect::Sprint {
                         percent_per_rank: 20,
                         ticks: 80,
+                    },
+                ),
+                skill("Broadside", 500, SkillEffect::Reload),
+                skill(
+                    "Iron Hull",
+                    600,
+                    SkillEffect::Brace {
+                        percent_per_rank: 20,
+                        ticks: 100,
                     },
                 ),
             ],

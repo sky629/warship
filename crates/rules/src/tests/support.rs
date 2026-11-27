@@ -22,6 +22,8 @@ pub(crate) const BIG_HULL: HullId = HullId(1);
 pub(crate) const REPAIR: SkillId = SkillId(0);
 pub(crate) const SALVO: SkillId = SkillId(1);
 pub(crate) const SPRINT: SkillId = SkillId(2);
+pub(crate) const RELOAD: SkillId = SkillId(3);
+pub(crate) const BRACE: SkillId = SkillId(4);
 
 pub(crate) struct Scenario {
     pub sim: Sim,
@@ -40,7 +42,8 @@ impl Scenario {
     /// 선체는 HP 1000에 칸 2개인 0번(가격 0)과 HP 2000에 칸 4개인 1번(가격 400)입니다.
     /// 누적 경험치 100에 2레벨, 300에 3레벨이 되고, 경험치는 10타일 안의 배가 나누어 받습니다.
     /// 스킬은 쿨다운 100Tick에 2단계까지이고, 0번은 단계마다 HP 100 회복, 1번(`SALVO`)은 4타일 안의 적에 단계마다 피해 30,
-    /// 2번(`SPRINT`)은 20Tick 동안 단계마다 속도 50% 증가입니다.
+    /// 2번(`SPRINT`)은 20Tick 동안 단계마다 속도 50% 증가, 3번(`RELOAD`)은 모든 무기의 쿨다운 제거,
+    /// 4번(`BRACE`)은 20Tick 동안 단계마다 받는 피해 40% 감소입니다. 0번 선체는 모든 스킬을 쓰고, 1번 선체는 `SPRINT`를 쓰지 못합니다.
     pub fn open_sea() -> Scenario {
         Scenario::with_tuning(|_| {})
     }
@@ -188,8 +191,15 @@ fn gun(name: &'static str, range: f32, hits: Hits) -> WeaponSpec {
     }
 }
 
-fn hull(name: &'static str, price: u32, max_hp: u32, mounts: usize) -> HullSpec {
+fn hull(
+    name: &'static str,
+    price: u32,
+    max_hp: u32,
+    mounts: usize,
+    skills: &[SkillId],
+) -> HullSpec {
     HullSpec {
+        skills: skills.to_vec(),
         name,
         price,
         max_hp,
@@ -227,8 +237,14 @@ fn open_sea_tuning() -> Tuning {
             bounty: 200,
         },
         hulls: vec![
-            hull("small hull", 0, 1000, 2),
-            hull("big hull", 400, 2000, 4),
+            hull(
+                "small hull",
+                0,
+                1000,
+                2,
+                &[REPAIR, SALVO, SPRINT, RELOAD, BRACE],
+            ),
+            hull("big hull", 400, 2000, 4, &[REPAIR, SALVO, RELOAD, BRACE]),
         ],
         weapons: vec![
             gun("gun", 5.0, Hits::ShipsAndStructures),
@@ -242,6 +258,11 @@ fn open_sea_tuning() -> Tuning {
             }),
             skill(SkillEffect::Sprint {
                 percent_per_rank: 50,
+                ticks: 20,
+            }),
+            skill(SkillEffect::Reload),
+            skill(SkillEffect::Brace {
+                percent_per_rank: 40,
                 ticks: 20,
             }),
         ],

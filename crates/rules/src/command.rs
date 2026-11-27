@@ -46,6 +46,8 @@ pub enum Refusal {
     /// 배우지 않은 스킬입니다.
     NotLearned,
     OnCooldown,
+    /// 지금 선체의 배는 쓸 수 없는 스킬입니다.
+    NotOnThisHull,
 }
 
 /// 배의 명령 하나를 처리합니다. 없는 배의 명령과 이미 처리한 순서 번호의 명령은 무시합니다.

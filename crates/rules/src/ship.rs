@@ -1,7 +1,7 @@
 //! 플레이어가 조종하는 배와 그 이동입니다.
 
 use crate::command::Refusal;
-use crate::ids::{HullId, ShipId, Team, WeaponId};
+use crate::ids::{HullId, ShipId, SkillId, Team, WeaponId};
 use crate::input::PlayerInputs;
 use crate::math::Vec2;
 use crate::nav;
@@ -26,7 +26,9 @@ pub struct Ship {
     /// 스킬마다 넣은 스킬 포인트와 쿨다운입니다. 순서는 스킬 표의 순서입니다.
     pub skills: Vec<SkillState>,
     /// 속도를 올리는 스킬의 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
-    pub sprint: Option<Sprint>,
+    pub sprint: Option<Boost>,
+    /// 받는 피해를 줄이는 스킬의 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
+    pub brace: Option<Boost>,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
     pub route: Vec<Vec2>,
     /// 무기를 다는 칸입니다. 빈 칸은 `None`입니다.
@@ -48,12 +50,22 @@ pub struct SkillState {
     pub ready_at: u64,
 }
 
-/// 속도를 올리는 효과입니다.
+/// 정해진 Tick까지 이어지는 스킬의 효과입니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Sprint {
-    /// 이 Tick까지 속도가 오릅니다.
+pub struct Boost {
+    /// 이 Tick까지 효과가 있습니다.
     pub until: u64,
     pub percent: u32,
+}
+
+impl Boost {
+    /// `tick`에 효과가 있으면 그 백분율이고, 없으면 0입니다.
+    fn percent_at(boost: Option<Boost>, tick: u64) -> u32 {
+        match boost {
+            Some(boost) if tick <= boost.until => boost.percent,
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +109,7 @@ impl Ship {
             xp: 0,
             skills: vec![SkillState::default(); tuning.skills.len()],
             sprint: None,
+            brace: None,
             route: Vec::new(),
             mounts,
             last_input_seq: 0,
@@ -115,6 +128,17 @@ impl Ship {
     pub fn skill_points(&self, tuning: &Tuning) -> u32 {
         let spent: u32 = self.skills.iter().map(|skill| u32::from(skill.rank)).sum();
         self.level(tuning) - spent
+    }
+
+    /// 이 선체의 배가 이 스킬을 배우고 쓸 수 있는지입니다.
+    pub fn has_skill(&self, tuning: &Tuning, skill: SkillId) -> bool {
+        tuning.hull(self.hull).skills.contains(&skill)
+    }
+
+    /// `tick`에 이 배에 닿은 `amount`의 피해 가운데 실제로 HP에서 빠지는 양입니다.
+    pub(crate) fn braced(&self, amount: u32, tick: u64) -> u32 {
+        let kept = 100 - Boost::percent_at(self.brace, tick).min(100);
+        (u64::from(amount) * u64::from(kept) / 100) as u32
     }
 
     pub fn is_afloat(&self) -> bool {
@@ -154,10 +178,7 @@ pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuni
         if !ship.is_afloat() {
             continue;
         }
-        let boost = match ship.sprint {
-            Some(sprint) if tick <= sprint.until => sprint.percent,
-            _ => 0,
-        };
+        let boost = Boost::percent_at(ship.sprint, tick);
         let speed = tuning.hull(ship.hull).speed * (100 + boost) as f32 / 100.0;
         let mut step = speed / tuning.tick_hz as f32;
         while let Some(&next) = ship.route.first() {

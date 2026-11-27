@@ -20,7 +20,7 @@ pub struct Welcome {
     pub hulls: Vec<WireHull>,
     /// 무기 표입니다. 스냅샷의 무기 번호가 이 목록의 자리이고, 상점이 이 무기를 모두 팝니다.
     pub weapons: Vec<WireWeapon>,
-    /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서입니다.
+    /// 스킬 표입니다. 스냅샷의 스킬 목록과 같은 순서이고, 선체마다 이 가운데 일부를 씁니다.
     pub skills: Vec<WireSkillSpec>,
     pub tower: WireStructureSpec,
     pub harbor: WireStructureSpec,
@@ -57,6 +57,8 @@ pub struct WireHull {
     pub max_hp: u32,
     /// 무기를 달 수 있는 칸의 수입니다.
     pub mounts: u8,
+    /// 이 선체의 배가 쓸 수 있는 스킬의 번호입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
+    pub skills: Vec<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -137,6 +139,7 @@ impl Welcome {
                     price: hull.price,
                     max_hp: hull.max_hp,
                     mounts: hull.mounts as u8,
+                    skills: hull.skills.iter().map(|skill| skill.0).collect(),
                 })
                 .collect(),
             skills: tuning

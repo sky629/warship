@@ -79,6 +79,7 @@ pub enum WireRefusal {
     MaxRank,
     NotLearned,
     OnCooldown,
+    NotOnThisHull,
 }
 
 impl From<Refusal> for WireRefusal {
@@ -96,6 +97,7 @@ impl From<Refusal> for WireRefusal {
             Refusal::MaxRank => WireRefusal::MaxRank,
             Refusal::NotLearned => WireRefusal::NotLearned,
             Refusal::OnCooldown => WireRefusal::OnCooldown,
+            Refusal::NotOnThisHull => WireRefusal::NotOnThisHull,
         }
     }
 }

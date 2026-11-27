@@ -3,14 +3,14 @@
 //! 봇은 기억을 가지지 않습니다. `plan`은 지금의 방 상태만 보고 결정하므로, 같은 상태에서는 항상 같은 계획이 나옵니다.
 //!
 //! 봇이 하는 일은 네 가지입니다.
-//! - 스킬 포인트가 있으면 단계가 가장 낮은 스킬에 넣습니다.
+//! - 스킬 포인트가 있으면 지금 선체의 스킬 가운데 단계가 가장 낮은 스킬에 넣습니다.
 //! - 사고 싶은 것(빈 칸에 달 무기, 칸이 다 찼으면 다음 선체)의 값이 모이면 상점으로 가서 삽니다.
 //! - HP가 적으면 상점으로 돌아가서 수리를 받습니다.
 //! - 그 밖에는 맡은 라인에서 가장 앞선 아군 NPC 배와 함께 싸웁니다. 아군 NPC 배가 없으면 라인의 입구에서 기다립니다.
 
 use warship_rules::{
-    Command, HullId, Ship, ShipId, Sim, SkillEffect, SkillId, StructureKind, Target, Team, Tuning,
-    Vec2, WeaponId,
+    Command, HullId, Ship, ShipId, Sim, SkillEffect, StructureKind, Target, Team, Tuning, Vec2,
+    WeaponId,
 };
 
 /// HP가 최대 HP의 이 백분율보다 적으면 상점으로 돌아갑니다.
@@ -35,13 +35,18 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     };
     let tuning = sim.tuning();
     let mut commands = Vec::new();
+    // 지금 선체의 스킬과 그 수치, 배의 상태입니다.
+    let skills = tuning.hull(ship.hull).skills.iter().map(|&id| {
+        let index = usize::from(id.0);
+        (id, &tuning.skills[index], ship.skills[index])
+    });
     if ship.skill_points(tuning) > 0 {
-        let ranks = ship.skills.iter().zip(&tuning.skills).enumerate();
-        let lowest = ranks
-            .filter(|(_, (state, spec))| state.rank < spec.max_rank)
-            .min_by_key(|(_, (state, _))| state.rank);
-        if let Some((index, _)) = lowest {
-            commands.push(Command::Learn(SkillId(index as u16)));
+        let lowest = skills
+            .clone()
+            .filter(|(_, spec, state)| state.rank < spec.max_rank)
+            .min_by_key(|(_, _, state)| state.rank);
+        if let Some((id, _, _)) = lowest {
+            commands.push(Command::Learn(id));
         }
     }
     if !ship.is_afloat() {
@@ -59,14 +64,15 @@ pub fn plan(sim: &Sim, id: ShipId) -> Plan {
     if docked && let Some((command, _)) = purchase {
         commands.push(command);
     }
-    for (index, (state, spec)) in ship.skills.iter().zip(&tuning.skills).enumerate() {
+    for (id, spec, state) in skills {
         let useful = match spec.effect {
-            SkillEffect::Repair { .. } => below(REPAIR_PERCENT),
+            SkillEffect::Repair { .. } | SkillEffect::Brace { .. } => below(REPAIR_PERCENT),
             SkillEffect::Salvo { radius, .. } => enemy_within(sim, ship, radius),
             SkillEffect::Sprint { .. } => hurt,
+            SkillEffect::Reload => enemy_within(sim, ship, reach(ship, tuning)),
         };
         if useful && state.rank > 0 && state.ready_at <= sim.tick() {
-            commands.push(Command::Cast(SkillId(index as u16)));
+            commands.push(Command::Cast(id));
         }
     }
     let destination = if hurt || purchase.is_some() {
@@ -95,6 +101,13 @@ fn wish(ship: &Ship, tuning: &Tuning) -> Option<(Command, u32)> {
     let refund = u64::from(hull.price) * u64::from(tuning.shop.refund_percent) / 100;
     let cost = spec.price.saturating_sub(refund as u32);
     Some((Command::ChangeHull(next), cost))
+}
+
+/// 배에 달린 무기 가운데 가장 짧은 사거리입니다. 이 거리 안의 적은 모든 무기가 쏠 수 있습니다. 무기가 없으면 0입니다.
+fn reach(ship: &Ship, tuning: &Tuning) -> f32 {
+    let ranges = ship.mounts.iter().flatten();
+    let ranges = ranges.map(|mount| tuning.weapons[usize::from(mount.weapon.0)].range);
+    ranges.reduce(f32::min).unwrap_or(0.0)
 }
 
 /// 배의 진영에 보이는 적의 배나 NPC 배가 `radius` 안에 있는지입니다.

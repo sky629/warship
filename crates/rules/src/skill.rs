@@ -1,10 +1,11 @@
 //! 스킬입니다. 배는 레벨마다 받는 스킬 포인트를 스킬에 넣어서 배우고, 배운 스킬을 쿨다운마다 한 번 씁니다.
 //!
 //! 모든 스킬은 자기 배를 중심으로 일어나므로 표적을 고르지 않습니다.
+//! 배는 지금 선체에 있는 스킬만 배우고 씁니다. 선체를 바꾸면 새 선체에 없는 스킬에 넣은 스킬 포인트가 돌아옵니다.
 
 use crate::command::Refusal;
 use crate::ids::{ShipId, SkillId};
-use crate::ship::Sprint;
+use crate::ship::Boost;
 use crate::tuning::{SkillEffect, Tuning};
 use crate::weapon::{Impact, Target};
 use crate::world::World;
@@ -19,6 +20,9 @@ pub(crate) fn learn(
     let index = usize::from(which.0);
     let spec = tuning.skills.get(index).ok_or(Refusal::UnknownItem)?;
     let ship = world.ships.get_mut(&id).ok_or(Refusal::Sunk)?;
+    if !ship.has_skill(tuning, which) {
+        return Err(Refusal::NotOnThisHull);
+    }
     if ship.skill_points(tuning) == 0 {
         return Err(Refusal::NoSkillPoint);
     }
@@ -40,6 +44,9 @@ pub(crate) fn cast(
     let index = usize::from(which.0);
     let spec = tuning.skills.get(index).ok_or(Refusal::UnknownItem)?;
     let ship = world.ships.get(&id).ok_or(Refusal::Sunk)?;
+    if !ship.has_skill(tuning, which) {
+        return Err(Refusal::NotOnThisHull);
+    }
     let state = ship.skills[index];
     let rank = u32::from(state.rank);
     if rank == 0 {
@@ -83,10 +90,24 @@ pub(crate) fn cast(
             percent_per_rank,
             ticks,
         } => {
-            ship.sprint = Some(Sprint {
+            ship.sprint = Some(Boost {
                 until: tick + u64::from(ticks),
                 percent: percent_per_rank * rank,
             });
+        }
+        SkillEffect::Brace {
+            percent_per_rank,
+            ticks,
+        } => {
+            ship.brace = Some(Boost {
+                until: tick + u64::from(ticks),
+                percent: percent_per_rank * rank,
+            });
+        }
+        SkillEffect::Reload => {
+            for mount in ship.mounts.iter_mut().flatten() {
+                mount.ready_at = tick;
+            }
         }
         SkillEffect::Salvo { .. } => {}
     }

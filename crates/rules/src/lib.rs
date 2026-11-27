@@ -35,7 +35,7 @@ pub use creep::Creep;
 pub use ids::{CreepId, HullId, ShipId, SkillId, StructureId, Team, WeaponId};
 pub use input::{PlayerInput, PlayerInputs, Waypoint};
 pub use math::Vec2;
-pub use ship::{Life, MOUNTS, Mount, Ship, SkillState, Sprint};
+pub use ship::{Boost, Life, MOUNTS, Mount, Ship, SkillState};
 pub use sim::{Outcome, RoomFull, Sim};
 pub use structures::{Structure, StructureKind};
 pub use tuning::{

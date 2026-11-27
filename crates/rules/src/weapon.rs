@@ -165,7 +165,14 @@ pub(crate) fn land_impacts(world: &mut World, tuning: &Tuning, tick: u64) -> Vec
     let respawn_at = tick + u64::from(tuning.ship.respawn_ticks);
     let mut kills = Vec::new();
     for impact in due {
-        if world.damage(impact.target, impact.damage, respawn_at) {
+        let damage = match impact.target {
+            Target::Ship(id) => world
+                .ships
+                .get(&id)
+                .map_or(impact.damage, |ship| ship.braced(impact.damage, tick)),
+            _ => impact.damage,
+        };
+        if world.damage(impact.target, damage, respawn_at) {
             kills.push(Kill {
                 target: impact.target,
                 by: impact.by,

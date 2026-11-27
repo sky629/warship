@@ -1,6 +1,7 @@
-use super::support::{GUN, REPAIR, SALVO, SPRINT, Scenario, assert_close};
+use super::support::{BIG_HULL, BRACE, GUN, RELOAD, REPAIR, SALVO, SPRINT, Scenario, assert_close};
 use crate::command::{Command, Refusal};
-use crate::ids::{SkillId, Team};
+use crate::ids::{ShipId, SkillId, Team};
+use crate::structures::StructureKind;
 
 #[test]
 fn a_ship_gains_a_level_and_a_skill_point_at_each_experience_step() {
@@ -64,7 +65,7 @@ fn learning_a_skill_spends_a_point_up_to_the_highest_rank() {
     );
 
     let ranks: Vec<u8> = s.ship(ship).skills.iter().map(|skill| skill.rank).collect();
-    assert_eq!(ranks, [2, 0, 0]);
+    assert_eq!(ranks, [2, 0, 0, 0, 0]);
     assert_eq!(s.ship(ship).skill_points(s.sim.tuning()), 1);
 }
 
@@ -169,4 +170,80 @@ fn a_sunk_ship_can_learn_but_cannot_cast() {
 
     assert_eq!(s.command(ship, Command::Learn(REPAIR)), None);
     assert_eq!(s.command(ship, Command::Cast(REPAIR)), Some(Refusal::Sunk));
+}
+
+/// 자기 진영의 본진 옆에 400골드를 가진 배를 놓습니다. 1번 선체의 가격이 400골드입니다.
+fn ship_at_the_shop() -> (Scenario, ShipId) {
+    let mut s = Scenario::open_sea();
+    s.structure_at(StructureKind::Base, Team::RED, 10.0, 10.0);
+    let ship = s.ship_at(Team::RED, 11.0, 10.0);
+    s.set_gold(ship, 400);
+    (s, ship)
+}
+
+#[test]
+fn a_ship_learns_and_casts_only_the_skills_of_its_hull() {
+    let (mut s, ship) = ship_at_the_shop();
+    s.command(ship, Command::ChangeHull(BIG_HULL));
+
+    assert_eq!(
+        s.command(ship, Command::Learn(SPRINT)),
+        Some(Refusal::NotOnThisHull)
+    );
+    assert_eq!(
+        s.command(ship, Command::Cast(SPRINT)),
+        Some(Refusal::NotOnThisHull)
+    );
+    assert_eq!(s.command(ship, Command::Learn(RELOAD)), None);
+}
+
+#[test]
+fn changing_the_hull_returns_the_points_of_the_skills_the_new_hull_lacks() {
+    let (mut s, ship) = ship_at_the_shop();
+    s.set_xp(ship, 100);
+    s.command(ship, Command::Learn(SPRINT));
+    s.command(ship, Command::Learn(REPAIR));
+
+    assert_eq!(s.command(ship, Command::ChangeHull(BIG_HULL)), None);
+
+    let after = s.ship(ship);
+    let rank = |skill: SkillId| after.skills[usize::from(skill.0)].rank;
+    assert_eq!((rank(SPRINT), rank(REPAIR)), (0, 1));
+    assert_eq!(after.skill_points(s.sim.tuning()), 1);
+    assert_eq!(s.command(ship, Command::Learn(BRACE)), None);
+}
+
+#[test]
+fn a_reload_lets_every_weapon_fire_again_at_once() {
+    let mut s = Scenario::open_sea();
+    let ship = s.ship_at(Team::RED, 10.0, 10.0);
+    s.ship_at(Team::BLUE, 13.0, 10.0);
+    s.arm(ship, GUN);
+    s.command(ship, Command::Learn(RELOAD));
+    s.run_ticks(1);
+    let ready_at = |s: &Scenario| s.ship(ship).mounts[0].map(|mount| mount.ready_at);
+    assert_eq!(ready_at(&s), Some(11), "the gun fired on the first tick");
+
+    assert_eq!(s.command(ship, Command::Cast(RELOAD)), None);
+    assert_eq!(ready_at(&s), Some(1));
+
+    s.run_ticks(1);
+    assert_eq!(ready_at(&s), Some(12), "the gun fired again");
+}
+
+#[test]
+fn a_brace_reduces_the_damage_the_ship_takes_for_its_duration() {
+    let mut s = Scenario::open_sea();
+    let ship = s.ship_at(Team::RED, 10.0, 10.0);
+    let enemy = s.ship_at(Team::BLUE, 13.0, 10.0);
+    s.arm(enemy, GUN);
+    s.command(ship, Command::Learn(BRACE));
+
+    assert_eq!(s.command(ship, Command::Cast(BRACE)), None);
+    // 포탄은 4, 14, 24번째 Tick에 닿습니다. 효과는 20번째 Tick까지이고, 피해 10의 40%를 줄입니다.
+    s.run_ticks(15);
+    assert_eq!(s.ship(ship).hp, 988);
+
+    s.run_ticks(10);
+    assert_eq!(s.ship(ship).hp, 978);
 }

@@ -1,7 +1,7 @@
 //! 내 배의 상태와 상점의 목록을 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다.
 //!
 //! 숫자 키는 그 번호의 무기를 사고, Shift와 숫자 키는 그 번호의 칸의 무기를 팝니다. F1부터의 키는 선체를 바꿉니다.
-//! Q, W, E, R은 스킬을 쓰고, Ctrl과 함께 누르면 스킬 포인트를 넣습니다. 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
+//! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Ctrl과 함께 누르면 스킬 포인트를 넣습니다. 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
 use warship_client_core::MyShip;
@@ -49,7 +49,11 @@ pub fn setup(mut commands: Commands) {
 }
 
 /// 이번 프레임에 눌린 단축키를 명령으로 보냅니다.
-pub fn order_commands(keys: Res<ButtonInput<KeyCode>>, mut net: NonSendMut<Net>) {
+pub fn order_commands(
+    keys: Res<ButtonInput<KeyCode>>,
+    frame: Res<CurrentFrame>,
+    mut net: NonSendMut<Net>,
+) {
     let held = |pair: [KeyCode; 2]| keys.any_pressed(pair);
     let shift = held([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let ctrl = held([KeyCode::ControlLeft, KeyCode::ControlRight]);
@@ -70,9 +74,13 @@ pub fn order_commands(keys: Res<ButtonInput<KeyCode>>, mut net: NonSendMut<Net>)
             orders.push(WireCommand::ChangeHull { hull: index as u16 });
         }
     }
-    for (index, (key, _)) in SKILL_KEYS.into_iter().enumerate() {
+    let me = frame.0.as_ref().and_then(|frame| frame.me.as_ref());
+    let hull_skills = match (net.session.welcome(), me) {
+        (Some(welcome), Some(me)) => hull_skills(welcome, me),
+        _ => &[],
+    };
+    for (&skill, (key, _)) in hull_skills.iter().zip(SKILL_KEYS) {
         if keys.just_pressed(key) {
-            let skill = index as u16;
             orders.push(if ctrl {
                 WireCommand::Learn { skill }
             } else {
@@ -100,6 +108,12 @@ pub fn show_hud(
     }
 }
 
+/// 내 배의 선체가 쓰는 스킬의 번호입니다. 단축키의 순서입니다.
+fn hull_skills<'a>(welcome: &'a Welcome, me: &MyShip) -> &'a [u16] {
+    let hull = welcome.hulls.get(usize::from(me.hull));
+    hull.map_or(&[], |hull| hull.skills.as_slice())
+}
+
 fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
     let hull = welcome.hulls.get(usize::from(me.hull));
     let hull_name = hull.map_or("?", |hull| hull.name.as_str());
@@ -114,7 +128,11 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
         lines += &format!("  [{}] {name}", slot + 1);
     }
     lines += "\nSkills:";
-    for ((spec, skill), (_, key)) in welcome.skills.iter().zip(&me.skills).zip(SKILL_KEYS) {
+    for (&id, (_, key)) in hull_skills(welcome, me).iter().zip(SKILL_KEYS) {
+        let index = usize::from(id);
+        let (Some(spec), Some(skill)) = (welcome.skills.get(index), me.skills.get(index)) else {
+            continue;
+        };
         lines += &format!("  [{key}] {} {}/{}", spec.name, skill.rank, spec.max_rank);
         if skill.rank > 0 && skill.ready_secs > 0.0 {
             lines += &format!(" ({:.0}s)", skill.ready_secs.ceil());
@@ -149,5 +167,6 @@ fn refusal_text(refusal: WireRefusal) -> &'static str {
         WireRefusal::MaxRank => "the skill is at its highest rank",
         WireRefusal::NotLearned => "learn the skill first",
         WireRefusal::OnCooldown => "the skill is not ready",
+        WireRefusal::NotOnThisHull => "this hull does not have that skill",
     }
 }

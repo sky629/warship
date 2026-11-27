@@ -1,9 +1,9 @@
 //! 기본 수치가 검사를 통과하는지와, 규칙의 전제를 어기는 수치가 거절되는지 확인합니다.
 
-use crate::ids::WeaponId;
+use crate::ids::{SkillId, WeaponId};
 use crate::math::Vec2;
 use crate::sim::Sim;
-use crate::tuning::Tuning;
+use crate::tuning::{SkillEffect, Tuning};
 
 #[test]
 fn the_default_tuning_is_valid_and_starts_a_room() {
@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 27] = [
+    let broken: [fn(&mut Tuning); 30] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -57,6 +57,15 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.growth.level_xp = vec![100, 100],
         |t| t.skills[0].max_rank = 0,
         |t| t.skills[1].cooldown_ticks = 0,
+        // 표에 없는 스킬을 가진 선체, 같은 스킬을 두 번 가진 선체, 가장 높은 단계에서 100%를 넘는 피해 감소입니다.
+        |t| t.hulls[0].skills = vec![SkillId(9)],
+        |t| t.hulls[0].skills = vec![SkillId(0), SkillId(0)],
+        |t| {
+            t.skills[4].effect = SkillEffect::Brace {
+                percent_per_rank: 40,
+                ticks: 10,
+            }
+        },
         |t| t.map.islands[0].radius = 0.0,
         // 맵의 가장자리에 붙은 섬, 다른 섬에 붙은 섬, 시작 자리를 덮은 섬, 라인을 막은 섬입니다.
         |t| t.map.islands[0].center = Vec2::new(5.5, 24.0),
