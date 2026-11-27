@@ -2,14 +2,15 @@
 //!
 //! 실행: `cargo run -p warship_dedicated` 또는 `cargo run -p warship_dedicated -- --addr 0.0.0.0:7777`
 //! 방의 빈자리는 봇이 채웁니다. `--no-bots`를 주면 사람의 배만 있는 방이 됩니다.
-//! 서버는 일어난 일(방의 생성과 제거, 입장과 퇴장, 거절)을 한 줄씩 출력합니다. `Ctrl-C`로 종료합니다.
+//! 접속이 끊긴 사람의 자리는 60초 동안 남고, 그 안에 같은 클라이언트가 다시 접속하면 같은 배를 조종합니다.
+//! 서버는 일어난 일(방의 생성과 제거, 입장과 퇴장, 끊긴 자리, 거절)을 한 줄씩 출력합니다. `Ctrl-C`로 종료합니다.
 
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use warship_protocol::ServerLimits;
 use warship_rules::{ShipId, Sim, Tuning, Waypoint};
-use warship_server::{GameServer, Orders, Pilot};
+use warship_server::{GameServer, Orders, Pilot, RandomSource};
 use warship_ws_server::WsServer;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:7777";
@@ -60,6 +61,16 @@ impl Pilot for BotPilot {
     }
 }
 
+/// 운영체제의 암호용 무작위입니다. 자리의 표식은 다른 사람이 예측할 수 없어야 합니다.
+struct OsRandom;
+
+impl RandomSource for OsRandom {
+    fn fill(&mut self, bytes: &mut [u8]) {
+        // 서버를 시작할 때 운영체제가 무작위 바이트를 주는지 확인했습니다.
+        getrandom::fill(bytes).expect("the operating system gives random bytes");
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Options { addr, bots } = match parse_args(&args) {
@@ -69,6 +80,10 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    if let Err(err) = getrandom::fill(&mut [0u8; 16]) {
+        eprintln!("cannot start the server: the operating system gives no random bytes: {err}");
+        return ExitCode::FAILURE;
+    }
     let limits = ServerLimits::default();
     let ws = match WsServer::bind(&addr, limits) {
         Ok(ws) => ws,
@@ -79,8 +94,14 @@ fn main() -> ExitCode {
     };
     eprintln!("listening on ws://{}", ws.local_addr());
 
-    let mut server = match GameServer::new(Box::new(ws), Tuning::default(), limits, Instant::now())
-    {
+    let server = GameServer::new(
+        Box::new(ws),
+        Tuning::default(),
+        limits,
+        Box::new(OsRandom),
+        Instant::now(),
+    );
+    let mut server = match server {
         Ok(server) if bots => server.with_pilot(Box::new(BotPilot)),
         Ok(server) => server,
         Err(err) => {

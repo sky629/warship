@@ -4,12 +4,15 @@ use serde::{Deserialize, Serialize};
 use warship_rules::{ShipId, Sim, StructureKind, StructureSpec, WeaponSpec};
 
 use crate::messages::{WireTeam, WireVec2};
+use crate::seat_token::SeatToken;
 use crate::snapshot::WireStructureKind;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Welcome {
     /// 해석된 방 코드입니다.
     pub room: String,
+    /// 이 자리의 표식입니다. 접속이 끊긴 뒤 다시 입장할 때 `Join`에 실으면 같은 배를 다시 조종합니다.
+    pub token: SeatToken,
     /// 이 접속이 조종하는 배의 번호입니다.
     pub ship: u32,
     pub team: WireTeam,
@@ -112,7 +115,7 @@ fn wire_structure_spec(spec: &StructureSpec) -> WireStructureSpec {
 
 impl Welcome {
     /// `ship`이 방에 없으면 `None`입니다.
-    pub fn from_sim(sim: &Sim, room: &str, ship: ShipId) -> Option<Welcome> {
+    pub fn from_sim(sim: &Sim, room: &str, ship: ShipId, token: SeatToken) -> Option<Welcome> {
         let tuning = sim.tuning();
         let structure = |kind| wire_structure_spec(tuning.structures.of(kind));
         let creeps = tuning.creeps.iter().map(|creep| WireCreepSpec {
@@ -126,6 +129,7 @@ impl Welcome {
         };
         Some(Welcome {
             room: room.to_string(),
+            token,
             ship: ship.0,
             team: sim.ship(ship)?.team.into(),
             tick_hz: tuning.tick_hz,

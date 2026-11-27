@@ -13,6 +13,8 @@ use crate::draw::TILE_PX;
 pub struct Net {
     transport: Option<Box<dyn ClientTransport>>,
     pub session: Session,
+    /// 접속이 끊긴 뒤 다시 접속할 서버 주소입니다.
+    server: String,
 }
 
 impl Net {
@@ -35,10 +37,11 @@ pub struct Destination(pub Option<Vec2>);
 
 /// 접속을 시작하고 리소스를 넣습니다. 실행 인자가 잘못되었거나 접속을 열지 못하면 그 이유로 끝난 접속 상태를 넣습니다.
 pub fn install(app: &mut App, launch: Result<LaunchOptions, String>) {
-    let room = launch.as_ref().map_or("", |launch| launch.room.as_str());
-    let mut session = Session::new(room);
+    let options = launch.clone().unwrap_or_default();
+    let mut session = Session::new(options.room.as_deref(), &options.name);
     let opened = launch.and_then(|launch| {
-        info!("connecting to {} (room {})", launch.server, launch.room);
+        let room = launch.room.as_deref().unwrap_or("a new room");
+        info!("connecting to {} ({room})", launch.server);
         WsClient::connect(&launch.server)
     });
     let transport: Option<Box<dyn ClientTransport>> = match opened {
@@ -50,23 +53,44 @@ pub fn install(app: &mut App, launch: Result<LaunchOptions, String>) {
     };
     app.init_resource::<CurrentFrame>()
         .init_resource::<Destination>()
-        .insert_non_send(Net { transport, session });
+        .insert_non_send(Net {
+            transport,
+            session,
+            server: options.server,
+        });
 }
 
 /// 접속 방식에 도착한 이벤트를 모두 처리하고, 이번 프레임에 그릴 방의 모습을 정합니다.
+/// 방 안에 있다가 접속이 끊겼으면 새 접속을 열고, 방 안에 있는 동안에는 접속이 살아 있다는 표시를 보냅니다.
 pub fn pump_network(
     mut net: NonSendMut<Net>,
     time: Res<Time<Real>>,
     mut frame: ResMut<CurrentFrame>,
 ) {
     let now = time.elapsed_secs_f64();
-    let Net { transport, session } = &mut *net;
+    let Net {
+        transport,
+        session,
+        server,
+    } = &mut *net;
     if let Some(transport) = transport {
         while let Some(event) = transport.poll() {
             if let Some(reply) = session.handle(event, now) {
                 transport.send(&reply);
             }
         }
+    }
+    if session.should_reconnect(now) {
+        info!("connecting to {server} again");
+        match WsClient::connect(server) {
+            Ok(client) => *transport = Some(Box::new(client)),
+            Err(reason) => {
+                session.handle(ClientEvent::Disconnected { reason }, now);
+            }
+        }
+    }
+    if let (Some(ping), Some(transport)) = (session.ping(now), transport.as_mut()) {
+        transport.send(&ping);
     }
     frame.0 = session.frame(now);
 }
@@ -89,7 +113,9 @@ pub fn order_moves(
     let Some(point) = clicked.map(|world| world / TILE_PX) else {
         return;
     };
-    let Net { transport, session } = &mut *net;
+    let Net {
+        transport, session, ..
+    } = &mut *net;
     if let (Some(order), Some(transport)) = (session.sail_to(point.x, point.y), transport) {
         transport.send(&order);
         destination.0 = Some(point);

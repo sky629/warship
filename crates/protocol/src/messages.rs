@@ -3,11 +3,12 @@
 use serde::{Deserialize, Serialize};
 use warship_rules::{Command, HullId, SkillId, Team, WeaponId};
 
+use crate::seat_token::SeatToken;
 use crate::snapshot::Snapshot;
 use crate::welcome::Welcome;
 
 /// 메시지의 형식이 바뀔 때마다 올리는 번호입니다. 서버는 다른 번호의 입장 요청을 거절합니다.
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 
 /// 클라이언트에서 서버로 가는 메시지입니다. `Join`은 첫째 변형이어야 합니다(`codec`이 변형 번호 0으로 알아봅니다).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -15,11 +16,17 @@ pub enum ClientMsg {
     /// 접속한 뒤 처음 보내는 메시지입니다. 모든 값은 플레이어가 입력한 그대로이고, 서버가 검사합니다.
     Join {
         version: u32,
-        /// 방 코드입니다. 서버가 `RoomCode`로 해석하고, 그 방이 없으면 만듭니다.
-        room: String,
+        /// 방 코드입니다. 서버가 `RoomCode`로 해석하고, 그 방이 없으면 만듭니다. 없으면 서버가 새 방 코드를 만듭니다.
+        room: Option<String>,
+        /// 플레이어의 이름입니다. 서버가 `PlayerName`으로 해석합니다.
+        name: String,
+        /// 앞선 입장에서 받은 자리의 표식입니다. 그 방에 이 표식의 자리가 남아 있으면 그 자리의 배를 다시 조종합니다.
+        token: Option<SeatToken>,
     },
     Input(InputMsg),
     Command(CommandMsg),
+    /// 접속이 살아 있다는 표시입니다. 서버는 입장한 접속이 `ServerLimits::idle_timeout` 동안 아무 메시지도 보내지 않으면 닫습니다.
+    Ping,
     /// 플레이어가 스스로 방을 나갑니다.
     Leave,
 }
@@ -103,11 +110,32 @@ pub enum ServerMsg {
     JoinRejected { reason: RejectReason },
     /// Tick마다 보내는, 받는 진영에 보이는 방의 상태입니다.
     Snapshot(Box<Snapshot>),
+    /// 방에 있는 사람의 명단입니다. 입장 안내 바로 다음에 보내고, 명단이 바뀔 때마다 방의 모든 접속에 다시 보냅니다.
+    Roster(Vec<WireMember>),
+    /// 같은 표식의 새 접속이 이 접속의 자리를 이어받았습니다. 서버는 접속을 닫지 않고, 클라이언트가 닫기를 기다립니다.
+    SeatTakenOver,
+}
+
+/// 방에 있는 사람 한 명입니다. 빈자리를 채우는 배는 명단에 없습니다.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireMember {
+    /// 이 사람이 조종하는 배의 번호입니다.
+    pub ship: u32,
+    pub name: String,
+    /// 접속이 열려 있는지입니다. 접속이 끊겨서 자리만 유지 중이면 거짓입니다.
+    pub connected: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RejectReason {
-    RoomFull { capacity: u32 },
+    RoomFull {
+        capacity: u32,
+    },
     BadRoomCode,
-    VersionMismatch { server: u32 },
+    BadName,
+    /// 서버가 방을 더 만들 수 없습니다.
+    ServerFull,
+    VersionMismatch {
+        server: u32,
+    },
 }

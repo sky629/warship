@@ -5702,6 +5702,7 @@ dependencies = [
 name = "warship_dedicated"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.4.3",
  "tokio-tungstenite",
  "warship_bot",
  "warship_protocol",

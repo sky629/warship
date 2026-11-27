@@ -107,7 +107,9 @@ mod tests {
     fn join(version: u32) -> ClientMsg {
         ClientMsg::Join {
             version,
-            room: "test".to_string(),
+            room: Some("test".to_string()),
+            name: "KANG".to_string(),
+            token: None,
         }
     }
 

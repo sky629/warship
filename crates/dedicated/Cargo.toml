@@ -15,6 +15,7 @@ warship_protocol.workspace = true
 warship_server.workspace = true
 warship_bot.workspace = true
 warship_ws_server.workspace = true
+getrandom.workspace = true
 
 [dev-dependencies]
 # 실제 소켓으로 접속하는 시험용 클라이언트가 씁니다. 블로킹 방식이라 비동기 실행기가 필요 없습니다.

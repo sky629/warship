@@ -47,6 +47,7 @@ tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
 tokio-tungstenite = "0.30"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 ewebsock = "0.8"
+getrandom = "0.4"
 bevy = { version = "0.20", default-features = false, features = ["2d", "ui"] }
 
 [workspace.lints.rust]

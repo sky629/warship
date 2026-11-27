@@ -17,7 +17,7 @@ use warship_protocol::{
     decode_server, encode_client,
 };
 use warship_rules::Tuning;
-use warship_server::GameServer;
+use warship_server::{GameServer, PredictableRandom};
 use warship_ws_server::WsServer;
 
 /// 실행 파일(`main.rs`)과 같은 방식으로 스레드 하나에서 서버를 돌립니다. 버려지면 스레드를 멈춥니다.
@@ -35,9 +35,15 @@ impl RunningServer {
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
         let thread = thread::spawn(move || {
-            let mut server =
-                GameServer::new(Box::new(ws), Tuning::default(), limits, Instant::now())
-                    .expect("the default tuning is valid");
+            let random = Box::new(PredictableRandom::new(1));
+            let mut server = GameServer::new(
+                Box::new(ws),
+                Tuning::default(),
+                limits,
+                random,
+                Instant::now(),
+            )
+            .expect("the default tuning is valid");
             while !stopped.load(Ordering::Relaxed) {
                 let now = Instant::now();
                 server.pump(now);
@@ -96,7 +102,9 @@ fn a_ship_joins_over_a_websocket_and_its_input_moves_it() {
         &mut socket,
         &ClientMsg::Join {
             version: PROTOCOL_VERSION,
-            room: "socket".to_string(),
+            room: Some("socket".to_string()),
+            name: "KANG".to_string(),
+            token: None,
         },
     );
 

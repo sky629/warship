@@ -13,7 +13,7 @@ use crate::vision::{self, Sight};
 use crate::weapon::{self, Target};
 use crate::world::World;
 
-/// 방 하나의 게임입니다. 바깥 코드는 `&Sim`으로 상태를 읽고, `join`, `remove_ship`, `command`, `step`으로만 상태를 바꿉니다.
+/// 방 하나의 게임입니다. 바깥 코드는 `&Sim`으로 상태를 읽고, `join`, `remove_ship`, `hand_over`, `command`, `step`으로만 상태를 바꿉니다.
 pub struct Sim {
     tuning: Tuning,
     /// 방이 만들어진 뒤 실행한 Tick의 수입니다. 대전이 끝나면 늘지 않습니다.
@@ -136,6 +136,17 @@ impl Sim {
     pub fn command(&mut self, ship: ShipId, seq: u32, command: Command) {
         if self.outcome.is_none() {
             command::apply(&mut self.world, &self.tuning, self.tick, ship, seq, command);
+        }
+    }
+
+    /// 배를 조종하는 쪽이 바뀌었습니다. 새 조종자는 입력과 명령의 순서 번호를 1부터 다시 세므로, 배가 기억하는 번호와 거절한 이유를 지웁니다.
+    /// 배는 새 입력을 받을 때까지 멈춥니다. 없는 배는 무시합니다.
+    pub fn hand_over(&mut self, ship: ShipId) {
+        if let Some(ship) = self.world.ships.get_mut(&ship) {
+            ship.last_input_seq = 0;
+            ship.last_command_seq = 0;
+            ship.refusal = None;
+            ship.route.clear();
         }
     }
 

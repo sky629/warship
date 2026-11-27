@@ -1,6 +1,7 @@
 //! Bevy 클라이언트입니다. 이 워크스페이스에서 Bevy를 사용하는 크레이트는 이것 하나입니다.
 //!
-//! PC: `cargo run -p warship_client` 또는 `cargo run -p warship_client -- --room duel --server ws://127.0.0.1:7777`
+//! PC: `cargo run -p warship_client` 또는 `cargo run -p warship_client -- --room duel --name Kang --server ws://127.0.0.1:7777`
+//! `--new-room`을 주면 서버가 만든 새 방에 들어가고, 화면 왼쪽 위에 그 방의 코드가 나옵니다.
 //! 웹: `cd crates/client && trunk serve` 뒤에 `http://127.0.0.1:8080/` 열기 (기본 서버와 기본 방에 들어갑니다)
 //!
 //! 서버가 Tick마다 보내는, 내 진영에 보이는 방의 상태를 받아서 위에서 내려다본 도형으로 그립니다.

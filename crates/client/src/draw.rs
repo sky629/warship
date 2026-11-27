@@ -180,7 +180,7 @@ fn draw_hp(gizmos: &mut Gizmos, center: Vec2, fraction: f32) {
     gizmos.line_2d(left, left + half * (2.0 * fraction.clamp(0.0, 1.0)), HP);
 }
 
-/// 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과를 화면 왼쪽 위에 글자로 보여 줍니다.
+/// 접속 상태, 골드, 다시 나타날 때까지 남은 시간, 대전의 결과, 방에 있는 사람의 이름을 화면 왼쪽 위에 글자로 보여 줍니다.
 pub fn show_status(
     net: NonSend<Net>,
     frame: Res<CurrentFrame>,
@@ -204,8 +204,15 @@ pub fn show_status(
                     (None, None) => "   Right-click: sail".to_string(),
                 };
             }
+            // 둘째 줄은 방에 있는 사람의 이름입니다. 접속이 끊긴 사람에는 표시를 붙입니다.
+            let names = net.session.roster().iter().map(|member| {
+                let away = if member.connected { "" } else { " (away)" };
+                format!("{}{away}", member.name)
+            });
+            line += &format!("\nCaptains: {}", names.collect::<Vec<_>>().join(", "));
             line
         }
+        (Phase::Reconnecting, _) => "Connection lost. Reconnecting...".to_string(),
         (Phase::Playing, None) => String::new(),
         (Phase::Ended(reason), _) => format!("Disconnected: {reason}"),
     };

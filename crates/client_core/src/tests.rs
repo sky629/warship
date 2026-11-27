@@ -8,12 +8,15 @@ use warship_protocol::{
     WireOwn, WireRefusal, WireShip, WireSkill, WireSkillSpec, WireStructure, WireStructureKind,
     WireStructureSpec, WireTarget, WireTeam, WireVec2, WireWeapon,
 };
+use warship_protocol::{SeatToken, WireMember};
 use warship_rules::Vec2;
 
 use crate::{Phase, Session, SkillView};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
+
+const TOKEN: SeatToken = SeatToken([7; 16]);
 
 fn welcome() -> Welcome {
     let gun = WireWeapon {
@@ -29,6 +32,7 @@ fn welcome() -> Welcome {
     };
     Welcome {
         room: "test".to_string(),
+        token: TOKEN,
         ship: ME,
         team: WireTeam::Red,
         tick_hz: 20,
@@ -114,7 +118,7 @@ fn snapshot(tick: u64, ships: Vec<WireShip>) -> ServerMsg {
 
 /// 입장을 마친 접속입니다.
 fn playing() -> Session {
-    let mut session = Session::new("test");
+    let mut session = Session::new(Some("test"), "KANG");
     session.handle(ClientEvent::Connected, 0.0);
     session.handle(
         ClientEvent::Message(ServerMsg::Welcome(Box::new(welcome()))),
@@ -129,7 +133,7 @@ fn receive(session: &mut Session, at: f64, msg: ServerMsg) {
 
 #[test]
 fn a_session_joins_when_the_link_opens_and_plays_after_the_welcome() {
-    let mut session = Session::new("test");
+    let mut session = Session::new(Some("test"), "KANG");
     assert_eq!(session.phase(), &Phase::Connecting);
     assert_eq!(session.sail_to(1.0, 1.0), None, "not in a room yet");
 
@@ -138,7 +142,9 @@ fn a_session_joins_when_the_link_opens_and_plays_after_the_welcome() {
         join,
         Some(ClientMsg::Join {
             version: PROTOCOL_VERSION,
-            room: "test".to_string()
+            room: Some("test".to_string()),
+            name: "KANG".to_string(),
+            token: None,
         })
     );
     assert_eq!(session.phase(), &Phase::Joining);
@@ -149,8 +155,8 @@ fn a_session_joins_when_the_link_opens_and_plays_after_the_welcome() {
 }
 
 #[test]
-fn a_rejection_and_a_lost_link_end_the_session_with_the_reason() {
-    let mut session = Session::new("test");
+fn a_rejection_and_a_link_lost_before_the_welcome_end_the_session_with_the_reason() {
+    let mut session = Session::new(Some("test"), "KANG");
     session.handle(ClientEvent::Connected, 0.0);
     let reason = RejectReason::RoomFull { capacity: 10 };
     receive(&mut session, 0.0, ServerMsg::JoinRejected { reason });
@@ -159,7 +165,8 @@ fn a_rejection_and_a_lost_link_end_the_session_with_the_reason() {
         &Phase::Ended("The room is full (10 ships)".to_string())
     );
 
-    let mut session = playing();
+    let mut session = Session::new(Some("test"), "KANG");
+    session.handle(ClientEvent::Connected, 0.0);
     let lost = ClientEvent::Disconnected {
         reason: "the server is gone".to_string(),
     };
@@ -315,7 +322,7 @@ fn the_frame_shows_creeps_structures_gold_the_respawn_time_and_the_outcome() {
 
 #[test]
 fn every_command_carries_the_next_sequence_number() {
-    let mut session = Session::new("test");
+    let mut session = Session::new(Some("test"), "KANG");
     assert_eq!(session.command(WireCommand::Sell { slot: 0 }), None);
     let mut session = playing();
 
@@ -371,4 +378,94 @@ fn the_frame_shows_my_hull_mounts_skills_and_the_last_refusal() {
     };
     assert_eq!(me.skills, [skill]);
     assert_eq!(me.refusal, Some(WireRefusal::NoShopInRange));
+}
+
+fn lose_link(session: &mut Session, now: f64) {
+    let reason = "the socket closed".to_string();
+    session.handle(ClientEvent::Disconnected { reason }, now);
+}
+
+#[test]
+fn a_session_that_loses_its_link_in_a_room_comes_back_with_its_seat_token() {
+    let mut session = Session::new(None, "KANG");
+    session.handle(ClientEvent::Connected, 0.0);
+    receive(&mut session, 0.0, ServerMsg::Welcome(Box::new(welcome())));
+
+    lose_link(&mut session, 10.0);
+    assert_eq!(session.phase(), &Phase::Reconnecting);
+    assert!(!session.should_reconnect(11.9), "not yet");
+    assert!(session.should_reconnect(12.0));
+    assert!(!session.should_reconnect(12.1), "one link at a time");
+
+    // 새 접속은 입장 안내가 알려 준 방과 표식으로 입장합니다.
+    let join = session.handle(ClientEvent::Connected, 12.2);
+    assert_eq!(
+        join,
+        Some(ClientMsg::Join {
+            version: PROTOCOL_VERSION,
+            room: Some("test".to_string()),
+            name: "KANG".to_string(),
+            token: Some(TOKEN),
+        })
+    );
+    receive(&mut session, 12.3, ServerMsg::Welcome(Box::new(welcome())));
+    assert_eq!(session.phase(), &Phase::Playing);
+    let first = session.sail_to(1.0, 1.0);
+    assert!(
+        matches!(first, Some(ClientMsg::Input(input)) if input.seq == 1),
+        "the numbers start over"
+    );
+}
+
+#[test]
+fn a_session_keeps_trying_for_a_minute_and_then_ends() {
+    let mut session = Session::new(None, "KANG");
+    session.handle(ClientEvent::Connected, 0.0);
+    receive(&mut session, 0.0, ServerMsg::Welcome(Box::new(welcome())));
+    lose_link(&mut session, 10.0);
+
+    // 새 접속이 열리지 않으면 2초 뒤에 다시 엽니다.
+    assert!(session.should_reconnect(12.0));
+    lose_link(&mut session, 12.5);
+    assert!(!session.should_reconnect(14.0));
+    assert!(session.should_reconnect(14.5));
+    lose_link(&mut session, 69.0);
+
+    assert!(!session.should_reconnect(70.1));
+    assert!(matches!(session.phase(), Phase::Ended(_)));
+}
+
+#[test]
+fn a_session_that_never_joined_or_lost_its_seat_does_not_come_back() {
+    let mut early = Session::new(None, "KANG");
+    lose_link(&mut early, 1.0);
+    assert!(matches!(early.phase(), Phase::Ended(_)));
+
+    let mut replaced = Session::new(None, "KANG");
+    replaced.handle(ClientEvent::Connected, 0.0);
+    receive(&mut replaced, 0.0, ServerMsg::Welcome(Box::new(welcome())));
+    receive(&mut replaced, 5.0, ServerMsg::SeatTakenOver);
+    lose_link(&mut replaced, 6.0);
+    assert!(matches!(replaced.phase(), Phase::Ended(_)));
+    assert!(!replaced.should_reconnect(100.0));
+}
+
+#[test]
+fn a_session_in_a_room_pings_every_five_seconds_and_keeps_the_roster() {
+    let mut session = Session::new(None, "KANG");
+    assert_eq!(session.ping(100.0), None, "not in a room");
+    session.handle(ClientEvent::Connected, 0.0);
+    receive(&mut session, 0.0, ServerMsg::Welcome(Box::new(welcome())));
+
+    assert_eq!(session.ping(4.9), None);
+    assert_eq!(session.ping(5.0), Some(ClientMsg::Ping));
+    assert_eq!(session.ping(9.9), None);
+
+    let member = WireMember {
+        ship: ME,
+        name: "KANG".to_string(),
+        connected: true,
+    };
+    receive(&mut session, 1.0, ServerMsg::Roster(vec![member.clone()]));
+    assert_eq!(session.roster(), [member]);
 }

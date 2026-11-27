@@ -1,4 +1,4 @@
-//! 서버를 소켓 없이 실행해서 입장, 진영별 스냅샷, 입력, 퇴장을 확인합니다.
+//! 서버를 소켓 없이 실행해서 입장, 진영별 스냅샷, 입력, 퇴장, 끊긴 자리로 돌아오는 것을 확인합니다.
 //!
 //! 접속 방식은 같은 프로세스 안에서 메시지를 옮기는 `loopback`이고, 시각은 테스트가 정합니다.
 
@@ -6,11 +6,11 @@ use std::time::{Duration, Instant};
 
 use warship_protocol::{
     ClientEvent, ClientMsg, ClientTransport, CommandMsg, InputMsg, LoopbackClient,
-    LoopbackConnector, PROTOCOL_VERSION, RejectReason, ServerLimits, ServerMsg, Snapshot, Welcome,
-    WireCommand, WireRefusal, WireTeam, WireVec2, loopback,
+    LoopbackConnector, PROTOCOL_VERSION, RejectReason, SeatToken, ServerLimits, ServerMsg,
+    Snapshot, Welcome, WireCommand, WireMember, WireRefusal, WireTeam, WireVec2, loopback,
 };
 use warship_rules::{Command, ShipId, Sim, SkillId, Tuning, Vec2, Waypoint};
-use warship_server::{GameServer, Notice, Orders, Pilot};
+use warship_server::{GameServer, Notice, Orders, Pilot, PredictableRandom};
 
 struct Bench {
     server: GameServer,
@@ -21,9 +21,14 @@ struct Bench {
 
 impl Bench {
     fn new(tuning: Tuning) -> Bench {
+        Bench::with_limits(tuning, ServerLimits::default())
+    }
+
+    fn with_limits(tuning: Tuning, limits: ServerLimits) -> Bench {
         let (transport, connector) = loopback();
         let now = Instant::now();
-        let server = GameServer::new(Box::new(transport), tuning, ServerLimits::default(), now);
+        let random = Box::new(PredictableRandom::new(1));
+        let server = GameServer::new(Box::new(transport), tuning, limits, random, now);
         Bench {
             server: server.expect("the tuning is valid"),
             connector,
@@ -39,15 +44,28 @@ impl Bench {
         bench
     }
 
-    /// 접속을 열고 `room`에 입장 요청을 보냅니다.
+    /// 접속을 열고 `room`에 "KANG"이라는 이름으로 입장 요청을 보냅니다.
     fn join(&mut self, room: &str) -> Player {
+        self.join_with(Some(room), "KANG", None)
+    }
+
+    /// 접속을 열고 입장 요청을 보냅니다. `room`이 없으면 서버가 방 코드를 만듭니다.
+    fn join_with(&mut self, room: Option<&str>, name: &str, token: Option<SeatToken>) -> Player {
         let mut link = self.connector.connect();
         assert!(matches!(link.poll(), Some(ClientEvent::Connected)));
         link.send(&ClientMsg::Join {
             version: PROTOCOL_VERSION,
-            room: room.to_string(),
+            room: room.map(str::to_string),
+            name: name.to_string(),
+            token,
         });
-        Player { link }
+        Player::of(link)
+    }
+
+    /// 지금까지 받은 알림 가운데 접속을 닫은 알림의 수입니다.
+    fn closures(&self) -> usize {
+        let closed = |notice: &&Notice| matches!(notice, Notice::LinkClosed { .. });
+        self.notices.iter().filter(closed).count()
     }
 
     /// 서버가 Tick을 `ticks`번 실행하게 합니다. 1초는 20Tick입니다.
@@ -62,17 +80,39 @@ impl Bench {
 
 struct Player {
     link: LoopbackClient,
+    /// 지금까지 받은 명단과 스냅샷 가운데 마지막 것입니다.
+    roster: Option<Vec<WireMember>>,
+    snapshot: Option<Snapshot>,
 }
 
 impl Player {
+    fn of(link: LoopbackClient) -> Player {
+        Player {
+            link,
+            roster: None,
+            snapshot: None,
+        }
+    }
+
+    /// 지난번에 읽은 뒤 새로 받은 메시지입니다.
     fn messages(&mut self) -> Vec<ServerMsg> {
         let mut messages = Vec::new();
         while let Some(event) = self.link.poll() {
             if let ClientEvent::Message(msg) = event {
+                match &msg {
+                    ServerMsg::Roster(roster) => self.roster = Some(roster.clone()),
+                    ServerMsg::Snapshot(snapshot) => self.snapshot = Some((**snapshot).clone()),
+                    _ => {}
+                }
                 messages.push(msg);
             }
         }
         messages
+    }
+
+    /// 서버가 닫지 않게 접속이 살아 있다는 표시를 보냅니다.
+    fn ping(&mut self) {
+        self.link.send(&ClientMsg::Ping);
     }
 
     fn welcome(&mut self) -> Welcome {
@@ -83,13 +123,25 @@ impl Player {
         found.expect("the server sent a welcome")
     }
 
+    /// 받은 명단 가운데 마지막 것입니다.
+    fn last_roster(&mut self) -> Vec<WireMember> {
+        self.messages();
+        self.roster.clone().expect("the server sent a roster")
+    }
+
+    /// 서버가 이 접속을 닫았는지입니다.
+    fn is_closed(&mut self) -> bool {
+        let mut last = None;
+        while let Some(event) = self.link.poll() {
+            last = Some(event);
+        }
+        matches!(last, Some(ClientEvent::Disconnected { .. }))
+    }
+
     /// 받은 스냅샷 가운데 마지막 것입니다.
     fn last_snapshot(&mut self) -> Snapshot {
-        let found = self.messages().into_iter().rev().find_map(|msg| match msg {
-            ServerMsg::Snapshot(snapshot) => Some(*snapshot),
-            _ => None,
-        });
-        found.expect("the server sent a snapshot")
+        self.messages();
+        self.snapshot.clone().expect("the server sent a snapshot")
     }
 
     fn command(&mut self, seq: u32, command: WireCommand) {
@@ -142,7 +194,13 @@ fn a_join_is_answered_with_a_welcome_and_then_a_snapshot_every_tick() {
     assert_eq!(welcome.room, "test");
     assert_eq!(welcome.team, WireTeam::Red);
     assert_eq!(welcome.tick_hz, 20);
-    let ticks: Vec<u64> = messages[1..]
+    let member = |name: &str| WireMember {
+        ship: 1,
+        name: name.to_string(),
+        connected: true,
+    };
+    assert_eq!(messages[1], ServerMsg::Roster(vec![member("KANG")]));
+    let ticks: Vec<u64> = messages[2..]
         .iter()
         .map(|msg| match msg {
             ServerMsg::Snapshot(snapshot) => snapshot.tick,
@@ -253,9 +311,12 @@ fn joins_that_break_the_rules_are_rejected_with_the_reason() {
     old.poll();
     old.send(&ClientMsg::Join {
         version: PROTOCOL_VERSION + 1,
-        room: "test".to_string(),
+        room: Some("test".to_string()),
+        name: "KANG".to_string(),
+        token: None,
     });
     let mut bad_code = bench.join("no spaces");
+    let mut bad_name = bench.join_with(Some("test"), "K@NG", None);
     let _first = bench.join("test");
     let _second = bench.join("test");
     let mut third = bench.join("test");
@@ -265,7 +326,7 @@ fn joins_that_break_the_rules_are_rejected_with_the_reason() {
         [ServerMsg::JoinRejected { reason }] => *reason,
         other => panic!("expected one rejection, got {other:?}"),
     };
-    let mut old = Player { link: old };
+    let mut old = Player::of(old);
     assert_eq!(
         reason(old.messages()),
         RejectReason::VersionMismatch {
@@ -273,6 +334,7 @@ fn joins_that_break_the_rules_are_rejected_with_the_reason() {
         }
     );
     assert_eq!(reason(bad_code.messages()), RejectReason::BadRoomCode);
+    assert_eq!(reason(bad_name.messages()), RejectReason::BadName);
     assert_eq!(
         reason(third.messages()),
         RejectReason::RoomFull { capacity: 2 }
@@ -280,7 +342,7 @@ fn joins_that_break_the_rules_are_rejected_with_the_reason() {
 }
 
 #[test]
-fn a_player_who_leaves_or_disconnects_is_removed_and_an_empty_room_is_removed() {
+fn a_player_who_leaves_is_removed_and_a_room_without_seats_is_removed() {
     let mut bench = Bench::new(close_spawns());
     let mut red = bench.join("test");
     let mut blue = bench.join("test");
@@ -291,7 +353,7 @@ fn a_player_who_leaves_or_disconnects_is_removed_and_an_empty_room_is_removed() 
     bench.run_ticks(2);
     assert_eq!(red.last_snapshot().ships.len(), 1);
 
-    drop(red);
+    red.link.send(&ClientMsg::Leave);
     bench.run_ticks(1);
     let room = "test".parse_room();
     assert_eq!(
@@ -324,35 +386,20 @@ fn rooms_do_not_see_each_other() {
 #[test]
 fn a_link_that_does_not_join_in_time_is_closed() {
     let mut bench = Bench::new(Tuning::default());
-    let mut silent = bench.connector.connect();
+    let silent = bench.connector.connect();
     let mut rejected = bench.join("no spaces");
     let mut playing = bench.join("test");
 
     // 기한은 5초(100Tick)입니다.
     bench.run_ticks(99);
-    assert!(
-        !bench
-            .notices
-            .iter()
-            .any(|notice| matches!(notice, Notice::LinkClosed { .. }))
-    );
+    assert_eq!(bench.closures(), 0);
     bench.run_ticks(2);
 
-    let closed = |link: &mut LoopbackClient| {
-        let mut last = None;
-        while let Some(event) = link.poll() {
-            last = Some(event);
-        }
-        matches!(last, Some(ClientEvent::Disconnected { .. }))
-    };
-    assert!(closed(&mut silent), "never sent a join");
-    assert!(closed(&mut rejected.link), "its join was rejected");
-    assert!(!closed(&mut playing.link), "joined in time");
-    let closures = bench
-        .notices
-        .iter()
-        .filter(|notice| matches!(notice, Notice::LinkClosed { .. }));
-    assert_eq!(closures.count(), 2);
+    let mut silent = Player::of(silent);
+    assert!(silent.is_closed(), "never sent a join");
+    assert!(rejected.is_closed(), "its join was rejected");
+    assert!(!playing.is_closed(), "joined in time");
+    assert_eq!(bench.closures(), 2);
 }
 
 #[test]
@@ -407,7 +454,10 @@ fn a_ship_buys_a_weapon_at_its_base_once_it_has_the_gold() {
     let mut bench = Bench::new(Tuning::default());
     let mut kang = bench.join("test");
     // 수입은 1초에 2골드이고, 0번 무기의 가격은 100입니다.
-    bench.run_ticks(1000);
+    for _ in 0..50 {
+        kang.ping();
+        bench.run_ticks(20);
+    }
 
     kang.command(1, WireCommand::Buy { weapon: 0 });
     bench.run_ticks(1);
@@ -460,4 +510,272 @@ fn a_player_takes_a_spare_seat_and_gives_it_back_on_leaving() {
     bench.run_ticks(2);
     let team_size = |player: &mut Player| player.last_snapshot().ships.len();
     assert!(players.iter_mut().all(|player| team_size(player) >= 5));
+}
+
+/// 방 "test"에 입장하고 입장 안내를 받은 플레이어입니다.
+fn joined(bench: &mut Bench) -> (Player, Welcome) {
+    let mut player = bench.join("test");
+    bench.run_ticks(1);
+    let welcome = player.welcome();
+    (player, welcome)
+}
+
+#[test]
+fn a_player_who_lost_the_link_comes_back_to_the_same_ship_with_the_seat_token() {
+    let mut bench = Bench::new(close_spawns());
+    let (mut red, _) = joined(&mut bench);
+    let (blue, old) = joined(&mut bench);
+    let room = "test".parse_room();
+    let ship = ShipId(old.ship);
+
+    drop(blue);
+    bench.run_ticks(20);
+    assert!(bench.notices.contains(&Notice::Held {
+        room: room.clone(),
+        ship
+    }));
+    let away = red.last_roster();
+    assert_eq!((away[1].ship, away[1].connected), (old.ship, false));
+    assert_eq!(red.last_snapshot().ships.len(), 2, "the ship stays");
+
+    let mut back = bench.join_with(Some("test"), "MIRO", Some(old.token));
+    bench.run_ticks(1);
+    let welcome = back.welcome();
+    assert_eq!((welcome.ship, welcome.token), (old.ship, old.token));
+    assert!(bench.notices.contains(&Notice::Returned { room, ship }));
+    let here = red.last_roster();
+    assert_eq!(here[1].name, "MIRO", "the new name is used");
+    assert!(here[1].connected);
+
+    // 돌아온 접속은 순서 번호를 1부터 다시 셉니다.
+    back.sail_to(1, 20.0, 10.0);
+    bench.run_ticks(20);
+    let ships = back.last_snapshot().ships;
+    let mine = ships.iter().find(|ship| ship.id == old.ship);
+    assert!(mine.is_some_and(|ship| ship.x > 16.0 && ship.last_input_seq == 1));
+}
+
+#[test]
+fn a_second_link_with_the_same_token_takes_the_seat_and_the_first_is_told() {
+    let mut bench = Bench::new(close_spawns());
+    let (mut first, old) = joined(&mut bench);
+    first.messages();
+
+    let mut second = bench.join_with(Some("test"), "KANG", Some(old.token));
+    bench.run_ticks(1);
+
+    assert_eq!(second.welcome().ship, old.ship);
+    assert_eq!(first.messages(), [ServerMsg::SeatTakenOver]);
+    // 이유를 들은 접속이 5초 안에 스스로 닫지 않으면 서버가 닫습니다.
+    bench.run_ticks(101);
+    assert!(first.is_closed());
+    assert!(!second.is_closed());
+}
+
+#[test]
+fn a_token_of_another_seat_or_another_room_gives_a_new_ship() {
+    let mut bench = Bench::new(close_spawns());
+    let (_kang, old) = joined(&mut bench);
+
+    let mut other_room = bench.join_with(Some("other"), "MIRO", Some(old.token));
+    let mut wrong = bench.join_with(Some("test"), "MIRO", Some(SeatToken([9; 16])));
+    bench.run_ticks(1);
+
+    assert_ne!(other_room.welcome().token, old.token);
+    let welcome = wrong.welcome();
+    assert_ne!((welcome.ship, welcome.token), (old.ship, old.token));
+}
+
+#[test]
+fn a_held_seat_ends_after_a_minute_and_its_ship_leaves_the_room() {
+    let mut bench = Bench::new(close_spawns());
+    let (mut red, _) = joined(&mut bench);
+    let (blue, old) = joined(&mut bench);
+    drop(blue);
+
+    // 자리는 60초(1200Tick) 동안 남습니다. 입장한 접속은 30초 동안 조용하면 닫히므로 `Ping`을 보냅니다.
+    for _ in 0..59 {
+        red.ping();
+        bench.run_ticks(20);
+    }
+    assert_eq!(red.last_snapshot().ships.len(), 2);
+    red.ping();
+    bench.run_ticks(25);
+
+    assert_eq!(red.last_snapshot().ships.len(), 1);
+    assert_eq!(red.last_roster().len(), 1);
+    assert!(bench.notices.contains(&Notice::Left {
+        room: "test".parse_room(),
+        ship: ShipId(old.ship),
+        members: 1
+    }));
+
+    // 표식의 자리가 끝났으므로 같은 표식은 새 배를 받습니다.
+    let mut late = bench.join_with(Some("test"), "KANG", Some(old.token));
+    bench.run_ticks(1);
+    assert_ne!(late.welcome().token, old.token);
+}
+
+#[test]
+fn a_room_whose_last_seat_ends_is_removed() {
+    let mut bench = Bench::new(close_spawns());
+    let (kang, _) = joined(&mut bench);
+
+    drop(kang);
+    bench.run_ticks(1199);
+    assert!(!bench.notices.contains(&Notice::RoomRemoved {
+        room: "test".parse_room()
+    }));
+    bench.run_ticks(3);
+
+    assert_eq!(
+        bench.notices.last(),
+        Some(&Notice::RoomRemoved {
+            room: "test".parse_room()
+        })
+    );
+}
+
+#[test]
+fn the_pilot_steers_the_ship_of_a_lost_link_and_keeps_it_when_the_seat_ends() {
+    let mut bench = Bench::with_bots(Tuning::default());
+    // 입장한 순서대로 붉은 진영과 푸른 진영에 번갈아 들어갑니다. `mate`는 `gone`과 같은 진영이라서 그 배를 봅니다.
+    let (_red, _) = joined(&mut bench);
+    let (gone, old) = joined(&mut bench);
+    let (_other, _) = joined(&mut bench);
+    let (mut mate, mate_welcome) = joined(&mut bench);
+    assert_eq!(mate_welcome.team, old.team);
+    drop(gone);
+
+    for _ in 0..3 {
+        mate.ping();
+        bench.run_ticks(20);
+    }
+    let x_of = |snapshot: Snapshot| {
+        let ship = snapshot.ships.into_iter().find(|ship| ship.id == old.ship);
+        ship.map(|ship| ship.x)
+    };
+    let start = if old.team == WireTeam::Red { 7.0 } else { 57.0 };
+    let sailed = x_of(mate.last_snapshot());
+    assert!(sailed.is_some_and(|x| x != start), "the pilot sails it");
+
+    // 사람이 돌아오면 조종사는 그 배를 놓습니다.
+    let mut back = bench.join_with(Some("test"), "KANG", Some(old.token));
+    bench.run_ticks(1);
+    assert_eq!(back.welcome().ship, old.ship);
+    back.sail_to(1, start, 24.0);
+    bench.run_ticks(200);
+    assert_eq!(x_of(back.last_snapshot()), Some(start));
+
+    // 다시 끊긴 뒤 자리가 끝나도 배는 빈자리의 배로 남습니다.
+    drop(back);
+    for _ in 0..61 {
+        mate.ping();
+        bench.run_ticks(20);
+    }
+    assert!(x_of(mate.last_snapshot()).is_some());
+    let roster = mate.last_roster();
+    assert!(roster.iter().all(|member| member.ship != old.ship));
+}
+
+#[test]
+fn a_joined_link_that_sends_nothing_for_thirty_seconds_is_closed_and_its_seat_is_held() {
+    let mut bench = Bench::new(close_spawns());
+    let (mut quiet, old) = joined(&mut bench);
+    let (mut alive, _) = joined(&mut bench);
+
+    for _ in 0..31 {
+        alive.ping();
+        bench.run_ticks(20);
+    }
+
+    assert!(quiet.is_closed());
+    assert!(!alive.is_closed());
+    assert!(bench.notices.contains(&Notice::Held {
+        room: "test".parse_room(),
+        ship: ShipId(old.ship)
+    }));
+}
+
+#[test]
+fn a_join_without_a_room_code_gets_a_new_room_each_time() {
+    let mut bench = Bench::new(close_spawns());
+    let mut first = bench.join_with(None, "KANG", None);
+    let mut second = bench.join_with(None, "MIRO", None);
+    bench.run_ticks(1);
+
+    let (first, second) = (first.welcome(), second.welcome());
+    assert_eq!(first.room.len(), 5);
+    assert_ne!(first.room, second.room);
+    assert_eq!((first.team, second.team), (WireTeam::Red, WireTeam::Red));
+}
+
+#[test]
+fn the_server_refuses_a_room_above_its_limit_but_not_a_seat_in_an_open_room() {
+    let limits = ServerLimits {
+        max_rooms: 1,
+        ..ServerLimits::default()
+    };
+    let mut bench = Bench::with_limits(close_spawns(), limits);
+    let _first = bench.join("here");
+    let mut second = bench.join("there");
+    let mut third = bench.join("here");
+    bench.run_ticks(1);
+
+    let reason = RejectReason::ServerFull;
+    assert_eq!(second.messages(), [ServerMsg::JoinRejected { reason }]);
+    assert_eq!(third.welcome().team, WireTeam::Blue);
+}
+
+#[test]
+fn a_link_that_breaks_the_order_of_messages_is_closed_and_gives_up_its_seat() {
+    let mut bench = Bench::new(close_spawns());
+    let mut early = bench.connector.connect();
+    early.poll();
+    early.send(&ClientMsg::Ping);
+    let (mut twice, old) = joined(&mut bench);
+    twice.link.send(&ClientMsg::Join {
+        version: PROTOCOL_VERSION,
+        room: Some("test".to_string()),
+        name: "KANG".to_string(),
+        token: None,
+    });
+    bench.run_ticks(2);
+
+    let mut early = Player::of(early);
+    assert!(early.is_closed(), "a message before the join");
+    assert!(twice.is_closed(), "a second join");
+    assert!(bench.notices.contains(&Notice::Left {
+        room: "test".parse_room(),
+        ship: ShipId(old.ship),
+        members: 0
+    }));
+}
+
+#[test]
+fn a_seat_above_the_limit_of_held_seats_ends_at_once() {
+    let limits = ServerLimits {
+        max_held_seats_per_ip: 1,
+        ..ServerLimits::default()
+    };
+    let mut bench = Bench::with_limits(close_spawns(), limits);
+    let (_stays, _) = joined(&mut bench);
+    let (first, _) = joined(&mut bench);
+    let mut third = bench.join("other");
+    bench.run_ticks(1);
+    let second = third.welcome();
+
+    drop(first);
+    bench.run_ticks(1);
+    drop(third);
+    bench.run_ticks(1);
+
+    // 테스트의 모든 접속은 같은 주소에서 옵니다. 첫 자리는 유지하고, 둘째 자리는 곧바로 끝냅니다.
+    let held = |notice: &&Notice| matches!(notice, Notice::Held { .. });
+    assert_eq!(bench.notices.iter().filter(held).count(), 1);
+    assert!(bench.notices.contains(&Notice::Left {
+        room: "other".parse_room(),
+        ship: ShipId(second.ship),
+        members: 0
+    }));
 }
