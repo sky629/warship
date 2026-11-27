@@ -723,6 +723,7 @@ impl Default for Tuning {
                 bounty: 200,
             },
             // 값의 순서입니다. 같은 값의 선체는 서로 다른 역할을 합니다: 화력, 속도, 지원, 방어, 교역.
+            // 같은 값의 전투용 선체는 칸의 수가 같습니다. 칸이 하나 적은 선체는 봇끼리의 대전에서 양쪽 자리 모두 졌습니다.
             hulls: vec![
                 hull("Sloop", 0, 400, 4.0, 3, &[patch, grape, sail]),
                 HullSpec {
@@ -730,11 +731,11 @@ impl Default for Tuning {
                     ..hull("Lugger", 150, 220, 4.6, 4, &[sail])
                 },
                 hull("Brig", 500, 650, 3.8, 4, &[patch, grape, sail]),
-                hull("Corvette", 500, 480, 4.6, 3, &[grape, sail, chain]),
+                hull("Corvette", 500, 480, 4.6, 4, &[grape, sail, chain]),
                 hull("Frigate", 1100, 950, 3.6, 5, &[patch, grape, broadside]),
                 HullSpec {
                     repair_per_sec: 4,
-                    ..hull("Tender", 1100, 800, 3.7, 4, &[patch, rally, sail])
+                    ..hull("Tender", 1100, 800, 3.7, 5, &[patch, rally, sail])
                 },
                 HullSpec {
                     trader: true,
@@ -743,7 +744,7 @@ impl Default for Tuning {
                 hull("Galleon", 2000, 1500, 3.2, 6, &[patch, grape, iron]),
                 HullSpec {
                     armor_percent: 15,
-                    ..hull("Bulwark", 2000, 1900, 2.9, 5, &[patch, iron, chain])
+                    ..hull("Bulwark", 2000, 1400, 2.9, 6, &[patch, iron, chain])
                 },
                 hull(
                     "Man-of-War",

@@ -3,6 +3,7 @@
 //! 실행: `cargo run -p warship_bot --example measure`
 //! 대전에서는 건물이 파괴된 시각, 정해진 시각마다의 레벨과 골드, 대전이 끝난 시각, 배 한 척이 1분에 번 골드를 출력합니다.
 //! 교역에서는 교역마다 배 한 척이 1분에 남긴 이익을 출력합니다. 두 값을 비교해서 교역의 보상을 정합니다.
+//! 마지막으로 같은 값의 선체 가운데 첫째만 쓰는 진영과 둘째만 쓰는 진영의 대전을 돌려서, 선체 계열끼리의 균형을 잽니다.
 //! 규칙에 무작위가 없으므로 같은 수치에서는 항상 같은 결과가 나옵니다.
 
 use std::collections::BTreeMap;
@@ -32,6 +33,44 @@ fn team_name(team: Team) -> &'static str {
 }
 
 fn main() {
+    let (outcome, tick, per_ship) = battle([None, None], true);
+    let tick_hz = Tuning::default().tick_hz;
+    println!("{}  end: {outcome:?}", clock(tick, tick_hz));
+    println!("a fighting ship earns {per_ship:.0} gold a minute (income and bounties)");
+
+    let trades = Tuning::default().trades.len();
+    for trade in 0..trades {
+        trade_run(TradeId(trade as u16));
+    }
+
+    // 진영마다 같은 값의 선체 가운데 몇째를 쓰는지입니다. 자리를 바꾼 대전도 돌려서 진영의 차이를 뺍니다.
+    for lines in [[0, 0], [0, 1], [1, 0], [1, 1]] {
+        let (outcome, tick, _) = battle(lines.map(Some), false);
+        println!(
+            "hull lines red {} blue {}: {outcome:?} at {}",
+            lines[0],
+            lines[1],
+            clock(tick, tick_hz)
+        );
+    }
+}
+
+/// 봇이 고른 선체를, 그 값의 전투용 선체 가운데 `line`째 선체로 바꿉니다. 그 값의 선체가 `line`개보다 적으면 마지막 선체입니다.
+fn on_line(tuning: &Tuning, command: Command, line: Option<usize>) -> Command {
+    let (Command::ChangeHull(hull), Some(line)) = (command, line) else {
+        return command;
+    };
+    let price = tuning.hull(hull).price;
+    let same: Vec<usize> = (0..tuning.hulls.len())
+        .filter(|index| !tuning.hulls[*index].trader && tuning.hulls[*index].price == price)
+        .collect();
+    let index = same[line.min(same.len() - 1)];
+    Command::ChangeHull(HullId(index as u16))
+}
+
+/// 봇끼리 5대5 대전을 한 판 돌리고, 결과와 끝난 Tick과 배 한 척이 1분에 번 골드를 돌려줍니다.
+/// `lines`는 진영마다 쓰는 선체 계열이고, 없으면 봇이 고른 선체를 그대로 씁니다. `verbose`이면 진행을 출력합니다.
+fn battle(lines: [Option<usize>; 2], verbose: bool) -> (Option<warship_rules::Outcome>, u64, f32) {
     let tuning = Tuning::default();
     let tick_hz = tuning.tick_hz;
     let mut sim = Sim::new(tuning);
@@ -53,8 +92,10 @@ fn main() {
                 seq += 1;
                 let destination = plan.destination.and_then(|p| Waypoint::new(p.x, p.y));
                 inputs.insert(id, PlayerInput { seq, destination });
+                let line = sim.ship(id).and_then(|ship| lines[ship.team.index()]);
                 for command in plan.commands {
                     seq += 1;
+                    let command = on_line(sim.tuning(), command, line);
                     sim.command(id, seq, command);
                 }
             }
@@ -75,26 +116,24 @@ fn main() {
             .filter(|id| sim.structure(*id).is_none())
             .collect();
         for id in fallen {
-            if let Some((kind, team)) = standing.remove(&id) {
+            if let Some((kind, team)) = standing.remove(&id)
+                && verbose
+            {
                 let now = clock(sim.tick(), tick_hz);
                 println!("{now}  {} {kind:?} destroyed", team_name(team));
             }
         }
-        if sim.tick().is_multiple_of(REPORT_MINUTES * per_minute) {
+        if verbose && sim.tick().is_multiple_of(REPORT_MINUTES * per_minute) {
             report(&sim);
         }
     }
-    println!("{}  end: {:?}", clock(sim.tick(), tick_hz), sim.outcome());
-    report(&sim);
+    if verbose {
+        report(&sim);
+    }
     let minutes = sim.tick() as f32 / per_minute as f32;
     let total: u32 = earned.values().sum();
     let per_ship = total as f32 / ships.len().max(1) as f32 / minutes;
-    println!("a fighting ship earns {per_ship:.0} gold a minute (income and bounties)");
-
-    let trades = Tuning::default().trades.len();
-    for trade in 0..trades {
-        trade_run(TradeId(trade as u16));
-    }
+    (sim.outcome(), sim.tick(), per_ship)
 }
 
 /// 교역선 한 척이 `trade`만 되풀이하는 방을 돌리고, 1분에 남긴 이익(보상에서 계약의 값을 뺀 것)을 출력합니다.
