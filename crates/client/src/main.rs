@@ -15,6 +15,7 @@ mod draw;
 mod hud;
 mod minimap;
 mod net;
+mod shop;
 mod start;
 mod storage;
 
@@ -49,9 +50,16 @@ fn main() {
         .insert_resource(Screen::Start)
         .init_resource::<camera::Rig>()
         .init_resource::<net::LeavePrompt>()
+        .init_resource::<shop::ShopOpen>()
         .add_systems(
             Startup,
-            (draw::setup, hud::setup, start::setup, minimap::setup),
+            (
+                draw::setup,
+                hud::setup,
+                start::setup,
+                minimap::setup,
+                shop::setup,
+            ),
         )
         .add_systems(
             Update,
@@ -62,6 +70,7 @@ fn main() {
                     net::pump_network,
                     net::order_moves,
                     hud::order_commands,
+                    shop::use_shop,
                     net::leave_room,
                     draw::build_scenery,
                     draw::sync_pieces,
@@ -77,6 +86,7 @@ fn main() {
                 hud::show_hud,
                 start::show_start,
                 minimap::show_minimap,
+                shop::show_shop,
             )
                 .chain(),
         )

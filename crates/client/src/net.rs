@@ -12,6 +12,7 @@ use warship_protocol::{ClientEvent, ClientTransport, PlayerName, RoomCode, WireC
 use warship_ws_client::WsClient;
 
 use crate::camera::minimap_under;
+use crate::shop::{self, ShopOpen};
 use crate::start::{Pending, Start};
 use crate::{Screen, storage};
 
@@ -176,6 +177,7 @@ pub fn close_room(world: &mut World) {
     world.resource_mut::<CurrentFrame>().0 = None;
     world.resource_mut::<Destination>().0 = None;
     world.resource_mut::<LeavePrompt>().0 = false;
+    world.resource_mut::<ShopOpen>().0 = false;
     // 방 안에서 누른 키(확인의 Enter 등)가 시작 화면의 칸에 들어가지 않게, 아직 읽지 않은 키 입력을 버립니다.
     world.resource_mut::<Messages<KeyboardInput>>().clear();
     world.insert_resource(Screen::Start);
@@ -261,15 +263,20 @@ pub fn leave_room(
     commands.insert_resource(Closing(notice));
 }
 
-/// 오른쪽 클릭한 수면의 자리나 미니맵의 자리로 배를 보냅니다.
+/// 오른쪽 클릭한 수면의 자리나 미니맵의 자리로 배를 보냅니다. 상점 창 위를 누른 클릭은 배를 보내지 않습니다.
 pub fn order_moves(
     mouse: Res<ButtonInput<MouseButton>>,
+    shop: Res<ShopOpen>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     mut net: NonSendMut<Net>,
     mut destination: ResMut<Destination>,
 ) {
     if !mouse.just_pressed(MouseButton::Right) {
+        return;
+    }
+    let welcome = net.session.welcome();
+    if welcome.is_some_and(|welcome| shop::row_under(&window, welcome, &shop).is_some()) {
         return;
     }
     let (camera, camera_transform) = *camera;

@@ -110,6 +110,44 @@ impl Minimap {
     }
 }
 
+/// 창의 오른쪽 위에 놓이는 상점 창의 자리(픽셀)입니다. 줄의 높이가 모두 같아서, 커서의 자리로 줄을 찾습니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShopWindow {
+    pub left: f32,
+    pub top: f32,
+    pub rows: usize,
+}
+
+impl ShopWindow {
+    pub const WIDTH: f32 = 460.0;
+    /// 줄 하나의 높이입니다.
+    pub const ROW: f32 = 22.0;
+    /// 창의 오른쪽 가장자리와 상점 창 사이의 간격입니다.
+    pub const MARGIN: f32 = 10.0;
+    /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 줄 두 줄을 가리지 않습니다.
+    pub const TOP: f32 = 60.0;
+
+    /// 너비가 `window_width`인 창에서, 줄이 `rows`개인 상점 창의 자리입니다.
+    pub fn in_window(window_width: f32, rows: usize) -> ShopWindow {
+        ShopWindow {
+            left: window_width - Self::MARGIN - Self::WIDTH,
+            top: Self::TOP,
+            rows,
+        }
+    }
+
+    pub fn height(&self) -> f32 {
+        self.rows as f32 * Self::ROW
+    }
+
+    /// 창의 `cursor` 자리가 상점 창 위이면, 그 자리에 있는 줄의 번호입니다.
+    pub fn row_at(&self, cursor: (f32, f32)) -> Option<usize> {
+        let (x, y) = (cursor.0 - self.left, cursor.1 - self.top);
+        let inside = (0.0..Self::WIDTH).contains(&x) && (0.0..self.height()).contains(&y);
+        inside.then(|| (y / Self::ROW) as usize)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,5 +229,20 @@ mod tests {
         assert_eq!((x, y), (60.0, 36.0));
         let cursor = (minimap.left + x, minimap.top + y);
         assert_eq!(minimap.tile_at(cursor), Some(tile));
+    }
+
+    #[test]
+    fn the_shop_window_sits_in_the_upper_right_corner_and_finds_the_row_under_the_cursor() {
+        let shop = ShopWindow::in_window(1000.0, 5);
+        assert_eq!((shop.left, shop.top, shop.height()), (530.0, 60.0, 110.0));
+
+        assert_eq!(shop.row_at((530.0, 60.0)), Some(0));
+        assert_eq!(shop.row_at((989.0, 81.0)), Some(0));
+        assert_eq!(shop.row_at((700.0, 82.0)), Some(1));
+        assert_eq!(shop.row_at((700.0, 169.0)), Some(4));
+        assert_eq!(shop.row_at((700.0, 170.0)), None, "below the last row");
+        assert_eq!(shop.row_at((529.0, 100.0)), None);
+        assert_eq!(shop.row_at((990.0, 100.0)), None);
+        assert_eq!(shop.row_at((700.0, 59.0)), None, "the status lines");
     }
 }

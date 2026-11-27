@@ -4,14 +4,15 @@
 
 use warship_protocol::{
     ClientEvent, ClientMsg, CommandMsg, InputMsg, PROTOCOL_VERSION, RejectReason, ServerMsg,
-    Snapshot, Welcome, WireCommand, WireCreep, WireCreepSpec, WireHull, WireItem, WireMount,
-    WireOutcome, WireOwn, WireRefusal, WireShip, WireSkill, WireSkillSpec, WireStructure,
-    WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2, WireWeapon,
+    Snapshot, Welcome, WireCommand, WireCreep, WireCreepSpec, WireGear, WireHull, WireItem,
+    WireMount, WireOutcome, WireOwn, WireRefusal, WireShip, WireSkill, WireSkillSpec,
+    WireStructure, WireStructureKind, WireStructureSpec, WireTarget, WireTeam, WireVec2,
+    WireWeapon,
 };
-use warship_protocol::{SeatToken, WireMember};
+use warship_protocol::{SeatToken, WireMember, WireRecipe};
 use warship_rules::Vec2;
 
-use crate::{Phase, Session, SkillView};
+use crate::{Phase, Session, SkillView, shop_rows};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -489,4 +490,81 @@ fn a_session_sends_the_remembered_token_with_its_first_join_and_leaves_once() {
     assert_eq!(session.leave(), Some(ClientMsg::Leave));
     assert_eq!(session.leave(), None);
     assert!(matches!(session.phase(), Phase::Ended(_)));
+}
+
+#[test]
+fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
+    let mut welcome = welcome();
+    welcome.weapons.push(WireWeapon {
+        name: "twin".to_string(),
+        price: 350,
+        buyable: false,
+        ..welcome.weapons[0].clone()
+    });
+    welcome.weapons.push(WireWeapon {
+        name: "mortar".to_string(),
+        price: 400,
+        ..welcome.weapons[0].clone()
+    });
+    welcome.gear.push(WireGear {
+        name: "planks".to_string(),
+        price: 200,
+        effect: "+250 HP".to_string(),
+    });
+    welcome.recipes.push(WireRecipe {
+        parts: vec![0, 0],
+        result: 1,
+        price: 150,
+    });
+
+    let rows = shop_rows(&welcome);
+
+    let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        [
+            "Weapons",
+            "  1  gun  100g",
+            "  2  mortar  400g",
+            "Gear",
+            "  1  planks  200g  (+250 HP)",
+            "Combine",
+            "  1  twin = gun + gun + 150g",
+            "Hulls",
+            "  1  small  0g  (1000 HP, 2 mounts)",
+            "  2  big  400g  (2000 HP, 4 mounts)",
+        ]
+    );
+    let orders: Vec<Option<WireCommand>> = rows.iter().map(|row| row.order).collect();
+    assert_eq!(
+        orders,
+        [
+            None,
+            Some(WireCommand::Buy { weapon: 0 }),
+            Some(WireCommand::Buy { weapon: 2 }),
+            None,
+            Some(WireCommand::BuyGear { gear: 0 }),
+            None,
+            Some(WireCommand::Combine { recipe: 0 }),
+            None,
+            Some(WireCommand::ChangeHull { hull: 0 }),
+            Some(WireCommand::ChangeHull { hull: 1 }),
+        ]
+    );
+    let costs: Vec<Option<u32>> = rows.iter().map(|row| row.cost).collect();
+    assert_eq!(
+        costs,
+        [
+            None,
+            Some(100),
+            Some(400),
+            None,
+            Some(200),
+            None,
+            Some(150),
+            None,
+            None,
+            None
+        ]
+    );
 }

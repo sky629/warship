@@ -1,4 +1,4 @@
-//! 내 배의 상태와 상점의 목록을 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다.
+//! 내 배의 상태를 화면 왼쪽 아래에 글자로 보여 주고, 단축키를 명령으로 보냅니다. 상점의 목록은 상점 창(`shop`)이 보여 줍니다.
 //!
 //! 숫자 키는 상점의 그 번호의 무기를 사고, Alt와 숫자 키는 그 번호의 장비를 삽니다. 무기와 장비는 같은 칸에 달립니다.
 //! Shift와 숫자 키는 그 번호의 칸의 아이템을 팝니다.
@@ -6,7 +6,7 @@
 //! Q, W, E, R은 지금 선체의 스킬을 차례로 쓰고, Ctrl과 함께 누르면 스킬 포인트를 넣습니다. 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
-use warship_client_core::MyShip;
+use warship_client_core::{MyShip, weapons_for_sale};
 use warship_protocol::{Welcome, WireCommand, WireItem, WireRefusal};
 
 use crate::net::{CurrentFrame, Net};
@@ -30,12 +30,7 @@ const HULL_KEYS: [KeyCode; 6] = [
     KeyCode::F5,
     KeyCode::F6,
 ];
-const RECIPE_KEYS: [(KeyCode, char); 4] = [
-    (KeyCode::KeyZ, 'Z'),
-    (KeyCode::KeyX, 'X'),
-    (KeyCode::KeyC, 'C'),
-    (KeyCode::KeyV, 'V'),
-];
+const RECIPE_KEYS: [KeyCode; 4] = [KeyCode::KeyZ, KeyCode::KeyX, KeyCode::KeyC, KeyCode::KeyV];
 const SKILL_KEYS: [(KeyCode, char); 4] = [
     (KeyCode::KeyQ, 'Q'),
     (KeyCode::KeyW, 'W'),
@@ -75,7 +70,8 @@ pub fn order_commands(
     let alt = held([KeyCode::AltLeft, KeyCode::AltRight]);
     let welcome = net.session.welcome();
     // 숫자 키의 번호는 상점이 파는 무기의 순서입니다. 조합으로만 얻는 무기는 건너뜁니다.
-    let for_sale: Vec<u16> = welcome.map_or(Vec::new(), |welcome| for_sale(welcome).collect());
+    let for_sale: Vec<u16> =
+        welcome.map_or(Vec::new(), |welcome| weapons_for_sale(welcome).collect());
     let recipes = welcome.map_or(0, |welcome| welcome.recipes.len());
     let mut orders = Vec::new();
     for (index, key) in DIGITS.into_iter().enumerate() {
@@ -92,7 +88,7 @@ pub fn order_commands(
         };
         orders.extend(order);
     }
-    for (index, (key, _)) in RECIPE_KEYS.into_iter().enumerate().take(recipes) {
+    for (index, key) in RECIPE_KEYS.into_iter().enumerate().take(recipes) {
         if keys.just_pressed(key) {
             let recipe = index as u16;
             orders.push(WireCommand::Combine { recipe });
@@ -138,14 +134,6 @@ pub fn show_hud(
     }
 }
 
-/// 상점이 파는 무기의 번호입니다. 무기 표의 순서입니다.
-fn for_sale(welcome: &Welcome) -> impl Iterator<Item = u16> + '_ {
-    let weapons = welcome.weapons.iter().enumerate();
-    weapons
-        .filter(|(_, weapon)| weapon.buyable)
-        .map(|(index, _)| index as u16)
-}
-
 /// 내 배의 선체가 쓰는 스킬의 번호입니다. 단축키의 순서입니다.
 fn hull_skills<'a>(welcome: &'a Welcome, me: &MyShip) -> &'a [u16] {
     let hull = welcome.hulls.get(usize::from(me.hull));
@@ -184,31 +172,9 @@ fn hud_lines(welcome: &Welcome, me: &MyShip) -> String {
             lines += &format!(" ({:.0}s)", skill.ready_secs.ceil());
         }
     }
-    let weapon_name = |id: u16| {
-        let weapon = welcome.weapons.get(usize::from(id));
-        weapon.map_or("?", |weapon| weapon.name.as_str())
-    };
-    lines += "\nShop:";
-    for (index, id) in for_sale(welcome).enumerate() {
-        let price = welcome.weapons[usize::from(id)].price;
-        lines += &format!("  {} {} {price}g", index + 1, weapon_name(id));
-    }
-    lines += "\nGear shop:";
-    for (index, gear) in welcome.gear.iter().enumerate() {
-        let (name, price, effect) = (&gear.name, gear.price, &gear.effect);
-        lines += &format!("  Alt+{} {name} {price}g ({effect})", index + 1);
-    }
-    lines += "\nCombine:";
-    for (recipe, (_, key)) in welcome.recipes.iter().zip(RECIPE_KEYS) {
-        let parts: Vec<&str> = recipe.parts.iter().map(|part| weapon_name(*part)).collect();
-        let (result, parts) = (weapon_name(recipe.result), parts.join(" + "));
-        lines += &format!("  {key} {result} = {parts} + {}g", recipe.price);
-    }
-    lines += "\nHulls:";
-    for (index, hull) in welcome.hulls.iter().enumerate() {
-        lines += &format!("  F{} {} {}g", index + 1, hull.name, hull.price);
-    }
-    lines += "\nNumber: buy weapon   Alt+number: buy gear   Shift+number: sell mount   Ctrl+key: learn skill";
+    lines +=
+        "\nB: shop   Number: buy weapon   Alt+number: buy gear   Z, X, C, V: combine   F1-F6: hull";
+    lines += "\nShift+number: sell mount   Ctrl+key: learn skill";
     if let Some(refusal) = me.refusal {
         lines += &format!("\nRefused: {}", refusal_text(refusal));
     }
