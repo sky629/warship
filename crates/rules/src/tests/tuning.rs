@@ -29,7 +29,7 @@ fn a_new_ship_carries_the_start_weapons() {
 
 #[test]
 fn tunings_that_break_the_rules_are_refused() {
-    let broken: [fn(&mut Tuning); 22] = [
+    let broken: [fn(&mut Tuning); 27] = [
         |t| t.tick_hz = 0,
         |t| t.team_size = 0,
         |t| t.weapons[0].cooldown_ticks = 0,
@@ -57,6 +57,12 @@ fn tunings_that_break_the_rules_are_refused() {
         |t| t.growth.level_xp = vec![100, 100],
         |t| t.skills[0].max_rank = 0,
         |t| t.skills[1].cooldown_ticks = 0,
+        |t| t.map.islands[0].radius = 0.0,
+        // 맵의 가장자리에 붙은 섬, 다른 섬에 붙은 섬, 시작 자리를 덮은 섬, 라인을 막은 섬입니다.
+        |t| t.map.islands[0].center = Vec2::new(5.5, 24.0),
+        |t| t.map.islands[1].center = Vec2::new(24.5, 24.0),
+        |t| t.map.islands[1].center = Vec2::new(9.0, 22.0),
+        |t| t.map.islands[1].center = Vec2::new(30.0, 34.0),
     ];
     for adjust in broken {
         let mut tuning = Tuning::default();

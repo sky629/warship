@@ -4,6 +4,7 @@ use crate::command::Refusal;
 use crate::ids::{HullId, ShipId, Team, WeaponId};
 use crate::input::PlayerInputs;
 use crate::math::Vec2;
+use crate::nav;
 use crate::tuning::Tuning;
 use crate::weapon::Target;
 use crate::world::World;
@@ -26,8 +27,8 @@ pub struct Ship {
     pub skills: Vec<SkillState>,
     /// 속도를 올리는 스킬의 효과입니다. 효과가 끝난 뒤에도 값은 남아 있습니다.
     pub sprint: Option<Sprint>,
-    /// 배가 향하는 지점입니다. 없으면 멈춰 있습니다.
-    pub destination: Option<Vec2>,
+    /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
+    pub route: Vec<Vec2>,
     /// 무기를 다는 칸입니다. 빈 칸은 `None`입니다.
     pub mounts: [Option<Mount>; MOUNTS],
     /// 마지막으로 처리한 입력의 순서 번호입니다.
@@ -96,7 +97,7 @@ impl Ship {
             xp: 0,
             skills: vec![SkillState::default(); tuning.skills.len()],
             sprint: None,
-            destination: None,
+            route: Vec::new(),
             mounts,
             last_input_seq: 0,
             last_command_seq: 0,
@@ -128,37 +129,47 @@ pub(crate) fn respawn(world: &mut World, tuning: &Tuning, tick: u64) {
             ship.life = Life::Afloat;
             ship.hp = tuning.hull(ship.hull).max_hp;
             ship.pos = tuning.map.spawns[ship.team.index()];
-            ship.destination = None;
+            ship.route.clear();
         }
     }
 }
 
-/// 입력을 받은 배의 목적지를 바꾸고, 떠 있는 배를 목적지 쪽으로 한 Tick만큼 움직입니다.
+/// 입력을 받은 배의 목적지를 바꾸고, 떠 있는 배를 길을 따라 한 Tick만큼 움직입니다.
+/// 목적지가 바뀌면 섬을 피해서 가는 길을 다시 찾습니다. 맵 밖이나 섬 위의 목적지는 배가 설 수 있는 가까운 점으로 옮깁니다.
 /// 한 Tick에 갈 수 있는 거리 안에 목적지가 있으면 목적지에 정확히 섭니다.
 pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuning, tick: u64) {
     for ship in world.ships.values_mut() {
         if let Some(input) = inputs.get(&ship.id) {
             ship.last_input_seq = input.seq;
-            ship.destination = input.destination.map(|point| tuning.map.clamp(point.get()));
+            match input.destination {
+                None => ship.route.clear(),
+                Some(point) => {
+                    let destination = nav::settle(&tuning.map, point.get());
+                    if ship.route.last() != Some(&destination) {
+                        ship.route = nav::route(&tuning.map, ship.pos, destination);
+                    }
+                }
+            }
         }
         if !ship.is_afloat() {
             continue;
         }
-        let Some(destination) = ship.destination else {
-            continue;
-        };
         let boost = match ship.sprint {
             Some(sprint) if tick <= sprint.until => sprint.percent,
             _ => 0,
         };
         let speed = tuning.hull(ship.hull).speed * (100 + boost) as f32 / 100.0;
-        let step = speed / tuning.tick_hz as f32;
-        let offset = destination - ship.pos;
-        let distance = offset.length();
-        ship.pos = if distance <= step {
-            destination
-        } else {
-            ship.pos + offset * (step / distance)
-        };
+        let mut step = speed / tuning.tick_hz as f32;
+        while let Some(&next) = ship.route.first() {
+            let offset = next - ship.pos;
+            let distance = offset.length();
+            if distance > step {
+                ship.pos = ship.pos + offset * (step / distance);
+                break;
+            }
+            ship.pos = next;
+            step -= distance;
+            ship.route.remove(0);
+        }
     }
 }

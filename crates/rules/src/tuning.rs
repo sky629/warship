@@ -5,6 +5,7 @@
 
 use crate::ids::{HullId, Team, WeaponId};
 use crate::math::Vec2;
+use crate::nav;
 use crate::ship::MOUNTS;
 use crate::structures::StructureKind;
 
@@ -194,6 +195,15 @@ pub struct MapSpec {
     /// 라인마다 NPC 배가 지나가는 지점입니다. `Team::RED` 쪽에서 `Team::BLUE` 쪽으로 가는 순서이고, `Team::BLUE`의 NPC 배는 거꾸로 갑니다.
     pub lanes: Vec<Vec<Vec2>>,
     pub structures: Vec<StructureSite>,
+    /// 배가 지나가지 못하는 섬입니다.
+    pub islands: Vec<Island>,
+}
+
+/// 원 모양의 섬입니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Island {
+    pub center: Vec2,
+    pub radius: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -403,13 +413,46 @@ impl MapSpec {
                 );
             }
         }
+        for (index, island) in self.islands.iter().enumerate() {
+            let (center, reach) = (island.center, island.radius + nav::CHANNEL);
+            let inside = center.x >= reach
+                && center.x <= self.width - reach
+                && center.y >= reach
+                && center.y <= self.height - reach;
+            if !is_positive(island.radius) || !inside {
+                return Err(
+                    "an island has a positive radius and leaves a channel to the map edge"
+                        .to_string(),
+                );
+            }
+            let apart = |other: &Island| center.distance(other.center) >= reach + other.radius;
+            if !self.islands[..index].iter().all(apart) {
+                return Err("islands must leave a channel between them".to_string());
+            }
+        }
+        let sites = self.structures.iter().map(|site| site.pos);
+        if !sites.chain(self.spawns).all(|p| nav::is_open(self, p)) {
+            return Err("spawns and structures must be off the islands".to_string());
+        }
+        // NPC 배는 길을 찾지 않으므로, 항구에서 적의 본진까지 가는 길의 모든 구간이 섬을 지나지 않아야 합니다.
+        for site in &self.structures {
+            let Some(lane) = site.lane else { continue };
+            let mut from = site.pos;
+            let points = (0..).map_while(|leg| self.path_point(site.team, lane, leg));
+            for point in points {
+                if !nav::clear(self, from, point) {
+                    return Err("a lane must not cross an island".to_string());
+                }
+                from = point;
+            }
+        }
         Ok(())
     }
 }
 
 impl Default for Tuning {
     /// 64 x 48 맵입니다. 두 진영의 본진이 동서 끝에 있고, 북쪽과 남쪽에 라인이 하나씩 있습니다.
-    /// 라인마다 진영별로 항구 하나와 타워 하나가 있습니다.
+    /// 라인마다 진영별로 항구 하나와 타워 하나가 있습니다. 두 라인 사이에 섬 셋이 있고, 라인의 바깥쪽 한가운데에 섬이 하나씩 있습니다.
     fn default() -> Tuning {
         let gun = |name, damage, range, cooldown_ticks, shot_speed, hits| WeaponSpec {
             name,
@@ -563,6 +606,19 @@ impl Default for Tuning {
                     .map(|y| vec![Vec2::new(12.0, y), Vec2::new(52.0, y)])
                     .collect(),
                 structures,
+                islands: [
+                    (32.0, 24.0, 5.0),
+                    (20.0, 24.0, 3.0),
+                    (44.0, 24.0, 3.0),
+                    (32.0, 43.5, 2.5),
+                    (32.0, 4.5, 2.5),
+                ]
+                .into_iter()
+                .map(|(x, y, radius)| Island {
+                    center: Vec2::new(x, y),
+                    radius,
+                })
+                .collect(),
             },
         }
     }

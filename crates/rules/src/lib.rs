@@ -5,7 +5,7 @@
 //!
 //! 바깥에서 쓰는 것은 `Sim`(생성, 입장, 퇴장, `command`, `step`, 읽기 함수), `Tuning`(모든 수치), `PlayerInput`, `Command`, 그리고 스냅샷이 읽는 상태 타입입니다.
 //!
-//! 읽는 순서: `tuning`(모든 수치), `sim`(Tick 하나의 처리 순서), `ship`(이동과 다시 나타남), `creep`(라인의 NPC 배),
+//! 읽는 순서: `tuning`(모든 수치), `sim`(Tick 하나의 처리 순서), `ship`(이동과 다시 나타남), `nav`(섬을 피해서 가는 길), `creep`(라인의 NPC 배),
 //! `vision`(진영별 시야), `weapon`(자동 사격과 늦게 닿는 피해), `economy`(수입, 보상, 경험치), `structures`(타워, 항구, 본진),
 //! `command`(명령의 순서 번호와 거절), `shop`(구매, 판매, 선체 교체), `skill`(스킬을 배우고 쓰는 것).
 //! `world`, `math`, `ids`, `input`은 이 모듈들이 쓰는 도구입니다.
@@ -16,6 +16,7 @@ mod economy;
 mod ids;
 mod input;
 mod math;
+mod nav;
 mod ship;
 mod shop;
 mod sim;
@@ -38,7 +39,8 @@ pub use ship::{Life, MOUNTS, Mount, Ship, SkillState, Sprint};
 pub use sim::{Outcome, RoomFull, Sim};
 pub use structures::{Structure, StructureKind};
 pub use tuning::{
-    CreepSpec, EconomyTuning, GrowthTuning, Hits, HullSpec, MapSpec, ShipTuning, ShopTuning,
-    SkillEffect, SkillSpec, StructureSite, StructureSpec, StructureTable, Tuning, Wave, WeaponSpec,
+    CreepSpec, EconomyTuning, GrowthTuning, Hits, HullSpec, Island, MapSpec, ShipTuning,
+    ShopTuning, SkillEffect, SkillSpec, StructureSite, StructureSpec, StructureTable, Tuning, Wave,
+    WeaponSpec,
 };
 pub use weapon::Target;

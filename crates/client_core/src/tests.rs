@@ -66,6 +66,7 @@ fn welcome() -> Welcome {
             weapon: gun,
         }],
         lanes: Vec::new(),
+        islands: Vec::new(),
     }
 }
 

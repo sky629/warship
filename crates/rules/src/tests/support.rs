@@ -31,7 +31,7 @@ pub(crate) struct Scenario {
 }
 
 impl Scenario {
-    /// 건물도 라인도 없는 40 x 40 맵입니다. 배는 HP가 1000이고 무기 없이 놓이며, 무기는 테스트가 `arm`으로 답니다.
+    /// 건물도 라인도 섬도 없는 40 x 40 맵입니다. 배는 HP가 1000이고 무기 없이 놓이며, 무기는 테스트가 `arm`으로 답니다.
     /// 1초는 20Tick이고 배는 1초에 4타일을 갑니다. 배, NPC 배, 건물의 시야는 9입니다.
     /// 타워와 본진의 포는 사거리 6, 피해 15, 쿨다운 10Tick이고 배만 쏩니다. 항구는 쏘지 않습니다. 건물의 HP는 1000입니다.
     /// NPC 배는 HP 100, 1초에 2타일, 포는 `GUN`과 같습니다. NPC 배는 저절로 나오지 않습니다(일정이 없습니다).
@@ -278,6 +278,7 @@ fn open_sea_tuning() -> Tuning {
             spawns: [Vec2::new(1.0, 1.0), Vec2::new(39.0, 39.0)],
             lanes: Vec::new(),
             structures: Vec::new(),
+            islands: Vec::new(),
         },
     }
 }

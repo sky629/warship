@@ -27,6 +27,7 @@ const TOWER_HALF: f32 = 0.6;
 const HARBOR_HALF: f32 = 0.9;
 const BASE_HALF: f32 = 1.2;
 const LANE: Color = Color::srgb(0.12, 0.2, 0.26);
+const ISLAND: Color = Color::srgb(0.45, 0.55, 0.3);
 
 /// 중심에서 본 정사각형과 마름모의 꼭짓점입니다. 처음 점으로 돌아와서 닫습니다.
 const SQUARE: [Vec2; 5] = [
@@ -107,6 +108,13 @@ pub fn draw_room(
             .iter()
             .map(|point| Vec2::new(point.x, point.y) * TILE_PX);
         gizmos.linestrip_2d(points, LANE);
+    }
+    // 섬은 가장자리의 원과 그 안쪽의 흐린 원으로 그립니다.
+    for island in &welcome.islands {
+        let center = Vec2::new(island.center.x, island.center.y) * TILE_PX;
+        let radius = island.radius * TILE_PX;
+        gizmos.circle_2d(center, radius, ISLAND);
+        gizmos.circle_2d(center, radius * 0.6, ISLAND.with_alpha(0.4));
     }
     if let Some(point) = destination.0 {
         let (center, arm) = (point * TILE_PX, TILE_PX * 0.3);

@@ -29,6 +29,15 @@ pub struct Welcome {
     pub creeps: Vec<WireCreepSpec>,
     /// 라인마다 NPC 배가 지나가는 지점입니다.
     pub lanes: Vec<Vec<WireVec2>>,
+    /// 배가 지나가지 못하는 섬입니다.
+    pub islands: Vec<WireIsland>,
+}
+
+/// 원 모양의 섬입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WireIsland {
+    pub center: WireVec2,
+    pub radius: f32,
 }
 
 impl Welcome {
@@ -145,6 +154,15 @@ impl Welcome {
             base: structure(StructureKind::Base),
             creeps: creeps.collect(),
             lanes: tuning.map.lanes.iter().map(lane).collect(),
+            islands: tuning
+                .map
+                .islands
+                .iter()
+                .map(|island| WireIsland {
+                    center: WireVec2::new(island.center.x, island.center.y),
+                    radius: island.radius,
+                })
+                .collect(),
         })
     }
 }
