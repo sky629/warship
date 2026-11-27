@@ -641,7 +641,7 @@ impl MapSpec {
 
 impl Default for Tuning {
     /// 96 x 64 맵입니다. 두 진영의 본진이 동서 끝에 있고, 북쪽과 가운데와 남쪽에 라인이 하나씩 있습니다.
-    /// 라인마다 진영별로 항구 하나와 타워 하나가 있습니다. 라인과 라인 사이에 섬이 셋씩 있고, 바깥쪽 라인의 바깥 한가운데에 섬과 교역항이 하나씩 있습니다.
+    /// 라인마다 진영별로 항구 하나와 타워 둘(안쪽과 바깥)이 있습니다. 라인과 라인 사이에 섬이 셋씩 있고, 바깥쪽 라인의 바깥 한가운데에 섬과 교역항이 하나씩 있습니다.
     fn default() -> Tuning {
         let gun = |name, damage, range, cooldown_ticks, shot_speed, hits| WeaponSpec {
             name,
@@ -706,9 +706,11 @@ impl Default for Tuning {
         // 라인의 남북 자리입니다. 북쪽, 가운데, 남쪽의 순서입니다.
         let lanes = [52.0, 32.0, 12.0];
         let mut structures = Vec::new();
-        for (team, base_x, harbor_x, tower_x) in
-            [(Team::RED, 5.0, 14.0, 30.0), (Team::BLUE, 91.0, 82.0, 66.0)]
-        {
+        // 라인마다 항구의 앞에 안쪽 타워가, 그 앞에 바깥 타워가 있습니다.
+        for (team, base_x, harbor_x, towers) in [
+            (Team::RED, 5.0, 14.0, [22.0, 30.0]),
+            (Team::BLUE, 91.0, 82.0, [74.0, 66.0]),
+        ] {
             let site = |kind, x, y, lane| StructureSite {
                 kind,
                 team,
@@ -718,7 +720,9 @@ impl Default for Tuning {
             structures.push(site(StructureKind::Base, base_x, 32.0, None));
             for (lane, y) in lanes.into_iter().enumerate() {
                 structures.push(site(StructureKind::Harbor, harbor_x, y, Some(lane)));
-                structures.push(site(StructureKind::Tower, tower_x, y, None));
+                for tower_x in towers {
+                    structures.push(site(StructureKind::Tower, tower_x, y, None));
+                }
             }
         }
         Tuning {
@@ -874,7 +878,7 @@ impl Default for Tuning {
             },
             structures: StructureTable {
                 tower: StructureSpec {
-                    max_hp: 3000,
+                    max_hp: 2000,
                     vision: 9.0,
                     weapon: Some(gun("Tower Battery", 30, 8.0, 30, 14.0, Hits::ShipsOnly)),
                     bounty: 300,

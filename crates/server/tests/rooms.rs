@@ -420,7 +420,7 @@ fn a_snapshot_carries_own_creeps_and_own_gold_but_not_the_far_enemys() {
             .iter()
             .all(|creep| creep.team == WireTeam::Red)
     );
-    assert_eq!(snapshot.structures.len(), 14, "structures of both teams");
+    assert_eq!(snapshot.structures.len(), 20, "structures of both teams");
     let own = snapshot.ships.iter().map(|ship| ship.own.as_ref());
     let golds: Vec<Option<u32>> = own.map(|own| own.map(|own| own.gold)).collect();
     assert_eq!(golds, [Some(6)]);

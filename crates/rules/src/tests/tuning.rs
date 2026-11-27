@@ -11,8 +11,8 @@ fn the_default_tuning_is_valid_and_starts_a_room() {
     assert_eq!(tuning.validate(), Ok(()));
 
     let sim = Sim::new(tuning);
-    // 진영마다 본진 하나, 라인 셋에 항구와 타워가 하나씩입니다.
-    assert_eq!(sim.structures().count(), 14);
+    // 진영마다 본진 하나, 라인 셋에 항구 하나와 타워 둘씩입니다.
+    assert_eq!(sim.structures().count(), 20);
 }
 
 #[test]
