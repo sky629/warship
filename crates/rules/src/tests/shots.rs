@@ -58,12 +58,14 @@ fn a_fire_gun_keeps_burning_its_target_for_a_while() {
 
     s.run_ticks(5);
     assert_eq!(s.ship(b).hp, 990);
+    assert!(s.ship(b).burning(s.sim.tick()));
     s.run_ticks(20);
     assert_eq!(s.ship(b).hp, 985);
     s.run_ticks(20);
     assert_eq!(s.ship(b).hp, 980);
     s.run_ticks(40);
     assert_eq!(s.ship(b).hp, 980, "the fire is out");
+    assert!(!s.ship(b).burning(s.sim.tick()));
 }
 
 #[test]

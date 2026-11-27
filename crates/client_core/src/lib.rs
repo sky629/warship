@@ -18,7 +18,9 @@ mod shop;
 mod start;
 mod view;
 
-pub use interp::{CreepView, Frame, MyShip, ShipView, ShotView, SkillView, StructureView};
+pub use interp::{
+    BlastView, CreepView, Frame, MyShip, ShipView, ShotView, SkillView, StructureView,
+};
 pub use launch::{DEFAULT_NAME, DEFAULT_SERVER, LaunchOptions, RoomChoice};
 pub use memory::{Memory, RememberedSeat};
 pub use mounts::{MountView, mount_views};

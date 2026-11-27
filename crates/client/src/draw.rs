@@ -480,6 +480,12 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
         };
         draw_hp(gizmos, center + Vec3::Y * top, site.hp);
     }
+    // 터진 범위는 쏜 진영의 색의 원이고, 시간이 지나면서 옅어집니다.
+    for blast in &frame.blasts {
+        let color = team_color(blast.team).with_alpha(1.0 - blast.age);
+        flat_circle(gizmos, on_water(blast.pos), blast.radius, color);
+        flat_circle(gizmos, on_water(blast.pos), blast.radius * blast.age, color);
+    }
     for creep in &frame.creeps {
         draw_hp(gizmos, on_water(creep.pos) + Vec3::Y * 0.7, creep.hp);
     }
@@ -497,6 +503,9 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
         }
         if ship.cloaked {
             flat_circle(gizmos, center, 1.0, CLOAKED);
+        }
+        if ship.burning {
+            flat_circle(gizmos, center, 0.65, FIRE);
         }
         draw_hp(gizmos, center + Vec3::Y * 1.3, ship.hp);
     }

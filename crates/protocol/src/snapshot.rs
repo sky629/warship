@@ -41,6 +41,8 @@ pub struct WireShip {
     pub slowed: bool,
     /// 은신하고 있는지입니다. 은신한 배는 자기 진영과, 그 배를 본 건물의 진영에만 보냅니다.
     pub cloaked: bool,
+    /// 불이 붙어 있는지입니다.
+    pub burning: bool,
     /// 적에게 보이지 않는 정보입니다. 받는 진영의 배에만 있습니다.
     pub own: Option<WireOwn>,
     /// 아이템이 달린 칸만 있습니다.
@@ -271,6 +273,7 @@ fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning, tick: u64) -> WireShip 
         },
         slowed: ship.slowed(tick),
         cloaked: ship.cloaked(tick),
+        burning: ship.burning(tick),
         own: (ship.team == viewer).then(|| WireOwn {
             gold: ship.gold,
             xp: ship.xp,

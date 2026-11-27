@@ -36,6 +36,8 @@ pub struct Ship {
     pub snare: Option<Boost>,
     /// 이 Tick까지 은신합니다. 은신하지 않은 배는 0입니다.
     pub cloaked_until: u64,
+    /// 이 Tick까지 불이 붙어 있습니다. 불이 붙은 적이 없는 배는 0입니다.
+    pub burning_until: u64,
     /// 이 Tick부터 소모품을 다시 쓸 수 있습니다.
     pub supply_ready_at: u64,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
@@ -161,6 +163,7 @@ impl Ship {
             brace: None,
             snare: None,
             cloaked_until: 0,
+            burning_until: 0,
             supply_ready_at: 0,
             route: Vec::new(),
             mounts,
@@ -239,6 +242,11 @@ impl Ship {
     /// `tick`에 은신하고 있는지입니다. 은신한 배는 적의 배와 NPC 배에게 보이지 않습니다.
     pub fn cloaked(&self, tick: u64) -> bool {
         self.is_afloat() && tick <= self.cloaked_until
+    }
+
+    /// `tick`에 불이 붙어 있는지입니다. 불이 붙은 배는 1초마다 피해를 받습니다.
+    pub fn burning(&self, tick: u64) -> bool {
+        self.is_afloat() && tick < self.burning_until
     }
 
     /// `tick`에 적의 감속 스킬의 효과를 받고 있는지입니다.

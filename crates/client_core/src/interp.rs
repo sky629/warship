@@ -26,6 +26,8 @@ pub struct Frame {
     pub structures: Vec<StructureView>,
     /// 날아가고 있는 포탄입니다.
     pub shots: Vec<ShotView>,
+    /// 방금 터진 산탄과 폭탄의 범위입니다.
+    pub blasts: Vec<BlastView>,
     /// 이 접속이 조종하는 배의 상태입니다.
     pub me: Option<MyShip>,
     pub outcome: Option<WireOutcome>,
@@ -73,6 +75,8 @@ pub struct ShipView {
     pub slowed: bool,
     /// 은신하고 있는지입니다.
     pub cloaked: bool,
+    /// 불이 붙어 있는지입니다.
+    pub burning: bool,
     /// 이 접속이 조종하는 배입니다.
     pub mine: bool,
     /// 달린 무기의 사거리입니다. 같은 사거리는 한 번만 있습니다.
@@ -112,6 +116,24 @@ pub struct ShotView {
     pub size: f32,
 }
 
+/// 산탄이나 폭탄이 터진 범위입니다. 터진 뒤 잠깐 동안 보입니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BlastView {
+    pub pos: Vec2,
+    pub team: WireTeam,
+    pub radius: f32,
+    /// 터진 뒤 지난 시간의 비율입니다. 0은 터진 순간이고, 1에 가까울수록 사라질 때입니다.
+    pub age: f32,
+}
+
+/// 포탄 하나가 화면에 보이는 모습입니다. 날아가는 동안은 포탄이고, 터진 뒤에는 범위입니다.
+enum Seen {
+    Shot(ShotView),
+    Blast(BlastView),
+}
+
+/// 터진 범위가 보이는 Tick 수입니다.
+const BLAST_TICKS: f32 = 8.0;
 /// 폭탄이 가장 높이 올라가는 높이입니다.
 const BOMB_ARC: f32 = 2.5;
 /// 포탄이 날아가는 높이입니다.
@@ -215,16 +237,29 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         } else {
             0.0
         };
-        (0.0..1.0).contains(&progress).then(|| ShotView {
-            pos: lerp(from, to, progress),
+        if (0.0..1.0).contains(&progress) {
+            return Some(Seen::Shot(ShotView {
+                pos: lerp(from, to, progress),
+                team,
+                kind: weapon.shot,
+                lift: SHOT_HEIGHT + arc,
+                size: (0.6 + weapon.damage as f32 / 40.0).min(2.5),
+            }));
+        }
+        let radius = match weapon.shot {
+            WireShot::Scatter { radius } | WireShot::Bomb { radius } => radius,
+            WireShot::Shell | WireShot::Fire { .. } => return None,
+        };
+        let age = (tick - fired - flight) / BLAST_TICKS;
+        (0.0..1.0).contains(&age).then_some(Seen::Blast(BlastView {
+            pos: to,
             team,
-            kind: weapon.shot,
-            lift: SHOT_HEIGHT + arc,
-            size: (0.6 + weapon.damage as f32 / 40.0).min(2.5),
-        })
+            radius,
+            age,
+        }))
     };
 
-    let mut shots = Vec::new();
+    let mut seen = Vec::new();
     let mut ships = Vec::new();
     for ship in &next.ships {
         let pos = ship_pos(ship.id).unwrap_or(Vec2::new(ship.x, ship.y));
@@ -238,7 +273,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             if !ranges.contains(&weapon.range) {
                 ranges.push(weapon.range);
             }
-            shots.extend(shot(
+            seen.extend(shot(
                 pos,
                 ship.team,
                 weapon,
@@ -256,6 +291,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             sunk: ship.respawn_at.is_some(),
             slowed: ship.slowed,
             cloaked: ship.cloaked,
+            burning: ship.burning,
             mine: ship.id == welcome.ship,
             ranges,
         });
@@ -267,7 +303,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         };
         let pos = creep_pos(creep.id).unwrap_or(Vec2::new(creep.x, creep.y));
         let weapon = &spec.weapon;
-        shots.extend(shot(
+        seen.extend(shot(
             pos,
             creep.team,
             weapon,
@@ -287,7 +323,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         let pos = Vec2::new(site.x, site.y);
         let spec = welcome.structure(site.kind);
         if let Some(weapon) = &spec.weapon {
-            shots.extend(shot(
+            seen.extend(shot(
                 pos,
                 site.team,
                 weapon,
@@ -334,11 +370,19 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             refusal: own.refusal,
         })
     });
+    let (mut shots, mut blasts) = (Vec::new(), Vec::new());
+    for seen in seen {
+        match seen {
+            Seen::Shot(shot) => shots.push(shot),
+            Seen::Blast(blast) => blasts.push(blast),
+        }
+    }
     Frame {
         ships,
         creeps,
         structures,
         shots,
+        blasts,
         me,
         outcome: next.outcome,
     }

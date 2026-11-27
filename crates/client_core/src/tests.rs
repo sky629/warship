@@ -12,7 +12,7 @@ use warship_protocol::{
 use warship_protocol::{SeatToken, WireMember, WireRecipe, WireShot, WireSupply, WireTrade};
 use warship_rules::Vec2;
 
-use crate::{MountView, Phase, Session, SkillView, mount_views, shop_list};
+use crate::{BlastView, MountView, Phase, Session, SkillView, mount_views, shop_list};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -104,6 +104,7 @@ fn ship(id: u32, x: f32) -> WireShip {
         respawn_at: None,
         slowed: false,
         cloaked: false,
+        burning: false,
         own: (id == ME).then(|| WireOwn {
             gold: 70,
             xp: 0,
@@ -635,11 +636,12 @@ fn the_shop_lists_what_is_sold_under_a_heading_for_each_kind() {
 }
 
 #[test]
-fn a_slowed_ship_and_a_cloaked_ship_are_marked_in_the_frame() {
+fn a_slowed_ship_a_cloaked_ship_and_a_burning_ship_are_marked_in_the_frame() {
     let mut session = playing();
     let slowed = WireShip {
         slowed: true,
         cloaked: true,
+        burning: true,
         ..ship(ENEMY, 12.0)
     };
     receive(
@@ -653,6 +655,8 @@ fn a_slowed_ship_and_a_cloaked_ship_are_marked_in_the_frame() {
     let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.slowed).collect();
     assert_eq!(marks, [false, true]);
     let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.cloaked).collect();
+    assert_eq!(marks, [false, true]);
+    let marks: Vec<bool> = frame.ships.iter().map(|ship| ship.burning).collect();
     assert_eq!(marks, [false, true]);
 }
 
@@ -760,4 +764,20 @@ fn a_bomb_flies_in_an_arc_to_the_place_it_was_aimed_at() {
     assert_eq!(bomb.kind, WireShot::Bomb { radius: 2.0 });
     assert!((bomb.lift - 3.0).abs() < 1e-3);
     assert_eq!(bomb.size, 2.1, "a heavy shot is drawn larger");
+    assert_eq!(frame.blasts, []);
+
+    // 폭탄은 24번째 Tick에 떨어지고, 그 뒤 8Tick 동안 터진 범위가 겨눈 자리에 보입니다.
+    receive(&mut session, 1.20, room(25));
+    receive(&mut session, 1.25, room(26));
+    let frame = session.frame(1.35).unwrap();
+    assert_eq!(frame.shots, []);
+    assert_eq!(
+        frame.blasts,
+        [BlastView {
+            pos: Vec2::new(14.0, 10.0),
+            team: armed.team,
+            radius: 2.0,
+            age: 0.25,
+        }]
+    );
 }

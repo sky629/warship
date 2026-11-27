@@ -30,6 +30,8 @@ pub(crate) struct Impact {
     pub by: Option<ShipId>,
     /// 둘레의 적을 함께 맞히는 포탄이면 그 범위입니다.
     pub blast: Option<Blast>,
+    /// 맞은 배에 불이 붙어 있는 Tick 수입니다. 불을 붙이지 않는 포탄은 0입니다.
+    pub burn_ticks: u64,
 }
 
 /// 포탄이 닿을 때 피해를 받는 범위입니다.
@@ -176,6 +178,10 @@ pub(crate) fn fire_all(world: &mut World, sight: &Sight, tuning: &Tuning, tick: 
                 damage: spec.damage,
                 by,
                 blast,
+                burn_ticks: match spec.shot {
+                    Shot::Fire { secs, .. } => u64::from(secs) * u64::from(tuning.tick_hz),
+                    _ => 0,
+                },
             });
             // 불은 포탄이 닿은 뒤 1초마다 표적에 피해를 줍니다.
             if let Shot::Fire {
@@ -189,6 +195,7 @@ pub(crate) fn fire_all(world: &mut World, sight: &Sight, tuning: &Tuning, tick: 
                     damage: damage_per_sec,
                     by,
                     blast: None,
+                    burn_ticks: 0,
                 });
                 world.impacts.extend(burns);
             }
@@ -240,6 +247,12 @@ pub(crate) fn land_impacts(world: &mut World, tuning: &Tuning, tick: u64) -> Vec
                 }),
                 _ => impact.damage,
             };
+            if let Target::Ship(id) = victim
+                && impact.burn_ticks > 0
+                && let Some(ship) = world.ships.get_mut(&id)
+            {
+                ship.burning_until = tick + impact.burn_ticks;
+            }
             if world.damage(victim, damage, respawn_at) {
                 kills.push(Kill {
                     target: victim,
