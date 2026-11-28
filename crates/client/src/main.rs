@@ -72,6 +72,9 @@ fn main() {
     });
     let plugins = plugins.set(AssetPlugin {
         file_path: asset_folder(),
+        // 에셋의 옆에 설정 파일(`.meta`)을 두지 않습니다. 찾지 않게 해서, 없는 파일에도 첫 페이지를 돌려주는 웹 서버에서
+        // 그 응답을 설정 파일로 읽다가 에셋을 불러오지 못하는 일을 막습니다.
+        meta_check: bevy::asset::AssetMetaCheck::Never,
         ..default()
     });
     app.add_plugins(plugins);
