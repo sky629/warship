@@ -11,6 +11,6 @@ Every file in this folder is either made by a script in `scripts/assets/` or com
 | `ui/`, `textures/water.png` | drawn by the script, no outside material | `scripts/assets/build_ui.py` |
 | `music/start.ogg` | Pirate Game Tune by Tozan (https://opengameart.org/content/pirate-game-tune), volume changed | `scripts/assets/build_music.py` |
 | `music/battle.ogg` | Boss Battle Music by Juhani Junkala / SubspaceAudio (https://opengameart.org/content/boss-battle-music), the seamless loop, volume changed | `scripts/assets/build_music.py` |
-| `fonts/ui.ttf` | Fira Sans Medium, Copyright (c) 2012-2015 The Mozilla Foundation and Telefonica S.A. (https://github.com/google/fonts/tree/main/ofl/firasans), unchanged. SIL Open Font License 1.1; the license text is `fonts/OFL.txt` and stays next to the font. | copied |
+| `fonts/ui.ttf` | NanumGothic Bold, Copyright (c) 2010 NHN Corporation (https://github.com/google/fonts/tree/main/ofl/nanumgothic), unchanged. It has the Korean letters of the game's text. SIL Open Font License 1.1; the license text is `fonts/OFL.txt` and stays next to the font. | copied |
 
 `scripts/assets/raster.py` holds the drawing code that the icon and UI scripts share.

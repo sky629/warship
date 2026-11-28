@@ -14,7 +14,7 @@ pub struct ScoreTeam {
 /// 점수판에서 배 하나의 줄입니다.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScoreRow {
-    /// 사람이 조종하는 배는 그 사람의 이름이고, 빈자리를 채우는 배는 `Bot`과 배의 번호입니다.
+    /// 사람이 조종하는 배는 그 사람의 이름이고, 빈자리를 채우는 배는 `봇`과 배의 번호입니다.
     pub name: String,
     /// 이 접속이 조종하는 배인지입니다.
     pub mine: bool,
@@ -33,7 +33,7 @@ pub fn score_table(scores: &[WireScore], roster: &[WireMember], me: u32) -> Vec<
         let rows = ships.iter().map(|score| {
             let member = roster.iter().find(|member| member.ship == score.ship);
             ScoreRow {
-                name: member.map_or(format!("Bot {}", score.ship), |member| member.name.clone()),
+                name: member.map_or(format!("봇 {}", score.ship), |member| member.name.clone()),
                 mine: score.ship == me,
                 level: score.level,
                 kills: score.kills,

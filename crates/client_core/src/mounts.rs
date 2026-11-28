@@ -4,6 +4,7 @@ use warship_protocol::{Welcome, WireItem};
 
 use crate::MyShip;
 use crate::assets::{Icon, IconKind};
+use crate::words::ko;
 
 /// 칸 하나에 보여 주는 것입니다.
 #[derive(Clone, Debug, PartialEq)]
@@ -36,9 +37,9 @@ pub fn mount_views(welcome: &Welcome, me: &MyShip) -> Vec<MountView> {
                 let supply = welcome.supplies.get(usize::from(*supply));
                 // 소모품은 하나를 쓴 뒤에 얼마 동안 다시 쓰지 못합니다.
                 let note = if me.supply_secs > 0.0 {
-                    format!("wait {:.0}s", me.supply_secs.ceil())
+                    format!("{:.0}초 뒤", me.supply_secs.ceil())
                 } else {
-                    "click: use".to_string()
+                    "클릭: 사용".to_string()
                 };
                 (named(supply.map(|supply| &supply.name)), note)
             }
@@ -46,14 +47,14 @@ pub fn mount_views(welcome: &Welcome, me: &MyShip) -> Vec<MountView> {
                 let trade = welcome.trades.get(usize::from(*trade));
                 (
                     named(trade.map(|trade| &trade.name)),
-                    "take to port".to_string(),
+                    "항구로 운반".to_string(),
                 )
             }
             Some(WireItem::Cargo(trade)) => {
                 let trade = welcome.trades.get(usize::from(*trade));
                 (
                     named(trade.map(|trade| &trade.name)),
-                    "bring to base".to_string(),
+                    "본진으로 운반".to_string(),
                 )
             }
         };
@@ -64,8 +65,9 @@ pub fn mount_views(welcome: &Welcome, me: &MyShip) -> Vec<MountView> {
             WireItem::Contract(_) | WireItem::Cargo(_) => IconKind::Trade,
         });
         MountView {
+            // 아이콘의 파일은 서버의 이름에서 나오고, 글자는 한국어 이름입니다.
             icon: kind.map(|kind| Icon::new(kind, &name)),
-            name,
+            name: ko(&name).to_string(),
             note,
             usable: matches!(item, Some(WireItem::Supply(_))),
         }

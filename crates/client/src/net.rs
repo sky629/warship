@@ -260,7 +260,7 @@ pub fn leave_room(
     if let (Some(leave), Some(transport)) = (session.leave(), transport) {
         transport.send(&leave);
     }
-    let notice = ended.unwrap_or_else(|| "You left the room".to_string());
+    let notice = ended.unwrap_or_else(|| "방에서 나왔습니다".to_string());
     commands.insert_resource(Closing(notice));
 }
 

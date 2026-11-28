@@ -7,6 +7,7 @@ use warship_protocol::{Welcome, WireCommand, WireShop, WireShot, WireStructureKi
 
 use crate::assets::{Icon, IconKind};
 use crate::interp::Frame;
+use crate::words::ko;
 
 /// 상점 창의 줄 하나입니다.
 #[derive(Clone, Debug, PartialEq)]
@@ -47,17 +48,17 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
         weapon.map_or(String::new(), |weapon| {
             let shot = match weapon.shot {
                 WireShot::Shell => String::new(),
-                WireShot::Scatter { radius } => format!(", scatters {radius} around the target"),
+                WireShot::Scatter { radius } => format!(", 표적의 둘레 {radius} 안에 흩어짐"),
                 WireShot::Bomb { radius } => {
-                    format!(", bomb {radius} wide, lands where the target was")
+                    format!(", 범위 {radius}의 폭탄, 표적이 있던 자리에 떨어짐")
                 }
                 WireShot::Fire {
                     damage_per_sec,
                     secs,
-                } => format!(", burns {damage_per_sec} a second for {secs}s"),
+                } => format!(", {secs}초 동안 1초에 {damage_per_sec}의 화상"),
             };
             format!(
-                "damage {}, range {}, reload {}s{shot}",
+                "피해 {}, 사거리 {}, 재장전 {}초{shot}",
                 weapon.damage,
                 weapon.range,
                 reload(weapon.cooldown_ticks)
@@ -75,9 +76,9 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
             };
             rows.push(ShopRow {
                 icon: Icon::new(IconKind::Weapon, &spec.name),
-                name: spec.name.clone(),
+                name: ko(&spec.name).to_string(),
                 note: format!(
-                    "{} dmg, range {}, {}s",
+                    "피해 {}, 사거리 {}, {}초",
                     spec.damage,
                     spec.range,
                     reload(spec.cooldown_ticks)
@@ -94,7 +95,7 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
             };
             rows.push(ShopRow {
                 icon: Icon::new(IconKind::Gear, &gear.name),
-                name: gear.name.clone(),
+                name: ko(&gear.name).to_string(),
                 note: gear.effect.clone(),
                 detail: String::new(),
                 price: gear.price,
@@ -108,8 +109,8 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
             };
             rows.push(ShopRow {
                 icon: Icon::new(IconKind::Supply, &supply.name),
-                name: supply.name.clone(),
-                note: format!("{}, one use", supply.effect),
+                name: ko(&supply.name).to_string(),
+                note: format!("{}, 1회용", supply.effect),
                 detail: String::new(),
                 price: supply.price,
                 cost: Some(supply.price),
@@ -129,14 +130,14 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
                 }
             }
             let parts = parts.iter().map(|&(count, part)| match count {
-                1 => weapon_name(part).to_string(),
-                count => format!("{count} x {}", weapon_name(part)),
+                1 => ko(weapon_name(part)).to_string(),
+                count => format!("{} {count}개", ko(weapon_name(part))),
             });
             let result = weapon_name(recipe.result);
             rows.push(ShopRow {
                 icon: Icon::new(IconKind::Weapon, result),
-                name: result.to_string(),
-                note: format!("combine: {}", parts.collect::<Vec<_>>().join(" + ")),
+                name: ko(result).to_string(),
+                note: format!("조합: {}", parts.collect::<Vec<_>>().join(" + ")),
                 detail: weapon_detail(recipe.result),
                 price: recipe.price,
                 cost: Some(recipe.price),
@@ -148,15 +149,15 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
             // 라인의 이름은 맵에서 라인이 있는 자리(북쪽, 가운데, 남쪽)입니다.
             let y = lane.iter().map(|point| point.y).sum::<f32>() / lane.len().max(1) as f32;
             let place = match y / welcome.map_height {
-                share if share > 2.0 / 3.0 => "North",
-                share if share < 1.0 / 3.0 => "South",
-                _ => "Middle",
+                share if share > 2.0 / 3.0 => "북쪽",
+                share if share < 1.0 / 3.0 => "남쪽",
+                _ => "가운데",
             };
             rows.push(ShopRow {
                 icon: Icon::new(IconKind::Hire, hired),
-                name: format!("Hire: {place} lane"),
-                note: format!("{} x {hired}", welcome.hire.count),
-                detail: "the creeps come out of your harbor on that lane".to_string(),
+                name: format!("용병 고용: {place} 라인"),
+                note: format!("{} {}척", ko(hired), welcome.hire.count),
+                detail: "용병은 그 라인의 우리 항구에서 나옵니다".to_string(),
                 price: welcome.hire.price,
                 cost: Some(welcome.hire.price),
                 order: WireCommand::Hire { lane: index as u8 },
@@ -173,13 +174,13 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
             };
             let skills = hull.skills.iter().map(|skill| {
                 let skill = welcome.skills.get(usize::from(*skill));
-                skill.map_or("?", |skill| skill.name.as_str())
+                skill.map_or("?", |skill| ko(&skill.name))
             });
             ShopRow {
                 icon: Icon::new(IconKind::Hull, &hull.name),
-                name: hull.name.clone(),
-                note: format!("{} HP, {} mounts{traits}", hull.max_hp, hull.mounts),
-                detail: format!("skills: {}", skills.collect::<Vec<_>>().join(", ")),
+                name: ko(&hull.name).to_string(),
+                note: format!("HP {}, 칸 {}개{traits}", hull.max_hp, hull.mounts),
+                detail: format!("스킬: {}", skills.collect::<Vec<_>>().join(", ")),
                 price: hull.price,
                 cost: None,
                 order: WireCommand::ChangeHull { hull: index as u16 },
@@ -191,13 +192,12 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
         let trades = welcome.trades.iter().enumerate();
         let rows = trades.map(|(index, trade)| {
             let port = welcome.shops.get(usize::from(trade.port) + 1);
-            let port = port.map_or("?", |port| port.name.as_str());
+            let port = port.map_or("?", |port| ko(&port.name));
             ShopRow {
                 icon: Icon::new(IconKind::Trade, &trade.name),
-                name: trade.name.clone(),
-                note: format!("to {port}, pays {}g", trade.reward),
-                detail: "a trader hull buys this at your base and unloads it at the port"
-                    .to_string(),
+                name: ko(&trade.name).to_string(),
+                note: format!("{port}까지, 보상 {}g", trade.reward),
+                detail: "교역선이 본진에서 사서 그 항구에 내립니다".to_string(),
                 price: trade.price,
                 cost: Some(trade.price),
                 order: WireCommand::Contract {
@@ -216,17 +216,17 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
         };
         // 첫 번째 상점은 자기 진영의 본진과 항구입니다. 파는 것이 많아서 탭을 나눕니다.
         if index == 0 {
-            tabs.push(tab("Armory", goods(shop)));
+            tabs.push(tab("무기고", goods(shop)));
             if shop.hulls {
-                tabs.push(tab("Shipyard", hulls()));
+                tabs.push(tab("조선소", hulls()));
             }
-            tabs.push(tab("Trade", trades()));
+            tabs.push(tab("교역", trades()));
         } else {
             let mut rows = goods(shop);
             if shop.hulls {
                 rows.extend(hulls());
             }
-            tabs.push(tab(&shop.name, rows));
+            tabs.push(tab(ko(&shop.name), rows));
         }
     }
     tabs.retain(|tab| !tab.rows.is_empty());

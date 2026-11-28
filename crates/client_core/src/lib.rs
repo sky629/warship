@@ -25,6 +25,7 @@ mod shop;
 mod sound;
 mod start;
 mod view;
+mod words;
 
 pub use assets::{Icon, IconKind, ModelKind, model_path, shot_models};
 pub use hud::{HudView, SkillSlot, TopBar, hud_view, top_bar};
@@ -41,6 +42,7 @@ pub use shop::{ShopRow, ShopTab, first_tab, shop_tabs, shops_near};
 pub use sound::{Sound, SoundEvent, sound_events};
 pub use start::{Field, FormKey, JoinRequest, StartForm};
 pub use view::{CameraRig, Minimap, MountBar, ShopWindow};
+pub use words::ko;
 
 #[cfg(test)]
 mod tests;

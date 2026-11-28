@@ -50,15 +50,15 @@ impl fmt::Display for PlayerName {
     }
 }
 
-/// 시작 화면에 그대로 보이는 문장이므로 영어입니다.
+/// 시작 화면에 그대로 보이는 문장입니다.
 impl fmt::Display for NameError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NameError::Empty => write!(f, "Enter a name"),
-            NameError::TooLong { max } => write!(f, "Name is longer than {max} letters"),
+            NameError::Empty => write!(f, "이름을 입력하십시오"),
+            NameError::TooLong { max } => write!(f, "이름은 {max}자를 넘을 수 없습니다"),
             NameError::BadChar(c) => write!(
                 f,
-                "Name cannot contain '{c}'. Use letters, digits, spaces, - or _"
+                "이름에 '{c}'는 쓸 수 없습니다. 영문자, 숫자, 빈칸, -, _를 쓰십시오"
             ),
         }
     }
@@ -110,10 +110,10 @@ mod tests {
 
     #[test]
     fn every_error_is_a_sentence_for_the_screen() {
-        assert_eq!(NameError::Empty.to_string(), "Enter a name");
+        assert_eq!(NameError::Empty.to_string(), "이름을 입력하십시오");
         assert_eq!(
             NameError::TooLong { max: 12 }.to_string(),
-            "Name is longer than 12 letters"
+            "이름은 12자를 넘을 수 없습니다"
         );
         assert!(NameError::BadChar('!').to_string().contains("'!'"));
     }

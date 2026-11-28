@@ -118,7 +118,7 @@ pub fn show_start(
         } else {
             parent.spawn(words("WARSHIP", 44.0, GOLD));
         }
-        for (label, field) in [("Name", Field::Name), ("Room code", Field::Room)] {
+        for (label, field) in [("이름", Field::Name), ("방 코드", Field::Room)] {
             parent.spawn(words(label, 13.0, DIM));
             let focused = form.focus == field;
             let boxed = Node {
@@ -135,8 +135,8 @@ pub fn show_start(
                     boxed.spawn(words(field_text(form, field), 18.0, TEXT));
                 });
         }
-        parent.spawn(words("Tab: next field   Enter: join", 12.0, DIM));
-        parent.spawn(words("An empty room code opens a new room", 12.0, DIM));
+        parent.spawn(words("Tab: 다음 칸   Enter: 입장", 12.0, DIM));
+        parent.spawn(words("방 코드를 비워 두면 새 방을 엽니다", 12.0, DIM));
         if let Some(notice) = &form.notice {
             parent.spawn(words(notice.clone(), 14.0, BAD));
         }

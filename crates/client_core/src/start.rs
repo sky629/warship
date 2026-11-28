@@ -164,7 +164,7 @@ mod tests {
 
         assert_eq!(form.on_key(FormKey::Enter), None);
 
-        assert_eq!(form.notice.as_deref(), Some("Enter a name"));
+        assert_eq!(form.notice.as_deref(), Some("이름을 입력하십시오"));
         assert_eq!(form.focus, Field::Name);
         type_text(&mut form, "Kang");
         assert!(form.on_key(FormKey::Enter).is_some());

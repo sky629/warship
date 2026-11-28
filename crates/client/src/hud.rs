@@ -6,7 +6,7 @@
 //! 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
-use warship_client_core::{MyShip, SkillSlot, hud_view, top_bar};
+use warship_client_core::{MyShip, SkillSlot, hud_view, ko, top_bar};
 use warship_protocol::{Welcome, WireCommand, WireRefusal, WireTeam};
 
 use crate::net::{CurrentFrame, Net};
@@ -161,26 +161,30 @@ pub fn show_top(
     node.display = Display::Flex;
     let bar = top_bar(frame.secs, &frame.scores);
     let (team, color) = match welcome.team {
-        WireTeam::Red => ("Red team", RED),
-        WireTeam::Blue => ("Blue team", BLUE),
-        WireTeam::Wild => ("Wild", DIM),
+        WireTeam::Red => ("레드 팀", RED),
+        WireTeam::Blue => ("블루 팀", BLUE),
+        WireTeam::Wild => ("중립", DIM),
     };
     let gold = frame.me.as_ref().map_or(0, |me| me.gold);
     let roster = net.as_ref().map_or(&[][..], |net| net.session.roster());
     commands.entity(root).with_children(|parent| {
-        parent.spawn(words(format!("Room {}", welcome.room), 14.0, DIM));
+        parent.spawn(words(format!("방 {}", welcome.room), 14.0, DIM));
         parent.spawn(words(team, 14.0, color));
-        parent.spawn(words(format!("Gold {gold}"), 16.0, GOLD));
+        parent.spawn(words(format!("골드 {gold}"), 16.0, GOLD));
         parent.spawn(words(bar.clock, 16.0, TEXT));
-        parent.spawn(words(format!("Red {}", bar.red_kills), 16.0, RED));
-        parent.spawn(words(format!("Blue {}", bar.blue_kills), 16.0, BLUE));
+        parent.spawn(words(format!("레드 {}", bar.red_kills), 16.0, RED));
+        parent.spawn(words(format!("블루 {}", bar.blue_kills), 16.0, BLUE));
         // 방에 있는 사람의 이름입니다. 접속이 끊긴 사람에는 표시를 붙입니다.
         let names = roster.iter().map(|member| {
-            let away = if member.connected { "" } else { " (away)" };
+            let away = if member.connected {
+                ""
+            } else {
+                " (자리 비움)"
+            };
             format!("{}{away}", member.name)
         });
         let names = names.collect::<Vec<_>>().join(", ");
-        parent.spawn(words(format!("Captains: {names}"), 13.0, DIM));
+        parent.spawn(words(format!("선장: {names}"), 13.0, DIM));
     });
 }
 
@@ -198,7 +202,7 @@ pub fn show_hud(
     let me = frame.0.as_ref().and_then(|frame| frame.me.as_ref());
     let welcome = net.as_ref().and_then(|net| net.session.welcome());
     let refusal = me.and_then(|me| me.refusal).map(refusal_text);
-    let refusal = refusal.map_or(String::new(), |why| format!("Refused: {why}"));
+    let refusal = refusal.map_or(String::new(), |why| format!("할 수 없습니다: {why}"));
     if toast.0 != refusal {
         toast.0 = refusal;
     }
@@ -233,11 +237,11 @@ pub fn show_hud(
         };
         parent.spawn(title).with_children(|title| {
             title.spawn(words(view.hull.clone(), 17.0, TEXT));
-            title.spawn(words(format!("Level {}", view.level), 14.0, GOLD));
+            title.spawn(words(format!("레벨 {}", view.level), 14.0, GOLD));
             let hp = format!("HP {} / {}", view.hp, view.max_hp);
             title.spawn(words(hp, 14.0, TEXT));
             if view.skill_points > 0 {
-                let points = format!("+{} skill (Shift+key)", view.skill_points);
+                let points = format!("스킬 포인트 +{} (Shift+키)", view.skill_points);
                 title.spawn(words(points, 13.0, GOOD));
             }
         });
@@ -346,7 +350,7 @@ pub fn show_labels(
     let (camera, transform) = camera.into_inner();
     let transform = &GlobalTransform::from(*transform);
     // 첫 번째 상점은 자기 진영의 본진과 항구이고, 그 뒤가 항구의 순서입니다.
-    let names = welcome.shops.iter().skip(1).map(|shop| shop.name.as_str());
+    let names = welcome.shops.iter().skip(1).map(|shop| ko(&shop.name));
     commands.entity(*root).with_children(|parent| {
         for (port, name) in welcome.ports.iter().zip(names) {
             let above = Vec3::new(port.x, 1.8, -port.y);
@@ -355,7 +359,7 @@ pub fn show_labels(
             };
             let label = Node {
                 position_type: PositionType::Absolute,
-                left: px(at.x - name.len() as f32 * 3.6),
+                left: px(at.x - half_width(name)),
                 top: px(at.y - 16.0),
                 padding: UiRect::horizontal(px(4)),
                 ..default()
@@ -377,26 +381,32 @@ fn hull_skills<'a>(welcome: &'a Welcome, me: &MyShip) -> &'a [u16] {
 
 fn refusal_text(refusal: WireRefusal) -> &'static str {
     match refusal {
-        WireRefusal::Sunk => "the ship is sunk",
-        WireRefusal::NoShopInRange => "go near your base, a harbor or a port",
-        WireRefusal::UnknownItem => "there is no such item",
-        WireRefusal::NotEnoughGold => "not enough gold",
-        WireRefusal::NoFreeMount => "every mount is in use",
-        WireRefusal::EmptyMount => "that mount is empty",
-        WireRefusal::MountsInUse => "sell the items the new hull has no mount for",
-        WireRefusal::SameHull => "the ship already has that hull",
-        WireRefusal::NoSkillPoint => "no skill point",
-        WireRefusal::MaxRank => "the skill is at its highest rank",
-        WireRefusal::NotLearned => "learn the skill first",
-        WireRefusal::OnCooldown => "not ready yet",
-        WireRefusal::NotOnThisHull => "this hull does not have that skill",
-        WireRefusal::NotForSale => "that weapon is made by combining, not sold",
-        WireRefusal::MissingParts => "mount every part of the recipe first",
-        WireRefusal::NoBaseInRange => "go near your base",
-        WireRefusal::NotUsable => "only a supply is used",
-        WireRefusal::NotATrader => "only a trader hull trades",
-        WireRefusal::NotSoldHere => "this shop does not sell that; see the shop window for where",
-        WireRefusal::NoHarbor => "your harbor on that lane is gone",
-        WireRefusal::CarryingFreight => "sell the contract or cargo before leaving the trader hull",
+        WireRefusal::Sunk => "배가 가라앉아 있습니다",
+        WireRefusal::NoShopInRange => "본진이나 항구의 가까이로 가십시오",
+        WireRefusal::UnknownItem => "그런 물건이 없습니다",
+        WireRefusal::NotEnoughGold => "골드가 부족합니다",
+        WireRefusal::NoFreeMount => "빈 칸이 없습니다",
+        WireRefusal::EmptyMount => "그 칸은 비어 있습니다",
+        WireRefusal::MountsInUse => "새 선체에 놓을 칸이 없는 물건을 먼저 파십시오",
+        WireRefusal::SameHull => "이미 그 선체입니다",
+        WireRefusal::NoSkillPoint => "스킬 포인트가 없습니다",
+        WireRefusal::MaxRank => "스킬이 가장 높은 단계입니다",
+        WireRefusal::NotLearned => "스킬을 먼저 배우십시오",
+        WireRefusal::OnCooldown => "아직 다시 쓸 수 없습니다",
+        WireRefusal::NotOnThisHull => "이 선체에는 그 스킬이 없습니다",
+        WireRefusal::NotForSale => "그 무기는 팔지 않고 조합으로 만듭니다",
+        WireRefusal::MissingParts => "조합의 재료를 먼저 모두 장착하십시오",
+        WireRefusal::NoBaseInRange => "본진의 가까이로 가십시오",
+        WireRefusal::NotUsable => "소모품만 사용할 수 있습니다",
+        WireRefusal::NotATrader => "교역선만 교역할 수 있습니다",
+        WireRefusal::NotSoldHere => "이 상점은 그것을 팔지 않습니다. 파는 곳은 상점 창에 있습니다",
+        WireRefusal::NoHarbor => "그 라인의 우리 항구가 무너졌습니다",
+        WireRefusal::CarryingFreight => "교역선에서 내리기 전에 계약이나 화물을 파십시오",
     }
+}
+
+/// 12픽셀 글자로 적은 글의 너비의 절반입니다. 한글은 영문자보다 넓습니다.
+fn half_width(text: &str) -> f32 {
+    let widths = text.chars().map(|c| if c.is_ascii() { 3.6 } else { 6.0 });
+    widths.sum()
 }

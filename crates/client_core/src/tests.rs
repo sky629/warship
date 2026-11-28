@@ -69,7 +69,7 @@ fn welcome() -> Welcome {
                 length: 2.6,
                 mounts: 4,
                 skills: vec![0],
-                traits: "trader, -15% damage".to_string(),
+                traits: "교역선, 받는 피해 -15%".to_string(),
             },
         ],
         weapons: vec![gun.clone()],
@@ -190,12 +190,12 @@ fn the_scoreboard_lists_each_team_with_the_best_ship_first() {
         ScoreTeam {
             team: WireTeam::Red,
             kills: 4,
-            rows: vec![row("KANG", true, 4, 1), row("Bot 1", false, 0, 2)],
+            rows: vec![row("KANG", true, 4, 1), row("봇 1", false, 0, 2)],
         },
         ScoreTeam {
             team: WireTeam::Blue,
             kills: 1,
-            rows: vec![row("Bot 2", false, 1, 0)],
+            rows: vec![row("봇 2", false, 1, 0)],
         },
     ];
     assert_eq!(table, expected);
@@ -247,7 +247,7 @@ fn a_rejection_and_a_link_lost_before_the_welcome_end_the_session_with_the_reaso
     receive(&mut session, 0.0, ServerMsg::JoinRejected { reason });
     assert_eq!(
         session.phase(),
-        &Phase::Ended("The room is full (10 ships)".to_string())
+        &Phase::Ended("방이 가득 찼습니다 (배 10척)".to_string())
     );
 
     let mut session = Session::new(Some("test"), "KANG", None);
@@ -597,7 +597,7 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
     welcome.gear.push(WireGear {
         name: "planks".to_string(),
         price: 200,
-        effect: "+250 HP".to_string(),
+        effect: "HP +250".to_string(),
     });
     welcome.recipes.push(WireRecipe {
         parts: vec![0, 0],
@@ -614,7 +614,7 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
     welcome.supplies.push(WireSupply {
         name: "kit".to_string(),
         price: 80,
-        effect: "+200 HP".to_string(),
+        effect: "HP +200".to_string(),
     });
 
     // 맵의 높이가 40이므로, y가 30인 라인은 북쪽 라인입니다.
@@ -659,12 +659,7 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
         .collect();
     assert_eq!(
         titles,
-        [
-            ("Armory", 0),
-            ("Shipyard", 0),
-            ("Trade", 0),
-            ("north port", 1)
-        ]
+        [("무기고", 0), ("조선소", 0), ("교역", 0), ("north port", 1)]
     );
     let seen = |tab: usize| -> Vec<(String, String, u32)> {
         let rows = tabs[tab].rows.iter();
@@ -675,22 +670,22 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
     assert_eq!(
         seen(0),
         [
-            row("gun", "10 dmg, range 5, 0.5s", 100),
-            row("mortar", "10 dmg, range 5, 0.5s", 400),
-            row("planks", "+250 HP", 200),
-            row("kit", "+200 HP, one use", 80),
-            row("twin", "combine: 2 x gun", 150),
+            row("gun", "피해 10, 사거리 5, 0.5초", 100),
+            row("mortar", "피해 10, 사거리 5, 0.5초", 400),
+            row("planks", "HP +250", 200),
+            row("kit", "HP +200, 1회용", 80),
+            row("twin", "조합: gun 2개", 150),
         ]
     );
     assert_eq!(
         seen(1),
         [
-            row("small", "1000 HP, 2 mounts", 0),
-            row("big", "2000 HP, 4 mounts, trader, -15% damage", 400),
+            row("small", "HP 1000, 칸 2개", 0),
+            row("big", "HP 2000, 칸 4개, 교역선, 받는 피해 -15%", 400),
         ]
     );
-    assert_eq!(seen(2), [row("salt", "to south port, pays 90g", 60)]);
-    assert_eq!(seen(3), [row("Hire: North lane", "2 x creep", 220)]);
+    assert_eq!(seen(2), [row("salt", "south port까지, 보상 90g", 60)]);
+    assert_eq!(seen(3), [row("용병 고용: 북쪽 라인", "creep 2척", 220)]);
 
     // 줄마다 명령과 드는 골드가 있습니다. 선체는 돌려받는 값이 있어서 드는 골드를 적지 않습니다.
     let orders: Vec<WireCommand> = tabs
@@ -732,8 +727,8 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
         ]
     );
     // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
-    assert_eq!(tabs[0].rows[4].detail, "damage 10, range 5, reload 0.5s");
-    assert_eq!(tabs[1].rows[0].detail, "skills: skill");
+    assert_eq!(tabs[0].rows[4].detail, "피해 10, 사거리 5, 재장전 0.5초");
+    assert_eq!(tabs[1].rows[0].detail, "스킬: skill");
     // 아이콘은 종류와 이름으로 정해집니다. 조합의 아이콘은 결과 무기의 아이콘입니다.
     let icons: Vec<String> = tabs
         .iter()
@@ -835,7 +830,7 @@ fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
     welcome.supplies.push(WireSupply {
         name: "kit".to_string(),
         price: 80,
-        effect: "+200 HP".to_string(),
+        effect: "HP +200".to_string(),
     });
     welcome.trades.push(WireTrade {
         name: "salt".to_string(),
@@ -880,9 +875,9 @@ fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
         seen(&me),
         [
             text("gun", "", false),
-            text("kit", "click: use", true),
-            text("salt", "take to port", false),
-            text("salt", "bring to base", false),
+            text("kit", "클릭: 사용", true),
+            text("salt", "항구로 운반", false),
+            text("salt", "본진으로 운반", false),
         ]
     );
 
@@ -902,7 +897,7 @@ fn the_mount_row_names_each_item_and_says_what_to_do_with_it() {
     me.supply_secs = 11.2;
     me.mounts[2] = None;
     assert_eq!(mount_views(&welcome, &me)[2].icon, None);
-    assert_eq!(seen(&me)[1], text("kit", "wait 12s", true));
+    assert_eq!(seen(&me)[1], text("kit", "12초 뒤", true));
     assert_eq!(seen(&me)[2], text("-", "", false));
 }
 

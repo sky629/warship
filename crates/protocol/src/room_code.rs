@@ -50,12 +50,15 @@ impl fmt::Display for RoomCode {
 impl fmt::Display for RoomCodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RoomCodeError::Empty => write!(f, "room code is empty"),
+            RoomCodeError::Empty => write!(f, "방 코드가 비어 있습니다"),
             RoomCodeError::TooLong { max } => {
-                write!(f, "room code is longer than {max} characters")
+                write!(f, "방 코드는 {max}자를 넘을 수 없습니다")
             }
             RoomCodeError::BadChar(c) => {
-                write!(f, "room code contains '{c}'; use a-z, 0-9, - or _")
+                write!(
+                    f,
+                    "방 코드에 '{c}'는 쓸 수 없습니다. a-z, 0-9, -, _를 쓰십시오"
+                )
             }
         }
     }

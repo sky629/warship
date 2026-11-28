@@ -89,7 +89,7 @@ impl Session {
     /// 스스로 방을 나가는 메시지입니다. 방 안에 있을 때만 만들어지고, 접속 상태는 끝납니다.
     pub fn leave(&mut self) -> Option<ClientMsg> {
         let playing = self.phase == Phase::Playing;
-        self.phase = Phase::Ended("You left the room".to_string());
+        self.phase = Phase::Ended("방에서 나왔습니다".to_string());
         playing.then_some(ClientMsg::Leave)
     }
 
@@ -138,7 +138,7 @@ impl Session {
             }
             ClientEvent::Message(ServerMsg::SeatTakenOver) => {
                 self.joined = false;
-                self.phase = Phase::Ended("Another window took over this ship".to_string());
+                self.phase = Phase::Ended("다른 창이 이 배를 이어받았습니다".to_string());
                 None
             }
             ClientEvent::Message(ServerMsg::Snapshot(snapshot)) => {
@@ -168,7 +168,7 @@ impl Session {
             return false;
         }
         if now - self.lost_at > RETURN_SECS {
-            self.phase = Phase::Ended("Lost the connection to the server".to_string());
+            self.phase = Phase::Ended("서버와의 연결이 끊어졌습니다".to_string());
             return false;
         }
         let due = now >= self.retry_at;
@@ -219,14 +219,14 @@ impl Session {
 
 fn reject_text(reason: RejectReason) -> String {
     match reason {
-        RejectReason::RoomFull { capacity } => format!("The room is full ({capacity} ships)"),
-        RejectReason::BadRoomCode => "The room code may use a-z, 0-9, - and _ only".to_string(),
+        RejectReason::RoomFull { capacity } => format!("방이 가득 찼습니다 (배 {capacity}척)"),
+        RejectReason::BadRoomCode => "방 코드에는 a-z, 0-9, -, _만 쓸 수 있습니다".to_string(),
         RejectReason::BadName => {
-            "The name may use up to 12 letters, digits, spaces, - and _".to_string()
+            "이름에는 영문자, 숫자, 빈칸, -, _를 12자까지 쓸 수 있습니다".to_string()
         }
-        RejectReason::ServerFull => "The server cannot open another room".to_string(),
+        RejectReason::ServerFull => "서버가 방을 더 열 수 없습니다".to_string(),
         RejectReason::VersionMismatch { server } => {
-            format!("The server speaks protocol {server}, this client {PROTOCOL_VERSION}")
+            format!("서버의 프로토콜은 {server}이고, 이 클라이언트는 {PROTOCOL_VERSION}입니다")
         }
     }
 }

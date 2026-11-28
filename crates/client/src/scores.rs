@@ -84,9 +84,9 @@ pub fn show_scores(
     };
     node.display = Display::Flex;
     let result = frame.outcome.map(|outcome| match outcome {
-        WireOutcome::Victory(winner) if winner == welcome.team => ("VICTORY", GOOD),
-        WireOutcome::Victory(_) => ("DEFEAT", BAD),
-        WireOutcome::Draw => ("DRAW", GOLD),
+        WireOutcome::Victory(winner) if winner == welcome.team => ("승리", GOOD),
+        WireOutcome::Victory(_) => ("패배", BAD),
+        WireOutcome::Draw => ("무승부", GOLD),
     });
     let table = score_table(&frame.scores, net.session.roster(), welcome.ship);
     commands.entity(root).with_children(|parent| {
@@ -95,11 +95,11 @@ pub fn show_scores(
         }
         for team in table {
             let (title, color) = match team.team {
-                WireTeam::Red => ("Red", RED),
-                WireTeam::Blue => ("Blue", BLUE),
-                WireTeam::Wild => ("Wild", DIM),
+                WireTeam::Red => ("레드", RED),
+                WireTeam::Blue => ("블루", BLUE),
+                WireTeam::Wild => ("중립", DIM),
             };
-            let heading = [title, "Lv", "K", "D", "A", "Creeps"].map(str::to_string);
+            let heading = [title, "레벨", "격침", "침몰", "도움", "NPC"].map(str::to_string);
             line(parent, heading, color, Color::NONE);
             for row in team.rows {
                 let back = if row.mine { LIT } else { Color::NONE };

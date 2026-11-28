@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use warship_client_core::{ShopTab, ShopWindow, first_tab, shop_tabs, shops_near};
+use warship_client_core::{ShopTab, ShopWindow, first_tab, ko, shop_tabs, shops_near};
 use warship_protocol::Welcome;
 
 use crate::net::{CurrentFrame, Net};
@@ -132,8 +132,11 @@ pub fn show_shop(
     let detail = lit.and_then(|row| tab?.rows.get(row));
     let footer = match (here, tab, detail) {
         (false, Some(tab), _) => {
-            let name = welcome.shops.get(tab.shop).map_or("?", |shop| &shop.name);
-            format!("Sail to {name} to buy from this tab")
+            let name = welcome
+                .shops
+                .get(tab.shop)
+                .map_or("?", |shop| ko(&shop.name));
+            format!("{name}에 가면 이 탭의 것을 살 수 있습니다")
         }
         (_, _, Some(row)) => row.detail.clone(),
         _ => String::new(),

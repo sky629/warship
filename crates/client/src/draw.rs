@@ -691,7 +691,10 @@ pub fn show_prompt(
 ) {
     let (mut node, mut text) = window.into_inner();
     let (display, lines) = if prompt.0 {
-        (Display::Flex, "Leave the room?\n\nEnter: leave   Esc: stay")
+        (
+            Display::Flex,
+            "방에서 나가시겠습니까?\n\nEnter: 나가기   Esc: 계속하기",
+        )
     } else {
         (Display::None, "")
     };
@@ -715,20 +718,20 @@ pub fn show_status(
 
 fn status_line(net: &Net, frame: Option<&Frame>) -> String {
     match (net.session.phase(), net.session.welcome()) {
-        (Phase::Connecting, _) => "Connecting...".to_string(),
-        (Phase::Joining, _) => "Joining...".to_string(),
+        (Phase::Connecting, _) => "서버에 연결하는 중입니다...".to_string(),
+        (Phase::Joining, _) => "방에 들어가는 중입니다...".to_string(),
         (Phase::Playing, Some(_)) => {
             // 첫째 줄은 조작의 안내입니다. 대전이 끝났으면 나가는 방법이고, 배가 가라앉아 있는 동안에는 다시 나타날 때까지 남은 시간입니다.
             let over = frame.is_some_and(|frame| frame.outcome.is_some());
             let respawn = frame.and_then(|frame| frame.me.as_ref()?.respawn_secs);
             match respawn {
-                _ if over => "The match is over.   Esc: leave".to_string(),
-                Some(secs) => format!("Sunk: back in {secs:.0}s"),
-                None => "Right-click: sail   Arrows: view   Space: my ship   B: shop   1-6: use a supply   Tab: scores   Esc: leave".to_string(),
+                _ if over => "경기가 끝났습니다.   Esc: 나가기".to_string(),
+                Some(secs) => format!("격침되었습니다. {secs:.0}초 뒤에 돌아옵니다   B: 상점"),
+                None => "우클릭: 이동   방향키: 화면 이동   Space: 내 배   B: 상점   1-6: 소모품 사용   Tab: 점수판   Esc: 나가기".to_string(),
             }
         }
-        (Phase::Reconnecting, _) => "Connection lost. Reconnecting...".to_string(),
+        (Phase::Reconnecting, _) => "연결이 끊어졌습니다. 다시 연결하는 중입니다...".to_string(),
         (Phase::Playing, None) => String::new(),
-        (Phase::Ended(reason), _) => format!("Disconnected: {reason}\nEsc: back to the start"),
+        (Phase::Ended(reason), _) => format!("연결이 끝났습니다: {reason}\nEsc: 시작 화면으로"),
     }
 }

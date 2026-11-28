@@ -225,42 +225,42 @@ pub struct WireCreepSpec {
     pub weapon: WireWeapon,
 }
 
-/// 화면에 그대로 보이는 문장이므로 영어입니다.
+/// 화면에 그대로 보이는 문장입니다.
 fn supply_text(effect: SupplyEffect, tick_hz: u32) -> String {
     let secs = |ticks: u32| ticks / tick_hz.max(1);
     match effect {
-        SupplyEffect::Repair { hp } => format!("+{hp} HP"),
+        SupplyEffect::Repair { hp } => format!("HP +{hp}"),
         SupplyEffect::Sprint { percent, ticks } => {
-            format!("+{percent}% speed for {}s", secs(ticks))
+            format!("{}초 동안 속도 +{percent}%", secs(ticks))
         }
         SupplyEffect::Brace { percent, ticks } => {
-            format!("-{percent}% damage for {}s", secs(ticks))
+            format!("{}초 동안 받는 피해 -{percent}%", secs(ticks))
         }
     }
 }
 
-/// 화면에 그대로 보이는 문장이므로 영어입니다.
+/// 화면에 그대로 보이는 문장입니다.
 fn traits_text(hull: &HullSpec) -> String {
     let mut traits = Vec::new();
     if hull.trader {
-        traits.push("trader".to_string());
+        traits.push("교역선".to_string());
     }
     if hull.armor_percent > 0 {
-        traits.push(format!("-{}% damage", hull.armor_percent));
+        traits.push(format!("받는 피해 -{}%", hull.armor_percent));
     }
     if hull.repair_per_sec > 0 {
-        traits.push(format!("+{} HP/s", hull.repair_per_sec));
+        traits.push(format!("1초에 HP +{}", hull.repair_per_sec));
     }
     traits.join(", ")
 }
 
-/// 화면에 그대로 보이는 문장이므로 영어입니다.
+/// 화면에 그대로 보이는 문장입니다.
 fn effect_text(effect: GearEffect) -> String {
     match effect {
-        GearEffect::Planking { max_hp } => format!("+{max_hp} HP"),
-        GearEffect::Sails { speed_percent } => format!("+{speed_percent}% speed"),
-        GearEffect::Crew { repair_per_sec } => format!("+{repair_per_sec} HP/s"),
-        GearEffect::Plating { armor_percent } => format!("-{armor_percent}% damage"),
+        GearEffect::Planking { max_hp } => format!("HP +{max_hp}"),
+        GearEffect::Sails { speed_percent } => format!("속도 +{speed_percent}%"),
+        GearEffect::Crew { repair_per_sec } => format!("1초에 HP +{repair_per_sec}"),
+        GearEffect::Plating { armor_percent } => format!("받는 피해 -{armor_percent}%"),
     }
 }
 

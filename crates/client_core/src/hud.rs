@@ -4,6 +4,7 @@ use warship_protocol::{Welcome, WireScore, WireTeam};
 
 use crate::assets::{Icon, IconKind};
 use crate::interp::MyShip;
+use crate::words::ko;
 
 /// 스킬 칸의 단축키입니다. 선체의 스킬의 순서입니다.
 pub const SKILL_KEYS: [char; 4] = ['Q', 'W', 'E', 'R'];
@@ -70,7 +71,7 @@ pub fn hud_view(welcome: &Welcome, me: &MyShip) -> HudView {
         Some(SkillSlot {
             icon: Icon::new(IconKind::Skill, &spec.name),
             key,
-            name: spec.name.clone(),
+            name: ko(&spec.name).to_string(),
             rank: state.rank,
             max_rank: spec.max_rank,
             ready_secs: state.ready_secs,
@@ -79,7 +80,7 @@ pub fn hud_view(welcome: &Welcome, me: &MyShip) -> HudView {
         })
     });
     HudView {
-        hull: hull.map_or("?".to_string(), |hull| hull.name.clone()),
+        hull: hull.map_or("?".to_string(), |hull| ko(&hull.name).to_string()),
         level: me.level,
         skill_points: me.skill_points,
         hp: me.hp,
