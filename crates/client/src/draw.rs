@@ -24,7 +24,7 @@ pub const SEA: Color = Color::srgb(0.03, 0.07, 0.1);
 const WATER: Color = Color::srgb(0.07, 0.22, 0.32);
 const ISLAND: Color = Color::srgb(0.42, 0.5, 0.28);
 const PORT: Color = Color::srgb(0.95, 0.8, 0.3);
-const FIRE: Color = Color::srgb(1.0, 0.45, 0.05);
+const FIRE: Color = Color::srgb(1.0, 0.65, 0.05);
 /// 산탄의 알이 포탄의 자리에서 떨어져 있는 거리입니다.
 const SCATTER: [Vec3; 3] = [
     Vec3::new(0.18, 0.0, 0.0),
@@ -373,13 +373,10 @@ pub fn sync_pieces(
     let mut wanted: Vec<Wanted> = Vec::new();
     let mut want = |piece, models: &[String], mesh: &Handle<Mesh>, material, at, turns| {
         let shape = Shape::of(models, mesh);
-        // 배는 선체의 최대 HP가 클수록 크게 그립니다. 시작 선체의 크기가 1입니다.
         let scale = match piece {
             Piece::Ship(id) => {
                 let ship = frame.ships.iter().find(|ship| ship.id == id);
-                let hp = |hull: u16| hulls.get(usize::from(hull)).map(|hull| hull.max_hp as f32);
-                let ratio = ship.and_then(|ship| Some(hp(ship.hull)? / hp(0)?));
-                ratio.map_or(1.0, f32::sqrt)
+                ship.map_or(1.0, |ship| ship.size)
             }
             // 포탄은 피해가 큰 무기일수록 크고, 산탄의 알은 작습니다.
             Piece::Shot(id) => frame.shots.get(id / SCATTER.len()).map_or(1.0, |shot| {
@@ -653,23 +650,25 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
     }
     for ship in frame.ships.iter().filter(|ship| !ship.sunk) {
         let center = on_water(ship.pos);
+        // 배의 둘레의 원은 배의 크기에 맞춥니다. 큰 선체의 아래에 가려지지 않게 배보다 조금 크게 그립니다.
+        let around = |share: f32| share * ship.size;
         // 내 배는 흰 원으로 표시하고, 무기마다 사거리를 그립니다.
         if ship.mine {
-            flat_circle(gizmos, center, 0.8, MINE);
+            flat_circle(gizmos, center, around(0.8), MINE);
             for range in &ship.ranges {
                 flat_circle(gizmos, center, *range, MINE.with_alpha(0.25));
             }
         }
         if ship.slowed {
-            flat_circle(gizmos, center, 0.5, SLOWED);
+            flat_circle(gizmos, center, around(0.9), SLOWED);
         }
         if ship.cloaked {
-            flat_circle(gizmos, center, 1.0, CLOAKED);
+            flat_circle(gizmos, center, around(1.1), CLOAKED);
         }
         if ship.burning {
-            flat_circle(gizmos, center, 0.65, FIRE);
+            flat_circle(gizmos, center, around(1.0), FIRE);
         }
-        draw_hp(gizmos, center + Vec3::Y * 1.3, ship.hp);
+        draw_hp(gizmos, center + Vec3::Y * 1.3 * ship.size, ship.hp);
     }
 }
 

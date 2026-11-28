@@ -1113,3 +1113,19 @@ fn the_sounds_between_two_frames_are_the_things_that_happened() {
         ["models/shots/siege_mortar.glb", "models/shots/bomb.glb"]
     );
 }
+
+#[test]
+fn a_ship_of_a_hull_with_more_hp_is_drawn_larger() {
+    // 큰 선체(1번)의 최대 HP는 작은 선체(0번)의 두 배입니다.
+    let big = WireShip {
+        hull: 1,
+        ..ship(ENEMY, 14.0)
+    };
+    let mut session = playing();
+    receive(&mut session, 1.0, snapshot(20, vec![ship(ME, 10.0), big]));
+
+    let frame = session.frame(1.15).unwrap();
+
+    let sizes: Vec<f32> = frame.ships.iter().map(|ship| ship.size).collect();
+    assert_eq!(sizes, [1.0, 2.0_f32.sqrt()]);
+}

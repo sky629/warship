@@ -74,6 +74,8 @@ pub struct ShipView {
     pub id: u32,
     pub team: WireTeam,
     pub pos: Vec2,
+    /// 모양의 크기의 배율입니다. 최대 HP가 큰 선체가 큽니다.
+    pub size: f32,
     /// `Welcome::hulls`의 자리입니다.
     pub hull: u16,
     /// 최대 HP에 대한 비율입니다(0 이상 1 이하).
@@ -321,10 +323,15 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
                 mount.ready_at,
             ));
         }
+        // 배는 선체의 최대 HP가 클수록 크게 그립니다. 첫 번째 선체의 크기가 1입니다.
+        let hull_hp = |hull: u16| welcome.hulls.get(usize::from(hull)).map(|hull| hull.max_hp);
+        let ratio = hull_hp(ship.hull).zip(hull_hp(0));
+        let size = ratio.map_or(1.0, |(hp, first)| (hp as f32 / first.max(1) as f32).sqrt());
         ships.push(ShipView {
             id: ship.id,
             team: ship.team,
             pos,
+            size,
             hull: ship.hull,
             hp: ship.hp as f32 / ship.max_hp.max(1) as f32,
             sunk: ship.respawn_at.is_some(),
