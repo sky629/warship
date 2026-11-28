@@ -72,21 +72,32 @@ fn a_kill_by_a_tower_pays_nobody() {
 }
 
 #[test]
-fn sinking_a_ship_of_a_higher_level_pays_more_gold_but_the_same_experience() {
-    let mut s = Scenario::with_tuning(|tuning| tuning.ship.level_bounty = 100);
+fn ships_that_hurt_a_sunk_enemy_share_the_assist_gold_by_the_damage_they_dealt() {
+    let mut s = Scenario::open_sea();
     let killer = s.ship_at(Team::RED, 10.0, 10.0);
+    let helper = s.ship_at(Team::RED, 30.0, 10.0);
+    let late = s.ship_at(Team::RED, 30.0, 12.0);
     let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
     s.arm(killer, GUN);
-    let third = s.sim.tuning().growth.level_xp[1];
-    s.set_xp(victim, third);
-    assert_eq!(s.ship(victim).level(s.sim.tuning()), 3);
-    s.set_ship_hp(victim, 10);
+    s.run_ticks(100);
+    // 도운 배는 30을 주었고, 다른 배는 30을 주었지만 100Tick보다 오래 전입니다. 가라앉히는 포탄은 10을 줍니다.
+    let (tuning, tick) = (s.sim.tuning().clone(), s.sim.tick());
+    let hurt = s.sim.world_mut().ships.get_mut(&victim).unwrap();
+    hurt.wounds.clear();
+    hurt.wound(late, 30, &tuning, tick - 100);
+    hurt.wound(helper, 30, &tuning, tick);
+    hurt.hp = 10;
+    let before = [killer, helper, late].map(|id| s.ship(id).gold);
 
-    s.run_ticks(2);
+    s.run_ticks(40);
 
     assert!(!s.ship(victim).is_afloat());
-    assert_eq!(s.ship(killer).gold, 200 + 3 * 100);
-    assert_eq!(s.ship(killer).xp, 200);
+    let paid = [killer, helper, late].map(|id| s.ship(id).gold);
+    let income = 2 * 2;
+    assert_eq!(paid[0] - before[0], 200 + income, "the bounty is fixed");
+    assert_eq!(paid[1] - before[1], 200 * 30 / 40 + income);
+    assert_eq!(paid[2] - before[2], income, "an old hit is no help");
+    assert!(s.ship(victim).wounds.is_empty());
 }
 
 #[test]

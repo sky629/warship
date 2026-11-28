@@ -261,6 +261,11 @@ pub(crate) fn land_impacts(
             }
             // 이미 사라졌거나 가라앉은 표적은 피해를 받지 않으므로 적지 않습니다.
             let hit = world.targets().find(|(target, ..)| *target == victim);
+            if let (Target::Ship(id), Some(by), Some(_)) = (victim, impact.by, hit)
+                && let Some(ship) = world.ships.get_mut(&id)
+            {
+                ship.wound(by, damage.min(ship.hp), tuning, tick);
+            }
             if let Some((_, _, pos)) = hit {
                 let kind = NoteKind::Hit {
                     by: impact.by,

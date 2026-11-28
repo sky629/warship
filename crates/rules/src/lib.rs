@@ -41,7 +41,7 @@ pub use ids::{
 pub use input::{PlayerInput, PlayerInputs, Waypoint};
 pub use math::Vec2;
 pub use note::{NOTE_TICKS, Note, NoteKind};
-pub use ship::{Boost, Item, Life, MOUNTS, Mount, Ship, SkillState};
+pub use ship::{Boost, Item, Life, MOUNTS, Mount, Ship, SkillState, Wound};
 pub use sim::{Outcome, RoomFull, Sim};
 pub use structures::{Structure, StructureKind};
 pub use tuning::{

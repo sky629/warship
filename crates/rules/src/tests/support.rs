@@ -288,7 +288,8 @@ fn open_sea_tuning() -> Tuning {
             start_weapons: Vec::new(),
             respawn_ticks: 100,
             bounty: 200,
-            level_bounty: 0,
+            assist_bounty: 200,
+            assist_ticks: 100,
         },
         hulls: vec![
             HullSpec {

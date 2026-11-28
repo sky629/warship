@@ -15,6 +15,15 @@ use crate::world::World;
 /// 가장 큰 선체의 아이템 칸의 수입니다. 선체마다 쓰는 칸의 수는 `HullSpec::mounts`입니다.
 pub const MOUNTS: usize = 6;
 
+/// 플레이어의 배 하나가 다른 배에 준 피해입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Wound {
+    pub by: ShipId,
+    pub damage: u32,
+    /// 마지막으로 맞힌 Tick입니다.
+    pub last: u64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ship {
     pub id: ShipId,
@@ -38,6 +47,8 @@ pub struct Ship {
     pub cloaked_until: u64,
     /// 이 Tick까지 불이 붙어 있습니다. 불이 붙은 적이 없는 배는 0입니다.
     pub burning_until: u64,
+    /// 최근에 이 배를 맞힌 플레이어의 배마다 준 피해입니다. 이 배가 가라앉으면 도움의 보상을 나누는 데 쓰고 비웁니다.
+    pub wounds: Vec<Wound>,
     /// 이 Tick부터 소모품을 다시 쓸 수 있습니다.
     pub supply_ready_at: u64,
     /// 배가 차례로 지나갈 지점입니다. 마지막 지점이 목적지이고, 비어 있으면 멈춰 있습니다.
@@ -170,6 +181,7 @@ impl Ship {
             snare: None,
             cloaked_until: 0,
             burning_until: 0,
+            wounds: Vec::new(),
             supply_ready_at: 0,
             route: Vec::new(),
             mounts,
@@ -183,6 +195,23 @@ impl Ship {
     }
 
     /// 배의 레벨입니다. 1부터 시작합니다.
+    /// `by`가 이 배에 준 피해를 적습니다. `assist_ticks`보다 오래 맞히지 않은 배의 피해는 잊습니다.
+    pub(crate) fn wound(&mut self, by: ShipId, damage: u32, tuning: &Tuning, tick: u64) {
+        let fresh = |wound: &Wound| wound.last + u64::from(tuning.ship.assist_ticks) > tick;
+        self.wounds.retain(fresh);
+        match self.wounds.iter_mut().find(|wound| wound.by == by) {
+            Some(wound) => {
+                wound.damage += damage;
+                wound.last = tick;
+            }
+            None => self.wounds.push(Wound {
+                by,
+                damage,
+                last: tick,
+            }),
+        }
+    }
+
     pub fn level(&self, tuning: &Tuning) -> u32 {
         let reached = |needed: &&u32| **needed <= self.xp;
         1 + tuning.growth.level_xp.iter().take_while(reached).count() as u32
