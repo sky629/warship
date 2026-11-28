@@ -2,6 +2,8 @@
 
 use super::support::{GUN, Scenario};
 use crate::ids::Team;
+use crate::note::{NOTE_TICKS, NoteKind};
+use crate::weapon::Target;
 
 #[test]
 fn every_ship_earns_the_income_once_a_second() {
@@ -67,4 +69,59 @@ fn a_kill_by_a_tower_pays_nobody() {
 
     assert!(!s.ship(victim).is_afloat());
     assert_eq!(s.ship(bystander).gold, 0);
+}
+
+#[test]
+fn sinking_a_ship_of_a_higher_level_pays_more_gold_but_the_same_experience() {
+    let mut s = Scenario::with_tuning(|tuning| tuning.ship.level_bounty = 100);
+    let killer = s.ship_at(Team::RED, 10.0, 10.0);
+    let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
+    s.arm(killer, GUN);
+    let third = s.sim.tuning().growth.level_xp[1];
+    s.set_xp(victim, third);
+    assert_eq!(s.ship(victim).level(s.sim.tuning()), 3);
+    s.set_ship_hp(victim, 10);
+
+    s.run_ticks(2);
+
+    assert!(!s.ship(victim).is_afloat());
+    assert_eq!(s.ship(killer).gold, 200 + 3 * 100);
+    assert_eq!(s.ship(killer).xp, 200);
+}
+
+#[test]
+fn a_hit_and_a_bounty_are_noted_for_a_second() {
+    let mut s = Scenario::open_sea();
+    let killer = s.ship_at(Team::RED, 10.0, 10.0);
+    let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
+    s.arm(killer, GUN);
+    s.set_ship_hp(victim, 10);
+    s.run_ticks(2);
+    assert!(!s.ship(victim).is_afloat());
+
+    let notes = s.sim.notes().to_vec();
+    let hit = NoteKind::Hit {
+        by: Some(killer),
+        target: Target::Ship(victim),
+        seen: [true, false],
+    };
+    let kinds: Vec<NoteKind> = notes.iter().map(|note| note.kind).collect();
+    assert_eq!(kinds, [hit, NoteKind::Gold { ship: killer }]);
+    assert_eq!((notes[0].amount, notes[1].amount), (10, 200));
+    assert_eq!(notes[0].pos, s.ship(victim).pos);
+    assert_eq!((notes[0].id, notes[1].id), (0, 1));
+
+    let noted = notes[0].tick;
+    s.run_ticks((noted + NOTE_TICKS - 1 - s.sim.tick()) as u32);
+    assert_eq!(s.sim.notes().len(), 2, "the notes stay until the last tick");
+    s.run_ticks(1);
+    assert!(s.sim.notes().is_empty());
+}
+
+#[test]
+fn the_income_is_not_noted() {
+    let mut s = Scenario::open_sea();
+    s.ship_at(Team::RED, 10.0, 10.0);
+    s.run_ticks(40);
+    assert!(s.sim.notes().is_empty());
 }

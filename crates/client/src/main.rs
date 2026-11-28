@@ -12,6 +12,7 @@
 
 mod camera;
 mod draw;
+mod floats;
 mod hud;
 mod minimap;
 mod mounts;
@@ -61,6 +62,7 @@ fn main() {
             Startup,
             (
                 draw::setup,
+                floats::setup,
                 hud::setup,
                 start::setup,
                 minimap::setup,
@@ -107,6 +109,7 @@ fn main() {
                 hud::show_top,
                 hud::show_hud,
                 hud::show_labels.after(camera::steer_camera),
+                floats::show_floats.after(camera::steer_camera),
                 start::show_start,
                 minimap::show_minimap,
                 shop::show_shop,

@@ -7,6 +7,7 @@
 
 use crate::ids::{CreepId, ShipId, StructureId, Team};
 use crate::math::Vec2;
+use crate::note::NoteKind;
 use crate::tuning::{Hits, Shot, Tuning, WeaponSpec};
 use crate::vision::Sight;
 use crate::world::World;
@@ -232,7 +233,12 @@ fn flight_ticks(distance: f32, spec: &WeaponSpec, tick_hz: u32) -> u64 {
 
 /// 이번 Tick까지 닿을 포탄의 피해를 쏜 순서대로 주고, HP를 0으로 만든 포탄을 돌려줍니다.
 /// 이번 Tick에 가라앉은 배는 `respawn_ticks` 뒤에 다시 나타납니다.
-pub(crate) fn land_impacts(world: &mut World, tuning: &Tuning, tick: u64) -> Vec<Kill> {
+pub(crate) fn land_impacts(
+    world: &mut World,
+    sight: &Sight,
+    tuning: &Tuning,
+    tick: u64,
+) -> Vec<Kill> {
     let (due, flying): (Vec<Impact>, Vec<Impact>) = std::mem::take(&mut world.impacts)
         .into_iter()
         .partition(|impact| impact.due <= tick);
@@ -252,6 +258,16 @@ pub(crate) fn land_impacts(world: &mut World, tuning: &Tuning, tick: u64) -> Vec
                 && let Some(ship) = world.ships.get_mut(&id)
             {
                 ship.burning_until = tick + impact.burn_ticks;
+            }
+            // 이미 사라졌거나 가라앉은 표적은 피해를 받지 않으므로 적지 않습니다.
+            let hit = world.targets().find(|(target, ..)| *target == victim);
+            if let Some((_, _, pos)) = hit {
+                let kind = NoteKind::Hit {
+                    by: impact.by,
+                    target: victim,
+                    seen: Team::ALL.map(|team| sight.sees(team, victim)),
+                };
+                world.note(tick, pos, damage, kind);
             }
             if world.damage(victim, damage, respawn_at) {
                 kills.push(Kill {

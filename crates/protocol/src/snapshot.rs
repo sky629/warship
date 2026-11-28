@@ -1,10 +1,13 @@
 //! Tick마다 보내는 방의 상태입니다. 진영마다 따로 만들고, 받는 진영에 보이지 않는 적의 배와 NPC 배는 싣지 않습니다.
 //!
+//! 최근의 피해와 골드의 보상(`notes`)은 받는 진영의 배가 주었거나 받은 것만 싣습니다.
+//!
 //! 포탄은 싣지 않습니다. 클라이언트는 무기가 마지막으로 쏜 Tick(`ready_at`에서 쿨다운을 뺀 값)과 표적에서 날아가는 포탄을 그립니다.
 
 use serde::{Deserialize, Serialize};
 use warship_rules::{
-    Creep, Item, Life, Outcome, Refusal, Ship, Sim, Structure, StructureKind, Target, Team, Tuning,
+    Creep, Item, Life, Note, NoteKind, Outcome, Refusal, Ship, Sim, Structure, StructureKind,
+    Target, Team, Tuning,
 };
 
 use crate::messages::{WireTeam, WireVec2};
@@ -21,8 +24,31 @@ pub struct Snapshot {
     pub structures: Vec<WireStructure>,
     /// 방에 있는 모든 배의 점수입니다. 번호가 작은 배부터이고, 보이지 않는 적의 배도 있습니다.
     pub scores: Vec<WireScore>,
+    /// 최근 1초 동안 받는 진영의 배가 준 피해, 받은 피해, 받은 골드의 보상입니다. 오래된 것이 앞입니다.
+    /// 화면이 숫자로 띄웁니다.
+    pub notes: Vec<WireNote>,
     /// 대전의 결과입니다. 끝나기 전에는 없습니다.
     pub outcome: Option<WireOutcome>,
+}
+
+/// 피해나 골드의 보상 하나입니다.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WireNote {
+    /// 방 안에서 일어난 순서의 번호입니다. 같은 일을 스냅샷 사이에서 알아봅니다.
+    pub id: u32,
+    /// 일어난 Tick입니다.
+    pub tick: u64,
+    pub pos: WireVec2,
+    pub amount: u32,
+    pub kind: WireNoteKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WireNoteKind {
+    /// `target`이 피해를 받았습니다. `by`는 포탄을 쏜 플레이어의 배이고, NPC 배와 건물이 쏜 포탄에는 없습니다.
+    Hit { by: Option<u32>, target: WireTarget },
+    /// 이 번호의 배가 골드를 받았습니다.
+    Gold { ship: u32 },
 }
 
 /// 배 하나의 점수입니다. 점수판에 보여 줍니다.
@@ -264,12 +290,41 @@ impl Snapshot {
                     creep_kills: ship.creep_kills,
                 })
                 .collect(),
+            notes: sim
+                .notes()
+                .iter()
+                .filter_map(|note| wire_note(sim, team, note))
+                .collect(),
             outcome: sim.outcome().map(|outcome| match outcome {
                 Outcome::Victory(winner) => WireOutcome::Victory(winner.into()),
                 Outcome::Draw => WireOutcome::Draw,
             }),
         }
     }
+}
+
+/// `team`의 배가 주었거나 받은 피해, 받은 골드의 보상만 전송 형식으로 바꿉니다.
+/// 준 피해는 맞은 순간에 그 개체가 이 진영에 보이고 있었을 때만 싣습니다. 보이지 않는 적의 자리를 알려 주지 않기 위해서입니다.
+fn wire_note(sim: &Sim, team: Team, note: &Note) -> Option<WireNote> {
+    let ours = |ship| sim.ship(ship).is_some_and(|ship| ship.team == team);
+    let kind = match note.kind {
+        NoteKind::Hit { by, target, seen } => {
+            let taken = matches!(target, Target::Ship(ship) if ours(ship));
+            let dealt = by.is_some_and(ours) && seen[team.index()];
+            (taken || dealt).then_some(WireNoteKind::Hit {
+                by: by.map(|ship| ship.0),
+                target: wire_target(target),
+            })?
+        }
+        NoteKind::Gold { ship } => ours(ship).then_some(WireNoteKind::Gold { ship: ship.0 })?,
+    };
+    Some(WireNote {
+        id: note.id,
+        tick: note.tick,
+        pos: WireVec2::new(note.pos.x, note.pos.y),
+        amount: note.amount,
+        kind,
+    })
 }
 
 fn wire_ship(ship: &Ship, viewer: Team, tuning: &Tuning, tick: u64) -> WireShip {
@@ -357,5 +412,63 @@ fn wire_target(target: Target) -> WireTarget {
         Target::Ship(id) => WireTarget::Ship(id.0),
         Target::Creep(id) => WireTarget::Creep(id.0),
         Target::Structure(id) => WireTarget::Structure(id.0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use warship_rules::{CreepId, Vec2};
+
+    use super::*;
+
+    #[test]
+    fn a_team_gets_only_the_notes_of_its_ships_and_no_hit_on_an_enemy_it_did_not_see() {
+        let mut sim = Sim::new(Tuning::default());
+        let red = sim.join().unwrap();
+        let blue = sim.join().unwrap();
+        let team = |ship| sim.ship(ship).unwrap().team;
+        assert_eq!((team(red), team(blue)), (Team::RED, Team::BLUE));
+        let note = |kind| Note {
+            id: 7,
+            tick: 3,
+            pos: Vec2::new(1.0, 2.0),
+            amount: 40,
+            kind,
+        };
+        let hit = |target, seen| {
+            note(NoteKind::Hit {
+                by: Some(red),
+                target,
+                seen,
+            })
+        };
+        let sent = |team, note: &Note| wire_note(&sim, team, note).map(|note| note.kind);
+
+        let on_ship = hit(Target::Ship(blue), [true, false]);
+        let wire = WireNoteKind::Hit {
+            by: Some(red.0),
+            target: WireTarget::Ship(blue.0),
+        };
+        assert_eq!(sent(Team::RED, &on_ship), Some(wire));
+        assert_eq!(
+            sent(Team::BLUE, &on_ship),
+            Some(wire),
+            "the hit ship's team"
+        );
+
+        let unseen = hit(Target::Creep(CreepId(4)), [false, false]);
+        assert_eq!(
+            sent(Team::RED, &unseen),
+            None,
+            "the target was out of sight"
+        );
+        assert_eq!(sent(Team::BLUE, &unseen), None);
+
+        let gold = note(NoteKind::Gold { ship: red });
+        assert_eq!(
+            sent(Team::RED, &gold),
+            Some(WireNoteKind::Gold { ship: red.0 })
+        );
+        assert_eq!(sent(Team::BLUE, &gold), None);
     }
 }

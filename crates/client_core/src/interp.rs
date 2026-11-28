@@ -8,8 +8,8 @@
 use std::collections::VecDeque;
 
 use warship_protocol::{
-    Snapshot, Welcome, WireItem, WireOutcome, WireRefusal, WireScore, WireShot, WireStructureKind,
-    WireTarget, WireTeam, WireVec2, WireWeapon,
+    Snapshot, Welcome, WireItem, WireNoteKind, WireOutcome, WireRefusal, WireScore, WireShot,
+    WireStructureKind, WireTarget, WireTeam, WireVec2, WireWeapon,
 };
 use warship_rules::Vec2;
 
@@ -28,6 +28,8 @@ pub struct Frame {
     pub shots: Vec<ShotView>,
     /// 방금 터진 산탄과 폭탄의 범위입니다.
     pub blasts: Vec<BlastView>,
+    /// 내 배가 방금 준 피해, 받은 피해, 받은 골드입니다. 화면이 떠오르는 숫자로 그립니다.
+    pub floats: Vec<FloatView>,
     /// 방에 있는 모든 배의 점수입니다.
     pub scores: Vec<WireScore>,
     /// 대전이 시작한 뒤 지난 시간(초)입니다.
@@ -154,12 +156,37 @@ pub struct BlastView {
     pub age: f32,
 }
 
+/// 떠오르는 숫자 하나입니다.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FloatView {
+    /// 같은 숫자를 프레임 사이에서 알아보는 번호입니다.
+    pub id: u32,
+    pub kind: FloatKind,
+    /// 숫자가 나온 자리입니다.
+    pub pos: Vec2,
+    pub amount: u32,
+    /// 나온 뒤 지난 시간의 비율입니다. 0은 나온 순간이고, 1에 가까울수록 사라질 때입니다.
+    pub age: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloatKind {
+    /// 내 배가 준 피해입니다.
+    Dealt,
+    /// 내 배가 받은 피해입니다.
+    Taken,
+    /// 내 배가 받은 골드입니다.
+    Gold,
+}
+
 /// 포탄 하나가 화면에 보이는 모습입니다. 날아가는 동안은 포탄이고, 터진 뒤에는 범위입니다.
 enum Seen {
     Shot(ShotView),
     Blast(BlastView),
 }
 
+/// 떠오르는 숫자가 보이는 Tick 수입니다. 서버가 피해와 골드를 스냅샷에 싣는 동안(20Tick)보다 짧습니다.
+const FLOAT_TICKS: f32 = 16.0;
 /// 터진 범위가 보이는 Tick 수입니다.
 const BLAST_TICKS: f32 = 8.0;
 /// 폭탄이 가장 높이 올라가는 높이입니다.
@@ -430,6 +457,25 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
             refusal: own.refusal,
         })
     });
+    let floats = next.notes.iter().filter_map(|note| {
+        let kind = match note.kind {
+            WireNoteKind::Hit { by, .. } if by == Some(welcome.ship) => FloatKind::Dealt,
+            WireNoteKind::Hit { target, .. } if target == WireTarget::Ship(welcome.ship) => {
+                FloatKind::Taken
+            }
+            WireNoteKind::Gold { ship } if ship == welcome.ship => FloatKind::Gold,
+            _ => return None,
+        };
+        let age = (tick - note.tick as f32) / FLOAT_TICKS;
+        (0.0..1.0).contains(&age).then_some(FloatView {
+            id: note.id,
+            kind,
+            pos: Vec2::new(note.pos.x, note.pos.y),
+            amount: note.amount,
+            age,
+        })
+    });
+    let floats = floats.collect();
     let (mut shots, mut blasts) = (Vec::new(), Vec::new());
     for seen in seen {
         match seen {
@@ -443,6 +489,7 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
         structures,
         shots,
         blasts,
+        floats,
         scores: next.scores.clone(),
         secs: tick / welcome.tick_hz.max(1) as f32,
         me,

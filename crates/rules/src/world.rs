@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use crate::creep::{CampState, Creep};
 use crate::ids::{CreepId, ShipId, StructureId, Team};
 use crate::math::Vec2;
+use crate::note::{NOTE_TICKS, Note, NoteKind};
 use crate::ship::{Life, Ship};
 use crate::structures::Structure;
 use crate::trade;
@@ -21,6 +22,10 @@ pub(crate) struct World {
     pub camps: Vec<CampState>,
     /// 고용했지만 아직 나오지 않은 용병의 진영과 라인입니다.
     pub hires: Vec<(Team, usize)>,
+    /// 최근에 일어난 피해와 골드의 보상입니다. 오래된 것이 앞입니다.
+    pub notes: Vec<Note>,
+    /// 지금까지 적은 일의 수입니다.
+    pub noted: u32,
 }
 
 impl World {
@@ -48,6 +53,24 @@ impl World {
                 )
             });
         ships.chain(creeps).chain(structures)
+    }
+
+    /// 화면이 숫자로 보여 줄 일을 적습니다.
+    pub fn note(&mut self, tick: u64, pos: Vec2, amount: u32, kind: NoteKind) {
+        let id = self.noted;
+        self.noted += 1;
+        self.notes.push(Note {
+            id,
+            tick,
+            pos,
+            amount,
+            kind,
+        });
+    }
+
+    /// `NOTE_TICKS`보다 오래된 일을 잊습니다.
+    pub fn forget_notes(&mut self, tick: u64) {
+        self.notes.retain(|note| note.tick + NOTE_TICKS > tick);
     }
 
     /// 표적의 HP를 줄이고, 이 피해로 HP가 0이 되었는지 돌려줍니다. 이미 사라졌거나 가라앉은 표적이면 아무 일도 하지 않습니다.

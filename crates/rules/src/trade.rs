@@ -3,6 +3,7 @@
 
 use crate::command::Refusal;
 use crate::ids::{ShipId, TradeId};
+use crate::note::NoteKind;
 use crate::ship::{Item, Mount, Ship};
 use crate::shop;
 use crate::tuning::Tuning;
@@ -32,12 +33,13 @@ pub(crate) fn contract(
 }
 
 /// 교역항 가까이에 떠 있는 배의 계약을 화물로 바꾸고, 본진 가까이에 떠 있는 배의 화물을 보상으로 바꿉니다.
-pub(crate) fn haul(world: &mut World, tuning: &Tuning) {
+pub(crate) fn haul(world: &mut World, tuning: &Tuning, tick: u64) {
     let carriers = world.ships.values();
     let carriers = carriers.filter(|ship| ship.is_afloat() && carries_freight(ship));
     let carriers: Vec<(ShipId, bool)> = carriers
         .map(|ship| (ship.id, shop::at_dock(world, tuning, ship)))
         .collect();
+    let mut paid = Vec::new();
     for (id, docked) in carriers {
         let Some(ship) = world.ships.get_mut(&id) else {
             continue;
@@ -55,12 +57,17 @@ pub(crate) fn haul(world: &mut World, tuning: &Tuning) {
                     }
                 }
                 Some(Item::Cargo(trade)) if docked => {
-                    ship.gold += tuning.trade_of(trade).map_or(0, |spec| spec.reward);
+                    let reward = tuning.trade_of(trade).map_or(0, |spec| spec.reward);
+                    ship.gold += reward;
+                    paid.push((id, pos, reward));
                     *slot = None;
                 }
                 _ => {}
             }
         }
+    }
+    for (ship, pos, reward) in paid {
+        world.note(tick, pos, reward, NoteKind::Gold { ship });
     }
 }
 

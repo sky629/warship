@@ -10,8 +10,8 @@ use warship_protocol::{
     WireWeapon,
 };
 use warship_protocol::{
-    SeatToken, WireHire, WireMember, WireRecipe, WireScore, WireShop, WireShot, WireSupply,
-    WireTrade,
+    SeatToken, WireHire, WireMember, WireNote, WireNoteKind, WireRecipe, WireScore, WireShop,
+    WireShot, WireSupply, WireTrade,
 };
 use warship_rules::Vec2;
 
@@ -19,8 +19,8 @@ use crate::{
     BlastView, Icon, IconKind, MountView, Phase, Session, SkillView, first_tab, mount_views,
     score_table, shop_tabs, shops_near,
 };
+use crate::{FloatKind, FloatView, Sound, Volley, sound_events};
 use crate::{HudView, ScoreRow, ScoreTeam, SkillSlot, TopBar, hud_view, top_bar};
-use crate::{Sound, Volley, sound_events};
 
 const ME: u32 = 1;
 const ENEMY: u32 = 2;
@@ -146,6 +146,7 @@ fn snapshot(tick: u64, ships: Vec<WireShip>) -> ServerMsg {
         creeps: Vec::new(),
         structures: Vec::new(),
         scores: Vec::new(),
+        notes: Vec::new(),
         outcome: None,
     }))
 }
@@ -385,6 +386,7 @@ fn the_frame_shows_creeps_structures_gold_the_respawn_time_and_the_outcome() {
             creeps: vec![creep(creep_x)],
             structures: vec![harbor.clone()],
             scores: Vec::new(),
+            notes: Vec::new(),
             outcome: Some(WireOutcome::Victory(WireTeam::Blue)),
         }))
     };
@@ -1128,4 +1130,59 @@ fn a_ship_of_a_hull_with_more_hp_is_drawn_larger() {
 
     let sizes: Vec<f32> = frame.ships.iter().map(|ship| ship.size).collect();
     assert_eq!(sizes, [1.0, 2.0_f32.sqrt()]);
+}
+
+#[test]
+fn the_frame_floats_the_damage_i_deal_and_take_and_the_gold_i_get() {
+    let note = |id, tick, kind| WireNote {
+        id,
+        tick,
+        pos: WireVec2::new(8.0, 5.0),
+        amount: 20 + id,
+        kind,
+    };
+    let hit = |by, target| WireNoteKind::Hit { by, target };
+    let notes = vec![
+        note(0, 100, hit(Some(ME), WireTarget::Ship(ENEMY))),
+        note(1, 100, hit(Some(ENEMY), WireTarget::Ship(ME))),
+        note(2, 100, hit(Some(3), WireTarget::Creep(9))),
+        note(3, 100, WireNoteKind::Gold { ship: ME }),
+        note(4, 100, WireNoteKind::Gold { ship: 3 }),
+        note(5, 104, hit(Some(ME), WireTarget::Ship(ENEMY))),
+        note(6, 80, hit(Some(ME), WireTarget::Ship(ENEMY))),
+    ];
+    let room = |tick| {
+        ServerMsg::Snapshot(Box::new(Snapshot {
+            tick,
+            ships: vec![ship(ME, 5.0)],
+            creeps: Vec::new(),
+            structures: Vec::new(),
+            scores: Vec::new(),
+            notes: notes.clone(),
+            outcome: None,
+        }))
+    };
+    let mut session = playing();
+    receive(&mut session, 1.00, room(100));
+    receive(&mut session, 1.20, room(104));
+
+    // 1.20초에 보여 주는 것은 102번째 Tick입니다. 104번째 Tick의 피해는 아직이고, 80번째 Tick의 피해는 이미 사라졌습니다.
+    let frame = session.frame(1.20).unwrap();
+
+    let float = |id, kind| FloatView {
+        id,
+        kind,
+        pos: Vec2::new(8.0, 5.0),
+        amount: 20 + id,
+        age: 2.0 / 16.0,
+    };
+    assert_eq!(
+        frame.floats,
+        [
+            float(0, FloatKind::Dealt),
+            float(1, FloatKind::Taken),
+            float(3, FloatKind::Gold),
+        ],
+        "only the notes of my ship"
+    );
 }
