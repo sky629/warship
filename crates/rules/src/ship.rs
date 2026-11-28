@@ -326,11 +326,12 @@ pub(crate) fn crew_repairs(world: &mut World, tuning: &Tuning, tick: u64) {
 /// 목적지가 바뀌면 섬을 피해서 가는 길을 다시 찾습니다. 맵 밖이나 섬 위의 목적지는 배가 설 수 있는 가까운 점으로 옮깁니다.
 /// 한 Tick에 갈 수 있는 거리 안에 목적지가 있으면 목적지에 정확히 섭니다.
 pub(crate) fn move_ships(world: &mut World, inputs: &PlayerInputs, tuning: &Tuning, tick: u64) {
-    // 건물 위의 목적지를 그 건물의 둘레로 옮깁니다. 배를 고치는 동안에는 건물을 읽을 수 없으므로 먼저 계산합니다.
+    // 건물과 겹치는 목적지를 그 건물의 둘레에서 배의 길이의 절반만큼 떨어진 자리로 옮깁니다. 배를 고치는 동안에는 건물을 읽을 수 없으므로 먼저 계산합니다.
     let asked = world.ships.values().filter_map(|ship| {
         let point = inputs.get(&ship.id)?.destination?.get();
         let open = nav::settle(&tuning.map, point);
-        let beside = structures::beside(world, open, ship.pos);
+        let room = tuning.hull_length(ship.hull) / 2.0;
+        let beside = structures::beside(world, open, ship.pos, room);
         Some((ship.id, nav::settle(&tuning.map, beside)))
     });
     let asked: BTreeMap<ShipId, Vec2> = asked.collect();

@@ -1,10 +1,10 @@
 //! 입장할 때 한 번 보내는, 접속 중에 바뀌지 않는 정보입니다.
 
 use serde::{Deserialize, Serialize};
-use warship_rules::Stock;
 use warship_rules::{
     GearEffect, HullSpec, ShipId, Shot, Sim, StructureKind, StructureSpec, SupplyEffect, WeaponSpec,
 };
+use warship_rules::{HullId, Stock};
 
 use crate::messages::{WireTeam, WireVec2};
 use crate::seat_token::SeatToken;
@@ -79,6 +79,8 @@ pub struct WireHull {
     pub name: String,
     pub price: u32,
     pub max_hp: u32,
+    /// 이 선체의 배의 길이입니다. 화면이 배를 이 길이로 그립니다.
+    pub length: f32,
     /// 아이템(무기와 장비)을 달 수 있는 칸의 수입니다.
     pub mounts: u8,
     /// 이 선체의 배가 쓸 수 있는 스킬의 번호입니다. 클라이언트가 이 순서로 단축키에 놓습니다.
@@ -309,10 +311,12 @@ impl Welcome {
             hulls: tuning
                 .hulls
                 .iter()
-                .map(|hull| WireHull {
+                .enumerate()
+                .map(|(id, hull)| WireHull {
                     name: hull.name.to_string(),
                     price: hull.price,
                     max_hp: hull.max_hp,
+                    length: tuning.hull_length(HullId(id as u16)),
                     mounts: hull.mounts as u8,
                     skills: hull.skills.iter().map(|skill| skill.0).collect(),
                     traits: traits_text(hull),

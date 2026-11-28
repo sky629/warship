@@ -56,6 +56,8 @@ pub struct ShipTuning {
     pub bounty: u32,
     /// 이 배를 가라앉히는 데 도운 배들이 나누어 받는 골드입니다. 도운 배들끼리 이 배에 준 피해의 비율로 나눕니다.
     pub assist_bounty: u32,
+    /// 첫 번째 선체의 배의 길이입니다. HP가 큰 선체는 `Tuning::hull_length`만큼 깁니다.
+    pub length: f32,
     /// 준 피해를 도움으로 치는 Tick 수입니다. 마지막으로 맞힌 뒤 이만큼 지나면 그 배가 준 피해는 잊습니다.
     pub assist_ticks: u32,
 }
@@ -387,6 +389,13 @@ pub struct StructureSite {
 impl Tuning {
     pub fn hull(&self, id: HullId) -> &HullSpec {
         &self.hulls[usize::from(id.0)]
+    }
+
+    /// 이 선체의 배의 길이입니다. 첫 번째 선체의 길이에, 최대 HP의 비율의 세제곱근을 곱합니다.
+    /// 화면이 배를 이 길이로 그리고, 배는 건물에서 이 길이의 절반만큼 떨어져서 섭니다.
+    pub fn hull_length(&self, id: HullId) -> f32 {
+        let ratio = self.hull(id).max_hp as f32 / self.hulls[0].max_hp.max(1) as f32;
+        self.ship.length * ratio.cbrt()
     }
 
     /// 소모품 표에 있는 번호이면 그 소모품입니다.
@@ -860,6 +869,7 @@ impl Default for Tuning {
                 // 배 하나의 격침으로 한 진영이 받는 골드는 `bounty`와 `assist_bounty`의 합(250)을 넘지 않습니다.
                 assist_bounty: 50,
                 assist_ticks: 200,
+                length: 1.95,
             },
             // 값의 순서입니다. 같은 값의 선체는 서로 다른 역할을 합니다: 화력, 속도, 지원, 방어, 교역.
             // 같은 값의 전투용 선체는 칸의 수가 같습니다. 칸이 하나 적은 선체는 봇끼리의 대전에서 양쪽 자리 모두 졌습니다.

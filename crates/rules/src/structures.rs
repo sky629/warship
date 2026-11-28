@@ -41,11 +41,12 @@ impl StructureKind {
     }
 }
 
-/// `p`가 서 있는 건물이 차지하는 원 안이면, 그 원의 둘레에서 `from`에 가장 가까운 점입니다. 아니면 `p`입니다.
-/// 배는 가는 길에 건물을 지날 수 있지만, 건물 위에 서지는 않습니다.
-pub(crate) fn beside(world: &World, p: Vec2, from: Vec2) -> Vec2 {
+/// `p`가 서 있는 건물이 차지하는 원에서 `room`보다 가까우면, 그 원에서 `room`만큼 떨어진 둘레에서 `from`에 가장 가까운 점입니다. 아니면 `p`입니다.
+/// `room`은 배의 길이의 절반입니다. 배는 가는 길에 건물을 지날 수 있지만, 건물과 겹쳐서 서지는 않습니다.
+pub(crate) fn beside(world: &World, p: Vec2, from: Vec2, room: f32) -> Vec2 {
     let mut standing = world.structures.values().filter(|site| site.hp > 0);
-    let Some(site) = standing.find(|site| site.pos.distance(p) < site.kind.footprint()) else {
+    let reach = |kind: StructureKind| kind.footprint() + room;
+    let Some(site) = standing.find(|site| site.pos.distance(p) < reach(site.kind)) else {
         return p;
     };
     let offset = from - site.pos;
@@ -56,7 +57,7 @@ pub(crate) fn beside(world: &World, p: Vec2, from: Vec2) -> Vec2 {
     } else {
         Vec2::new(1.0, 0.0)
     };
-    site.pos + direction * site.kind.footprint()
+    site.pos + direction * reach(site.kind)
 }
 
 /// HP가 0이 된 건물을 맵에서 지우고, 본진을 잃은 진영을 돌려줍니다.

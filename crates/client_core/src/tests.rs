@@ -57,6 +57,7 @@ fn welcome() -> Welcome {
                 name: "small".to_string(),
                 price: 0,
                 max_hp: 1000,
+                length: 1.3,
                 mounts: 2,
                 skills: vec![0],
                 traits: String::new(),
@@ -65,6 +66,7 @@ fn welcome() -> Welcome {
                 name: "big".to_string(),
                 price: 400,
                 max_hp: 2000,
+                length: 2.6,
                 mounts: 4,
                 skills: vec![0],
                 traits: "trader, -15% damage".to_string(),
@@ -1149,7 +1151,7 @@ fn a_ship_of_a_hull_with_more_hp_is_drawn_larger() {
     let frame = session.frame(1.15).unwrap();
 
     let sizes: Vec<f32> = frame.ships.iter().map(|ship| ship.size).collect();
-    assert_eq!(sizes, [1.0, 2.0_f32.cbrt()]);
+    assert_eq!(sizes, [1.0, 2.0]);
 }
 
 #[test]

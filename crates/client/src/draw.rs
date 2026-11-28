@@ -33,8 +33,8 @@ const SCATTER: [Vec3; 3] = [
 ];
 /// 은신한 배의 둘레에 그리는 원의 색입니다.
 const CLOAKED: Color = Color::srgb(0.7, 0.5, 1.0);
-/// 배와 NPC 배를 그리는 크기의 배율입니다. 섬과 건물 사이에서 배가 잘 보이게 모형을 키웁니다. 규칙의 거리는 바뀌지 않습니다.
-const BOATS: f32 = 1.5;
+/// NPC 배를 그리는 크기의 배율입니다. 섬과 건물 사이에서 잘 보이게 모형을 키웁니다. 플레이어의 배는 서버가 알려 준 길이로 그립니다.
+const CREEPS: f32 = 1.5;
 /// 감속된 배의 둘레에 그리는 원의 색입니다.
 const SLOWED: Color = Color::srgb(0.4, 0.9, 0.9);
 const BORDER: Color = Color::srgb(0.35, 0.55, 0.65);
@@ -378,7 +378,7 @@ pub fn sync_pieces(
         let scale = match piece {
             Piece::Ship(id) => {
                 let ship = frame.ships.iter().find(|ship| ship.id == id);
-                ship.map_or(1.0, |ship| ship.size) * BOATS
+                ship.map_or(1.0, |ship| ship.size)
             }
             // 포탄은 피해가 큰 무기일수록 크고, 산탄의 알은 작습니다.
             Piece::Shot(id) => frame.shots.get(id / SCATTER.len()).map_or(1.0, |shot| {
@@ -387,7 +387,7 @@ pub fn sync_pieces(
             }),
             Piece::Creep(id) => {
                 let creep = frame.creeps.iter().find(|creep| creep.id == id);
-                creep.map_or(1.0, |creep| creep.size) * BOATS
+                creep.map_or(1.0, |creep| creep.size) * CREEPS
             }
             _ => 1.0,
         };
@@ -646,14 +646,14 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
     for creep in &frame.creeps {
         draw_hp(
             gizmos,
-            on_water(creep.pos) + Vec3::Y * 0.85 * BOATS * creep.size,
+            on_water(creep.pos) + Vec3::Y * 0.85 * CREEPS * creep.size,
             creep.hp,
         );
     }
     for ship in frame.ships.iter().filter(|ship| !ship.sunk) {
         let center = on_water(ship.pos);
         // 배의 둘레의 원은 배의 크기에 맞춥니다. 큰 선체의 아래에 가려지지 않게 배보다 조금 크게 그립니다.
-        let around = |share: f32| share * BOATS * ship.size;
+        let around = |share: f32| share * ship.size;
         // 내 배는 흰 원으로 표시하고, 무기마다 사거리를 그립니다.
         if ship.mine {
             flat_circle(gizmos, center, around(0.8), MINE);
@@ -670,7 +670,7 @@ fn draw_frame(gizmos: &mut Gizmos, frame: &Frame) {
         if ship.burning {
             flat_circle(gizmos, center, around(1.0), FIRE);
         }
-        draw_hp(gizmos, center + Vec3::Y * 1.55 * BOATS * ship.size, ship.hp);
+        draw_hp(gizmos, center + Vec3::Y * 1.55 * ship.size, ship.hp);
     }
 }
 

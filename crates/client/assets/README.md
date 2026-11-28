@@ -26,8 +26,8 @@ A missing icon is drawn as a square in the color of its kind with the initials o
 
 | Folder | One file for each | Built-in size to match |
 |---|---|---|
-| `models/hulls/` | hull (`sloop.glb`, `man_of_war.glb`, ...) | about 1.3 long. The game draws every boat 1.5 times larger than its file, and makes hulls with more HP larger. |
-| `models/creeps/` | creep kind (`cutter.glb`, `brig.glb`, `sea_raider.glb`) | about 0.7 long. The game draws every boat 1.5 times larger than its file, and makes kinds with more HP larger. |
+| `models/hulls/` | hull (`sloop.glb`, `man_of_war.glb`, ...) | 1.3 long. The game scales the file to the length of the hull (1.95 for the first hull, longer for hulls with more HP). |
+| `models/creeps/` | creep kind (`cutter.glb`, `brig.glb`, `sea_raider.glb`) | about 0.7 long. The game draws it 1.5 times larger than its file, and makes kinds with more HP larger. |
 | `models/structures/` | `tower.glb`, `harbor.glb`, `base.glb`, `port.glb` | tower 1 wide and 2 high, harbor 2 x 2, base 2.4 x 2.4, port 1.6 x 1.6 |
 | `models/shots/` | weapon (`deck_gun.glb`, `siege_mortar.glb`, `cutter_gun.glb`, ...) and attack kind (`shell.glb`, `scatter.glb`, `bomb.glb`, `flame.glb`) | about 0.3 across. The game makes the shots of stronger weapons larger. |
 

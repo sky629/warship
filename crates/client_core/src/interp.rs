@@ -76,7 +76,7 @@ pub struct ShipView {
     pub id: u32,
     pub team: WireTeam,
     pub pos: Vec2,
-    /// 모양의 크기의 배율입니다. 최대 HP가 큰 선체가 큽니다.
+    /// 모양의 크기의 배율입니다. 내장 모양과 모형 파일의 길이(`HULL_FILE_LENGTH`)를 선체의 길이로 맞추는 값입니다.
     pub size: f32,
     /// `Welcome::hulls`의 자리입니다.
     pub hull: u16,
@@ -187,6 +187,8 @@ enum Seen {
 
 /// 떠오르는 숫자가 보이는 Tick 수입니다. 서버가 피해와 골드를 스냅샷에 싣는 동안(20Tick)보다 짧습니다.
 const FLOAT_TICKS: f32 = 16.0;
+/// 배의 내장 모양과 모형 파일의 길이입니다.
+const HULL_FILE_LENGTH: f32 = 1.3;
 /// 터진 범위가 보이는 Tick 수입니다.
 const BLAST_TICKS: f32 = 8.0;
 /// 폭탄이 가장 높이 올라가는 높이입니다.
@@ -350,11 +352,9 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
                 mount.ready_at,
             ));
         }
-        // 배는 선체의 최대 HP가 클수록 크게 그립니다. 첫 번째 선체의 크기가 1이고, HP의 비율의 세제곱근만큼 큽니다.
-        // 가장 큰 선체가 건물보다 지나치게 커지지 않게 완만하게 키웁니다.
-        let hull_hp = |hull: u16| welcome.hulls.get(usize::from(hull)).map(|hull| hull.max_hp);
-        let ratio = hull_hp(ship.hull).zip(hull_hp(0));
-        let size = ratio.map_or(1.0, |(hp, first)| (hp as f32 / first.max(1) as f32).cbrt());
+        // 배는 서버가 알려 준 선체의 길이로 그립니다. 규칙이 배를 건물에서 떨어뜨려 세우는 거리와 같은 길이입니다.
+        let hull = welcome.hulls.get(usize::from(ship.hull));
+        let size = hull.map_or(1.0, |hull| hull.length / HULL_FILE_LENGTH);
         ships.push(ShipView {
             id: ship.id,
             team: ship.team,

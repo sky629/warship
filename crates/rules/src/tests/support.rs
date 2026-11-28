@@ -290,6 +290,7 @@ fn open_sea_tuning() -> Tuning {
             bounty: 200,
             assist_bounty: 200,
             assist_ticks: 100,
+            length: 2.0,
         },
         hulls: vec![
             HullSpec {

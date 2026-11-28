@@ -90,7 +90,7 @@ fn a_sunk_ship_does_not_move() {
 }
 
 #[test]
-fn a_ship_sent_onto_a_structure_stops_at_its_edge_on_the_near_side() {
+fn a_ship_sent_onto_a_structure_stops_half_its_length_from_the_edge_on_the_near_side() {
     let mut s = Scenario::open_sea();
     let a = s.ship_at(Team::RED, 10.0, 10.0);
     let tower = s.tower_at(Team::RED, 20.0, 10.0);
@@ -98,8 +98,8 @@ fn a_ship_sent_onto_a_structure_stops_at_its_edge_on_the_near_side() {
 
     s.run_ticks(100);
 
-    // 타워의 둘레는 반지름 1입니다.
-    assert_close(s.ship(a).pos.x, 19.0);
+    // 타워의 둘레는 반지름 1이고, 배의 길이는 2입니다.
+    assert_close(s.ship(a).pos.x, 18.0);
     assert_close(s.ship(a).pos.y, 10.0);
 
     // 파괴된 건물의 자리에는 설 수 있습니다.
