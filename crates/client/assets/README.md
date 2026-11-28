@@ -26,8 +26,8 @@ A missing icon is drawn as a square in the color of its kind with the initials o
 
 | Folder | One file for each | Built-in size to match |
 |---|---|---|
-| `models/hulls/` | hull (`sloop.glb`, `man_of_war.glb`, ...) | about 1.3 long. The game makes hulls with more HP larger. |
-| `models/creeps/` | creep kind (`cutter.glb`, `brig.glb`, `sea_raider.glb`) | about 0.7 long. The game makes kinds with more HP larger. |
+| `models/hulls/` | hull (`sloop.glb`, `man_of_war.glb`, ...) | about 1.3 long. The game draws every boat 1.5 times larger than its file, and makes hulls with more HP larger. |
+| `models/creeps/` | creep kind (`cutter.glb`, `brig.glb`, `sea_raider.glb`) | about 0.7 long. The game draws every boat 1.5 times larger than its file, and makes kinds with more HP larger. |
 | `models/structures/` | `tower.glb`, `harbor.glb`, `base.glb`, `port.glb` | tower 1 wide and 2 high, harbor 2 x 2, base 2.4 x 2.4, port 1.6 x 1.6 |
 | `models/shots/` | weapon (`deck_gun.glb`, `siege_mortar.glb`, `cutter_gun.glb`, ...) and attack kind (`shell.glb`, `scatter.glb`, `bomb.glb`, `flame.glb`) | about 0.3 across. The game makes the shots of stronger weapons larger. |
 
@@ -85,7 +85,7 @@ A browser starts sound only after the first click or key press on the page.
 | `ui/panel.png` | Background of the top bar, the ship panel, the shop window, the scoreboard and the start panel. Nine-slice: the outer 12 pixels on each side are the border and are not stretched. Keep the visible frame within the outer 8 pixels; text starts 8 pixels from the edge in the smallest panel. |
 | `ui/start.png` | Full-screen picture behind the start panel. It is stretched to the window. |
 | `ui/logo.png` | Title picture at the top of the start panel, 96 pixels high. |
-| `fonts/ui.ttf` | Font of all text. |
+| `fonts/ui.ttf` | Font of all text. Keep the license text of the font next to it. |
 
 Without these files, panels are a flat dark color, the start screen has no picture and shows the title as text, and the text uses the built-in font.
 
