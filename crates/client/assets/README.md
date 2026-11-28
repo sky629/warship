@@ -2,6 +2,8 @@
 
 Put a file here with the name below and build again. The client uses every file it finds and draws a placeholder for the rest. No code change is needed.
 
+The files that are here now are listed in `CREDITS.md` with their sources. The scripts in `scripts/assets/` make them again from the source packs.
+
 ## Icons
 
 `icons/<folder>/<name>.png`, square, 64 x 64 or larger. The name is the item name in lower case, with every character that is not a letter or a digit replaced by `_` (for example `Man-of-War` is `man_of_war`, `Twin Deck Guns` is `twin_deck_guns`).
