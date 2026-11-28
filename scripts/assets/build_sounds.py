@@ -39,15 +39,17 @@ def notes(pitches, each, ring):
 
 # 이름, 입력들, 입력을 섞는 필터입니다. 필터의 결과는 [out]입니다.
 SYNTH = [
-    # 짧고 낮은 포성입니다.
-    ("fire_shell", [noise("brown", 0.6), wave("sin(2*PI*(110-90*t)*t)*exp(-10*t)", 0.6)],
-     "[0]lowpass=f=700,volume='exp(-8*t)':eval=frame[n];[n][1]amix=inputs=2:normalize=0[out]"),
+    # 짧고 낮은 포성입니다. 처음에 짧은 높은 소리가 있어서 쏘는 순간이 또렷합니다.
+    ("fire_shell", [noise("brown", 0.6), wave("sin(2*PI*(110-90*t)*t)*exp(-10*t)", 0.6), noise("white", 0.15)],
+     "[0]lowpass=f=700,volume='exp(-8*t)':eval=frame[n];[2]highpass=f=1500,volume='0.5*exp(-45*t)':eval=frame[c];"
+     "[n][1][c]amix=inputs=3:normalize=0[out]"),
     # 여러 알이 흩어지는 거친 소리입니다.
     ("fire_scatter", [noise("white", 0.35), wave("sin(2*PI*(160-200*t)*t)*exp(-16*t)", 0.35)],
      "[0]highpass=f=900,lowpass=f=5000,volume='0.7*exp(-13*t)':eval=frame[n];[n][1]amix=inputs=2:normalize=0[out]"),
     # 박격포의 깊고 긴 소리입니다.
-    ("fire_bomb", [noise("brown", 0.9), wave("sin(2*PI*(70-40*t)*t)*exp(-5*t)", 0.9)],
-     "[0]lowpass=f=350,volume='exp(-5*t)':eval=frame[n];[n][1]amix=inputs=2:normalize=0[out]"),
+    ("fire_bomb", [noise("brown", 0.9), wave("sin(2*PI*(70-40*t)*t)*exp(-5*t)", 0.9), noise("white", 0.2)],
+     "[0]lowpass=f=350,volume='exp(-5*t)':eval=frame[n];[2]highpass=f=900,volume='0.35*exp(-30*t)':eval=frame[c];"
+     "[n][1][c]amix=inputs=3:normalize=0[out]"),
     # 불이 스치는 소리입니다.
     ("fire_flame", [noise("pink", 0.6)],
      "[0]highpass=f=500,lowpass=f=3500,volume='sin(PI*t/0.6)*sin(PI*t/0.6)':eval=frame[out]"),

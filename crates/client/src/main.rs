@@ -37,10 +37,30 @@ pub enum Screen {
     Room,
 }
 
+/// 에셋 폴더의 경로입니다. 빌드할 때 본 파일 목록(`ui::has`)과 실행할 때 읽는 폴더가 같아야 합니다.
+///
+/// 엔진은 실행 파일의 옆(cargo로 실행하면 이 크레이트의 폴더)에서 `assets`를 찾습니다. PC에서 실행 파일을 직접 실행했는데
+/// 그 옆에 `assets`가 없으면, 빌드할 때의 이 크레이트의 `assets`를 씁니다. 웹에서는 페이지의 옆의 `assets`입니다.
+fn asset_folder() -> String {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let by_cargo = ["BEVY_ASSET_ROOT", "CARGO_MANIFEST_DIR"]
+            .iter()
+            .any(|name| std::env::var_os(name).is_some());
+        let beside = std::env::current_exe()
+            .ok()
+            .and_then(|exe| Some(exe.parent()?.join("assets").is_dir()));
+        if !by_cargo && beside != Some(true) {
+            return concat!(env!("CARGO_MANIFEST_DIR"), "/assets").to_string();
+        }
+    }
+    "assets".to_string()
+}
+
 fn main() {
     let launch = read_launch_options();
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+    let plugins = DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "WARSHIP".to_string(),
             // 웹에서는 index.html의 이 캔버스에 그립니다. PC에서는 무시됩니다.
@@ -49,7 +69,12 @@ fn main() {
             ..default()
         }),
         ..default()
-    }));
+    });
+    let plugins = plugins.set(AssetPlugin {
+        file_path: asset_folder(),
+        ..default()
+    });
+    app.add_plugins(plugins);
     net::install(&mut app, launch);
     let in_room = resource_equals(Screen::Room);
     app.insert_resource(ClearColor(draw::SEA))
