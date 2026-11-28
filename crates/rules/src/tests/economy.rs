@@ -101,6 +101,28 @@ fn ships_that_hurt_a_sunk_enemy_share_the_assist_gold_by_the_damage_they_dealt()
 }
 
 #[test]
+fn one_sunk_ship_pays_a_team_at_most_250_gold() {
+    let mut s = Scenario::with_tuning(|tuning| tuning.ship = crate::Tuning::default().ship);
+    let killer = s.ship_at(Team::RED, 10.0, 10.0);
+    let helpers = [12.0, 14.0, 16.0, 18.0].map(|y| s.ship_at(Team::RED, 30.0, y));
+    let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
+    s.arm(killer, GUN);
+    let (tuning, tick) = (s.sim.tuning().clone(), s.sim.tick());
+    let hurt = s.sim.world_mut().ships.get_mut(&victim).unwrap();
+    for helper in helpers {
+        hurt.wound(helper, 1000, &tuning, tick);
+    }
+    hurt.hp = 10;
+
+    s.run_ticks(2);
+
+    assert!(!s.ship(victim).is_afloat());
+    let paid: u32 = s.sim.ships().map(|ship| ship.gold).sum();
+    assert_eq!(s.ship(killer).gold, 200);
+    assert!((240..=250).contains(&paid), "the team got {paid}");
+}
+
+#[test]
 fn a_hit_and_a_bounty_are_noted_for_a_second() {
     let mut s = Scenario::open_sea();
     let killer = s.ship_at(Team::RED, 10.0, 10.0);

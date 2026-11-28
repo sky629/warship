@@ -54,7 +54,7 @@ pub struct ShipTuning {
     pub respawn_ticks: u32,
     /// 이 배를 가라앉힌 배가 받는 골드입니다. 가까이 있던 적이 나누어 받는 경험치이기도 합니다.
     pub bounty: u32,
-    /// 이 배를 가라앉히는 데 도운 배들이 받는 골드입니다. 도운 배는 이 배에 준 피해의 비율만큼 받습니다.
+    /// 이 배를 가라앉히는 데 도운 배들이 받는 골드의 한도입니다. 도운 배는 이 배에 준 피해의 비율만큼 받고, 도운 배들이 받는 합은 이 값을 넘지 않습니다.
     pub assist_bounty: u32,
     /// 준 피해를 도움으로 치는 Tick 수입니다. 마지막으로 맞힌 뒤 이만큼 지나면 그 배가 준 피해는 잊습니다.
     pub assist_ticks: u32,
@@ -857,7 +857,8 @@ impl Default for Tuning {
                 start_weapons: vec![WeaponId(0)],
                 respawn_ticks: 200,
                 bounty: 200,
-                assist_bounty: 200,
+                // 배 하나의 격침으로 한 진영이 받는 골드는 `bounty`와 `assist_bounty`의 합(250)을 넘지 않습니다.
+                assist_bounty: 50,
                 assist_ticks: 200,
             },
             // 값의 순서입니다. 같은 값의 선체는 서로 다른 역할을 합니다: 화력, 속도, 지원, 방어, 교역.
