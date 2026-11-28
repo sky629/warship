@@ -79,7 +79,7 @@ fn only_a_standing_harbor_or_base_of_the_own_team_is_a_shop() {
 }
 
 #[test]
-fn a_sunk_ship_cannot_use_the_shop() {
+fn a_sunk_ship_uses_the_home_shop_wherever_it_sank() {
     let (mut s, ship) = customer();
     let enemy = s.ship_at(Team::BLUE, 14.0, 10.0);
     s.arm(enemy, GUN);
@@ -87,7 +87,20 @@ fn a_sunk_ship_cannot_use_the_shop() {
     s.run_ticks(3);
     assert!(!s.ship(ship).is_afloat());
 
-    assert_eq!(s.command(ship, Command::Buy(GUN)), Some(Refusal::Sunk));
+    assert_eq!(s.command(ship, Command::Buy(GUN)), None);
+    assert_eq!(s.ship(ship).hp, 0, "a purchase does not raise a sunk ship");
+
+    // 본진에서 먼 자리에서 가라앉아도 본진의 상점을 씁니다.
+    let far = s.ship_at(Team::RED, 60.0, 40.0);
+    s.set_gold(far, 1000);
+    assert_eq!(
+        s.command(far, Command::Buy(GUN)),
+        Some(Refusal::NoShopInRange)
+    );
+    s.sim
+        .world_mut()
+        .damage(crate::weapon::Target::Ship(far), 100_000, u64::MAX);
+    assert_eq!(s.command(far, Command::Buy(GUN)), None);
 }
 
 #[test]

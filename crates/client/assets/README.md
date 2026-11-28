@@ -48,7 +48,7 @@ A missing model is drawn with the built-in shape.
 
 | File | Use |
 |---|---|
-| `textures/water.png` | The water. It repeats; one copy covers 8 x 8 tiles. Make it seamless. |
+| `textures/water.png` | The water. It repeats; one copy covers 24 x 24 tiles. Make it seamless, and avoid a strong motif: a motif shows as a grid when the view is far. |
 | `textures/island.png` | The built-in island shape. It is stretched once over the top of each island and wraps around the side. Not used when `models/scenery/island.glb` exists. |
 
 Without these files the water and the islands are flat colors.

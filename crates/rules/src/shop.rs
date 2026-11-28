@@ -42,8 +42,12 @@ pub(crate) fn at_home(world: &World, tuning: &Tuning, ship: &Ship) -> bool {
     })
 }
 
-/// 배가 상점 거리 안에 있는 상점들이 파는 것입니다. 자기 진영의 서 있는 본진과 항구, 그리고 어느 진영의 것도 아닌 항구가 상점입니다.
+/// 배가 쓸 수 있는 상점들이 파는 것입니다. 떠 있는 배는 상점 거리 안에 있는 상점을 씁니다: 자기 진영의 서 있는 본진과 항구, 그리고 어느 진영의 것도 아닌 항구입니다.
+/// 가라앉아 있는 배는 어디에서 가라앉았든 본진의 상점을 씁니다. 다시 나타나기를 기다리는 동안 살 것을 삽니다.
 fn stocks_near<'a>(world: &World, tuning: &'a Tuning, ship: &Ship) -> Vec<&'a Stock> {
+    if !ship.is_afloat() {
+        return vec![&tuning.home_stock];
+    }
     let home = at_home(world, tuning, ship).then_some(&tuning.home_stock);
     let ports = tuning.map.ports.iter();
     let ports = ports.filter(|port| port.pos.distance(ship.pos) <= tuning.shop.range);
@@ -84,16 +88,13 @@ pub(crate) fn repair(world: &mut World, tuning: &Tuning, tick: u64) {
     }
 }
 
-/// 상점을 쓸 수 있는 배를 돌려줍니다. 가라앉은 배와 상점에서 먼 배는 거절합니다.
+/// 상점을 쓸 수 있는 배를 돌려줍니다. 떠 있는데 상점에서 먼 배는 거절합니다.
 pub(crate) fn customer<'a>(
     world: &'a mut World,
     tuning: &Tuning,
     id: ShipId,
 ) -> Result<&'a mut Ship, Refusal> {
     let ship = world.ships.get(&id).ok_or(Refusal::Sunk)?;
-    if !ship.is_afloat() {
-        return Err(Refusal::Sunk);
-    }
     if stocks_near(world, tuning, ship).is_empty() {
         return Err(Refusal::NoShopInRange);
     }

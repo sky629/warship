@@ -73,18 +73,26 @@ def marks():
 
 
 def water():
-    """수면의 질감입니다. 가로와 세로로 이어 붙여도 이음매가 없습니다."""
-    size = 256
+    """수면의 질감입니다. 가로와 세로로 이어 붙여도 이음매가 없습니다.
+
+    한 장이 넓은 수면(24 x 24 타일)을 덮습니다. 방향과 간격이 다른 물결 여러 개를 겹쳐서, 같은 무늬가 되풀이되는 것이 눈에 띄지 않게 합니다.
+    """
+    size = 512
     canvas = Canvas(size)
     turn = 2.0 * math.pi
+    # 물결마다 가로와 세로의 주기의 수, 세기, 굽이의 세기입니다. 주기의 수가 정수여서 이음매가 없습니다.
+    waves = [(7, 4, 1.0, 1.6), (-5, 9, 0.8, 1.2), (11, -3, 0.6, 1.4), (-8, -10, 0.5, 0.9), (4, 15, 0.4, 1.1), (17, 6, 0.3, 0.7)]
     for py in range(size):
+        y = py / size
         for px in range(size):
-            x, y = px / size, py / size
-            ripple = math.sin(turn * (3 * x + 2 * y) + 2.0 * math.sin(turn * 2 * y))
-            ripple += 0.6 * math.sin(turn * (5 * y - 2 * x) + 1.5 * math.sin(turn * 3 * x))
-            crest = max(0.0, ripple - 1.1)
-            shade = 0.03 * ripple
-            canvas.pixels[py * size + px] = [0.16 + shade + 0.25 * crest, 0.31 + shade + 0.25 * crest, 0.44 + shade + 0.2 * crest, 1.0]
+            x = px / size
+            ripple = 0.0
+            for index, (fx, fy, gain, bend) in enumerate(waves):
+                sway = bend * math.sin(turn * ((index + 2) * y - (index + 1) * x) + index)
+                ripple += gain * math.sin(turn * (fx * x + fy * y) + sway)
+            crest = max(0.0, ripple - 2.3)
+            shade = 0.018 * ripple
+            canvas.pixels[py * size + px] = [0.17 + shade + 0.12 * crest, 0.32 + shade + 0.13 * crest, 0.45 + shade + 0.11 * crest, 1.0]
     canvas.save(OUT / "textures/water.png")
 
 

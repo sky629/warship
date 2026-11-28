@@ -233,11 +233,15 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
     tabs
 }
 
-/// 내 배가 상점 거리 안에 있는 상점입니다. `Welcome::shops`의 자리입니다.
+/// 내 배가 쓸 수 있는 상점입니다. `Welcome::shops`의 자리입니다.
+/// 떠 있는 배는 상점 거리 안에 있는 상점을 쓰고, 가라앉아 있는 배는 본진의 상점을 씁니다.
 pub fn shops_near(welcome: &Welcome, frame: &Frame) -> Vec<usize> {
-    let Some(me) = frame.ships.iter().find(|ship| ship.mine && !ship.sunk) else {
+    let Some(me) = frame.ships.iter().find(|ship| ship.mine) else {
         return Vec::new();
     };
+    if me.sunk {
+        return vec![0];
+    }
     let near = |x: f32, y: f32| (me.pos.x - x).hypot(me.pos.y - y) <= welcome.shop_range;
     let home = frame.structures.iter().any(|site| {
         site.team == welcome.team

@@ -129,6 +129,13 @@ fn battle(lines: [Option<usize>; 2], verbose: bool) -> (Option<warship_rules::Ou
     }
     if verbose {
         report(&sim);
+        let sum = |count: fn(&warship_rules::Ship) -> u32| sim.ships().map(count).sum::<u32>();
+        let (kills, assists, deaths) = (
+            sum(|ship| ship.kills),
+            sum(|ship| ship.assists),
+            sum(|ship| ship.deaths),
+        );
+        println!("ships sunk {deaths} times: {kills} by a ship, {assists} assists");
     }
     let minutes = sim.tick() as f32 / per_minute as f32;
     let total: u32 = earned.values().sum();

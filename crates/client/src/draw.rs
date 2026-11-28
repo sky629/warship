@@ -55,7 +55,7 @@ const ISLAND_HEIGHT: f32 = 0.5;
 const WATER_TEXTURE: &str = "textures/water.png";
 const LAND_TEXTURE: &str = "textures/island.png";
 /// 질감 한 장이 덮는 넓이의 한 변(타일)입니다.
-const TEXTURE_TILES: f32 = 8.0;
+const TEXTURE_TILES: f32 = 24.0;
 
 /// 타일 좌표를 수면 위의 점으로 바꿉니다.
 pub fn on_water(pos: warship_rules::Vec2) -> Vec3 {

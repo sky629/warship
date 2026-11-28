@@ -172,3 +172,29 @@ fn the_income_is_not_noted() {
     s.run_ticks(40);
     assert!(s.sim.notes().is_empty());
 }
+
+#[test]
+fn two_ships_that_shoot_the_same_enemy_get_the_bounty_and_the_assist_gold() {
+    let mut s = Scenario::open_sea();
+    let a = s.ship_at(Team::RED, 10.0, 10.0);
+    let b = s.ship_at(Team::RED, 10.0, 11.0);
+    let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
+    s.arm(a, GUN);
+    s.arm(b, GUN);
+    s.set_ship_hp(victim, 100);
+
+    let mut ticks = 0;
+    while s.ship(victim).is_afloat() {
+        s.run_ticks(1);
+        ticks += 1;
+        assert!(ticks < 400, "the victim never sank");
+    }
+
+    let income = 2 * (ticks / 20);
+    // 한 배는 격침의 보상을 받고, 다른 배는 도움의 보상을 전부 받습니다.
+    let gold = [a, b].map(|id| s.ship(id).gold - income);
+    assert_eq!(gold, [200, 200]);
+    let kills: u32 = [a, b].iter().map(|id| s.ship(*id).kills).sum();
+    let assists: u32 = [a, b].iter().map(|id| s.ship(*id).assists).sum();
+    assert_eq!((kills, assists), (1, 1));
+}
