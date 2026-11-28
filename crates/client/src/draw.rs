@@ -716,9 +716,11 @@ fn status_line(net: &Net, frame: Option<&Frame>) -> String {
         (Phase::Connecting, _) => "Connecting...".to_string(),
         (Phase::Joining, _) => "Joining...".to_string(),
         (Phase::Playing, Some(_)) => {
-            // 첫째 줄은 조작의 안내이고, 배가 가라앉아 있는 동안에는 다시 나타날 때까지 남은 시간입니다.
+            // 첫째 줄은 조작의 안내입니다. 대전이 끝났으면 나가는 방법이고, 배가 가라앉아 있는 동안에는 다시 나타날 때까지 남은 시간입니다.
+            let over = frame.is_some_and(|frame| frame.outcome.is_some());
             let respawn = frame.and_then(|frame| frame.me.as_ref()?.respawn_secs);
             match respawn {
+                _ if over => "The match is over.   Esc: leave".to_string(),
                 Some(secs) => format!("Sunk: back in {secs:.0}s"),
                 None => "Right-click: sail   Arrows: view   Space: my ship   B: shop   1-6: use a supply   Tab: scores   Esc: leave".to_string(),
             }
