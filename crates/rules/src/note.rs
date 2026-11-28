@@ -16,7 +16,7 @@ pub struct Note {
     pub id: u32,
     /// 일어난 Tick입니다.
     pub tick: u64,
-    /// 일어난 자리입니다. 피해는 맞은 개체의 자리이고, 보상은 가라앉은 개체의 자리이며, 교역의 보상은 배의 자리입니다.
+    /// 일어난 자리입니다. 피해는 맞은 개체의 자리이고, 골드는 받은 배의 자리입니다.
     pub pos: Vec2,
     pub amount: u32,
     pub kind: NoteKind,

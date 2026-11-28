@@ -42,7 +42,8 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], t
             continue;
         };
         if let Some(ship) = kill.by.and_then(|id| world.ships.get_mut(&id)) {
-            let (id, gold) = (ship.id, bounty + extra);
+            // 보상의 숫자는 받은 배의 자리에 띄웁니다. 가라앉은 개체의 자리는 받는 진영에 보이지 않을 수 있습니다.
+            let (id, at, gold) = (ship.id, ship.pos, bounty + extra);
             ship.gold += gold;
             match kill.target {
                 Target::Ship(_) => ship.kills += 1,
@@ -50,7 +51,7 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], t
                 Target::Structure(_) => {}
             }
             if gold > 0 {
-                world.note(tick, pos, gold, NoteKind::Gold { ship: id });
+                world.note(tick, at, gold, NoteKind::Gold { ship: id });
             }
         }
         if let Target::Ship(id) = kill.target
