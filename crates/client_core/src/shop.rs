@@ -6,6 +6,7 @@
 use warship_protocol::{Welcome, WireCommand, WireShop, WireShot, WireStructureKind};
 
 use crate::assets::{Icon, IconKind};
+use crate::hud::skill_detail;
 use crate::interp::Frame;
 use crate::words::ko;
 
@@ -16,7 +17,7 @@ pub struct ShopRow {
     pub name: String,
     /// 이름 아래에 적는 짧은 설명입니다.
     pub note: String,
-    /// 이 줄에 커서를 올리면 창의 아래에 보여 주는 설명입니다. 없으면 빈 글입니다.
+    /// 이 줄에 커서를 올리면 창의 아래에 보여 주는 설명입니다. 없으면 빈 글입니다. 선체의 설명은 스킬마다 한 줄입니다.
     pub detail: String,
     /// 줄에 적는 값입니다.
     pub price: u32,
@@ -33,6 +34,14 @@ pub struct ShopTab {
     /// 이 탭의 것을 파는 상점입니다. `Welcome::shops`의 자리입니다.
     pub shop: usize,
     pub rows: Vec<ShopRow>,
+}
+
+impl ShopTab {
+    /// 이 탭의 줄의 설명 가운데 가장 긴 것의 줄의 수입니다.
+    pub fn detail_lines(&self) -> usize {
+        let lines = self.rows.iter().map(|row| row.detail.lines().count());
+        lines.max().unwrap_or(0)
+    }
 }
 
 /// 상점 창의 탭을 왼쪽부터 차례로 만듭니다. 줄이 없는 탭은 만들지 않습니다.
@@ -174,13 +183,18 @@ pub fn shop_tabs(welcome: &Welcome) -> Vec<ShopTab> {
             };
             let skills = hull.skills.iter().map(|skill| {
                 let skill = welcome.skills.get(usize::from(*skill));
-                skill.map_or("?", |skill| ko(&skill.name))
+                skill.map_or("?".to_string(), |skill| {
+                    skill_detail(skill, welcome.tick_hz)
+                })
             });
             ShopRow {
                 icon: Icon::new(IconKind::Hull, &hull.name),
                 name: ko(&hull.name).to_string(),
-                note: format!("HP {}, 칸 {}개{traits}", hull.max_hp, hull.mounts),
-                detail: format!("스킬: {}", skills.collect::<Vec<_>>().join(", ")),
+                note: format!(
+                    "HP {}, 속도 {}, 칸 {}개{traits}",
+                    hull.max_hp, hull.speed, hull.mounts
+                ),
+                detail: skills.collect::<Vec<_>>().join("\n"),
                 price: hull.price,
                 cost: None,
                 order: WireCommand::ChangeHull { hull: index as u16 },

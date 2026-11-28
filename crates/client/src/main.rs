@@ -138,6 +138,7 @@ fn main() {
                 sound::play_sounds,
                 sound::play_music,
                 hud::show_top,
+                hud::show_tip,
                 hud::show_hud,
                 hud::show_labels.after(camera::steer_camera),
                 floats::show_floats.after(camera::steer_camera),

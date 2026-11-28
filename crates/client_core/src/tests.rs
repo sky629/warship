@@ -57,6 +57,7 @@ fn welcome() -> Welcome {
                 name: "small".to_string(),
                 price: 0,
                 max_hp: 1000,
+                speed: 4.0,
                 length: 1.3,
                 mounts: 2,
                 skills: vec![0],
@@ -66,6 +67,7 @@ fn welcome() -> Welcome {
                 name: "big".to_string(),
                 price: 400,
                 max_hp: 2000,
+                speed: 3.5,
                 length: 2.6,
                 mounts: 4,
                 skills: vec![0],
@@ -79,6 +81,7 @@ fn welcome() -> Welcome {
             name: "skill".to_string(),
             cooldown_ticks: 100,
             max_rank: 2,
+            effect: "effect".to_string(),
         }],
         tower: armed.clone(),
         harbor: WireStructureSpec {
@@ -680,8 +683,12 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
     assert_eq!(
         seen(1),
         [
-            row("small", "HP 1000, 칸 2개", 0),
-            row("big", "HP 2000, 칸 4개, 교역선, 받는 피해 -15%", 400),
+            row("small", "HP 1000, 속도 4, 칸 2개", 0),
+            row(
+                "big",
+                "HP 2000, 속도 3.5, 칸 4개, 교역선, 받는 피해 -15%",
+                400
+            ),
         ]
     );
     assert_eq!(seen(2), [row("salt", "south port까지, 보상 90g", 60)]);
@@ -728,7 +735,7 @@ fn the_shop_has_a_tab_for_each_part_of_the_home_shop_and_for_each_port() {
     );
     // 무기와 조합의 줄은 무기의 수치를, 선체의 줄은 스킬을 설명합니다.
     assert_eq!(tabs[0].rows[4].detail, "피해 10, 사거리 5, 재장전 0.5초");
-    assert_eq!(tabs[1].rows[0].detail, "스킬: skill");
+    assert_eq!(tabs[1].rows[0].detail, "skill: effect. 재사용 5초");
     // 아이콘은 종류와 이름으로 정해집니다. 조합의 아이콘은 결과 무기의 아이콘입니다.
     let icons: Vec<String> = tabs
         .iter()
@@ -987,6 +994,7 @@ fn the_ship_panel_shows_hp_the_xp_of_this_level_and_the_skill_slots() {
         icon: Icon::new(IconKind::Skill, "skill"),
         key: 'Q',
         name: "skill".to_string(),
+        detail: "skill: effect. 재사용 5초".to_string(),
         rank: 1,
         max_rank: 2,
         ready_secs: 2.0,

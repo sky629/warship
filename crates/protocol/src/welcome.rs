@@ -2,7 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use warship_rules::{
-    GearEffect, HullSpec, ShipId, Shot, Sim, StructureKind, StructureSpec, SupplyEffect, WeaponSpec,
+    GearEffect, HullSpec, ShipId, Shot, Sim, SkillEffect, StructureKind, StructureSpec,
+    SupplyEffect, WeaponSpec,
 };
 use warship_rules::{HullId, Stock};
 
@@ -79,6 +80,8 @@ pub struct WireHull {
     pub name: String,
     pub price: u32,
     pub max_hp: u32,
+    /// 1초에 움직이는 거리입니다.
+    pub speed: f32,
     /// 이 선체의 배의 길이입니다. 화면이 배를 이 길이로 그립니다.
     pub length: f32,
     /// 아이템(무기와 장비)을 달 수 있는 칸의 수입니다.
@@ -164,6 +167,8 @@ pub struct WireSkillSpec {
     pub name: String,
     pub cooldown_ticks: u32,
     pub max_rank: u8,
+    /// 스킬이 하는 일을 설명하는 글입니다.
+    pub effect: String,
 }
 
 /// 클라이언트가 사거리와 날아가는 포탄을 그리고 상점의 목록을 보여 주는 데 쓰는 무기의 수치입니다.
@@ -226,6 +231,51 @@ pub struct WireCreepSpec {
 }
 
 /// 화면에 그대로 보이는 문장입니다.
+/// 스킬이 하는 일을 설명하는 글입니다. 화면에 그대로 보이는 문장입니다.
+fn skill_text(effect: SkillEffect, tick_hz: u32) -> String {
+    let secs = |ticks: u32| ticks / tick_hz.max(1);
+    match effect {
+        SkillEffect::Repair { hp_per_rank } => {
+            format!("자기 배의 HP를 단계마다 {hp_per_rank} 회복")
+        }
+        SkillEffect::Salvo {
+            damage_per_rank,
+            radius,
+        } => format!("거리 {radius} 안의 적 배와 NPC 배에 단계마다 {damage_per_rank}의 피해"),
+        SkillEffect::Sprint {
+            percent_per_rank,
+            ticks,
+        } => format!(
+            "{}초 동안 자기 배의 속도 단계마다 +{percent_per_rank}%",
+            secs(ticks)
+        ),
+        SkillEffect::Reload => "자기 배의 모든 무기를 바로 다시 쏨".to_string(),
+        SkillEffect::Brace {
+            percent_per_rank,
+            ticks,
+        } => format!(
+            "{}초 동안 자기 배가 받는 피해 단계마다 -{percent_per_rank}%",
+            secs(ticks)
+        ),
+        SkillEffect::Rally {
+            hp_per_rank,
+            radius,
+        } => format!("자기 배와 거리 {radius} 안의 아군 배의 HP를 단계마다 {hp_per_rank} 회복"),
+        SkillEffect::Cloak { ticks_per_rank } => format!(
+            "단계마다 {}초 동안 적 배에게 보이지 않음, 무기를 쏘거나 스킬을 쓰면 끝남",
+            secs(ticks_per_rank)
+        ),
+        SkillEffect::Snare {
+            percent_per_rank,
+            radius,
+            ticks,
+        } => format!(
+            "{}초 동안 거리 {radius} 안의 적 배의 속도 단계마다 -{percent_per_rank}%",
+            secs(ticks)
+        ),
+    }
+}
+
 fn supply_text(effect: SupplyEffect, tick_hz: u32) -> String {
     let secs = |ticks: u32| ticks / tick_hz.max(1);
     match effect {
@@ -316,6 +366,7 @@ impl Welcome {
                     name: hull.name.to_string(),
                     price: hull.price,
                     max_hp: hull.max_hp,
+                    speed: hull.speed,
                     length: tuning.hull_length(HullId(id as u16)),
                     mounts: hull.mounts as u8,
                     skills: hull.skills.iter().map(|skill| skill.0).collect(),
@@ -329,6 +380,7 @@ impl Welcome {
                     name: skill.name.to_string(),
                     cooldown_ticks: skill.cooldown_ticks,
                     max_rank: skill.max_rank,
+                    effect: skill_text(skill.effect, tuning.tick_hz),
                 })
                 .collect(),
             weapons: tuning.weapons.iter().map(wire_weapon).collect(),

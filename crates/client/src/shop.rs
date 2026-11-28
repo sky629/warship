@@ -47,8 +47,10 @@ fn open_shop(
 ) -> Option<(Vec<ShopTab>, ShopWindow)> {
     open.open.then(|| {
         let tabs = shop_tabs(welcome);
-        let rows = tabs.get(open.tab).map_or(0, |tab| tab.rows.len());
-        let shop = ShopWindow::in_window(window.width(), tabs.len(), rows);
+        let tab = tabs.get(open.tab);
+        let rows = tab.map_or(0, |tab| tab.rows.len());
+        let lines = tab.map_or(0, ShopTab::detail_lines);
+        let shop = ShopWindow::in_window(window.width(), tabs.len(), rows, lines);
         (tabs, shop)
     })
 }
@@ -188,7 +190,7 @@ pub fn show_shop(
                     line.spawn(words(format!("{}g", row.price), 14.0, price));
                 });
         }
-        let size = (shop.width() - ShopWindow::FRAME * 2.0, ShopWindow::FOOTER);
+        let size = (shop.width() - ShopWindow::FRAME * 2.0, shop.footer_height());
         parent
             .spawn(cell(shop.footer(), size))
             .with_children(|line| {

@@ -5,6 +5,8 @@
 
 use warship_protocol::{PlayerName, RoomCode};
 
+use crate::hangul;
+
 /// 시작 화면이 받는 키입니다.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormKey {
@@ -51,16 +53,29 @@ impl StartForm {
     }
 
     /// 키 하나를 처리합니다. Enter를 눌렀고 두 칸이 검사를 통과하면 입장 요청을 돌려줍니다.
-    /// 칸에 넣을 수 없는 문자와 칸의 길이를 넘는 문자는 버립니다. 방 코드 칸은 대문자를 소문자로 바꿉니다.
+    /// 칸에 넣을 수 없는 문자와 칸의 길이를 넘는 문자는 버립니다. 이름 칸은 한글 자모를 음절로 조합합니다.
+    /// 방 코드 칸은 대문자를 소문자로 바꾸고, 한글 입력 상태에서 친 자모를 그 키의 영문자로 바꿉니다.
     pub fn on_key(&mut self, key: FormKey) -> Option<JoinRequest> {
         match (key, self.focus) {
             (FormKey::Char(c), Field::Name) => {
-                if PlayerName::allows(c) && self.name.len() < PlayerName::MAX_CHARS {
-                    self.name.push(c);
+                let mut name = self.name.clone();
+                match name.pop().filter(|_| hangul::is_jamo(c)) {
+                    Some(last) => {
+                        let (first, second) = hangul::typed_after(last, c);
+                        name.push(first);
+                        name.extend(second);
+                    }
+                    None => {
+                        name.clone_from(&self.name);
+                        name.push(c);
+                    }
+                }
+                if PlayerName::allows(c) && name.chars().count() <= PlayerName::MAX_CHARS {
+                    self.name = name;
                 }
             }
             (FormKey::Char(c), Field::Room) => {
-                let c = c.to_ascii_lowercase();
+                let c = hangul::key_of(c).unwrap_or(c).to_ascii_lowercase();
                 if RoomCode::allows(c) && self.room.len() < RoomCode::MAX_LEN {
                     self.room.push(c);
                 }
@@ -141,6 +156,26 @@ mod tests {
         form.on_key(FormKey::Tab);
         type_text(&mut form, "my room#1");
         assert_eq!(form.room, "myroom1");
+    }
+
+    #[test]
+    fn korean_letters_join_into_syllables_in_the_name_and_turn_into_their_keys_in_the_room_code() {
+        let mut form = StartForm::new("", "");
+        type_text(&mut form, "Kㄱㅏㅇㄱㅣ ㅌㅐ");
+        assert_eq!(form.name, "K강기 태");
+        form.on_key(FormKey::Backspace);
+        assert_eq!(form.name, "K강기 ");
+
+        let mut form = StartForm::new("가나다라마바사아자차카", "");
+        type_text(&mut form, "ㅌㅏㄴㅏ");
+        assert_eq!(
+            form.name, "가나다라마바사아자차카탄",
+            "the thirteenth letter is dropped"
+        );
+
+        form.on_key(FormKey::Tab);
+        type_text(&mut form, "ㅎㅁㅡㄷ1");
+        assert_eq!(form.room, "game1");
     }
 
     #[test]

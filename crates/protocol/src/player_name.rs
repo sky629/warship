@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-/// 앞뒤 공백을 지운 뒤 1자 이상 `MAX_CHARS`자 이하이고, 영문 대소문자, 숫자, 공백, `-`, `_`만 있는 이름입니다. 같은 이름을 허용합니다.
+/// 앞뒤 공백을 지운 뒤 1자 이상 `MAX_CHARS`자 이하이고, 한글, 영문 대소문자, 숫자, 공백, `-`, `_`만 있는 이름입니다. 같은 이름을 허용합니다.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlayerName(String);
 
@@ -19,7 +19,9 @@ impl PlayerName {
 
     /// 이름에 넣을 수 있는 문자입니다. 시작 화면의 이름 칸이 이 함수로 입력을 거릅니다.
     pub fn allows(c: char) -> bool {
-        c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_'
+        // 한글은 음절과 낱자로 적은 자모입니다.
+        let korean = ('가'..='힣').contains(&c) || ('ㄱ'..='ㅣ').contains(&c);
+        korean || c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_'
     }
 
     pub fn parse(raw: &str) -> Result<PlayerName, NameError> {
@@ -30,8 +32,7 @@ impl PlayerName {
         if let Some(bad) = name.chars().find(|&c| !PlayerName::allows(c)) {
             return Err(NameError::BadChar(bad));
         }
-        // 위에서 ASCII 문자만 남겼으므로 바이트 수가 글자 수와 같습니다.
-        if name.len() > Self::MAX_CHARS {
+        if name.chars().count() > Self::MAX_CHARS {
             return Err(NameError::TooLong {
                 max: Self::MAX_CHARS,
             });
@@ -58,7 +59,7 @@ impl fmt::Display for NameError {
             NameError::TooLong { max } => write!(f, "이름은 {max}자를 넘을 수 없습니다"),
             NameError::BadChar(c) => write!(
                 f,
-                "이름에 '{c}'는 쓸 수 없습니다. 영문자, 숫자, 빈칸, -, _를 쓰십시오"
+                "이름에 '{c}'는 쓸 수 없습니다. 한글, 영문자, 숫자, 빈칸, -, _를 쓰십시오"
             ),
         }
     }
@@ -77,6 +78,8 @@ mod tests {
     #[test]
     fn a_name_of_twelve_letters_is_the_longest_allowed() {
         assert!(PlayerName::parse("ABCDEFGHIJKL").is_ok());
+        assert!(PlayerName::parse("가나다라마바사아자차카타").is_ok());
+        assert!(PlayerName::parse("가나다라마바사아자차카타파").is_err());
         assert_eq!(
             PlayerName::parse("ABCDEFGHIJKLM"),
             Err(NameError::TooLong { max: 12 })
@@ -97,7 +100,8 @@ mod tests {
     #[test]
     fn only_letters_digits_spaces_dashes_and_underscores_are_allowed() {
         assert!(PlayerName::parse("Kang_7-b c").is_ok());
-        assert_eq!(PlayerName::parse("한"), Err(NameError::BadChar('한')));
+        assert!(PlayerName::parse("강기태 ㅋㅋ").is_ok());
+        assert_eq!(PlayerName::parse("漢"), Err(NameError::BadChar('漢')));
         assert_eq!(PlayerName::parse("kang!"), Err(NameError::BadChar('!')));
         assert_eq!(PlayerName::parse("a\tb"), Err(NameError::BadChar('\t')));
         assert_eq!(PlayerName::parse("a\nb"), Err(NameError::BadChar('\n')));

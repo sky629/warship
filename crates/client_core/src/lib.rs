@@ -14,6 +14,7 @@
 //! - `interp`: 스냅샷을 보관하고 100ms 이전의 방 모습을 보간해서 `Frame`으로 만듭니다. 날아가는 포탄의 위치도 여기서 계산합니다.
 
 mod assets;
+mod hangul;
 mod hud;
 mod interp;
 mod launch;

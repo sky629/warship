@@ -6,6 +6,7 @@
 //! 조건은 서버가 검사하고, 거절한 이유가 화면에 나옵니다.
 
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use warship_client_core::{MyShip, SkillSlot, hud_view, ko, top_bar};
 use warship_protocol::{Welcome, WireCommand, WireRefusal, WireTeam};
 
@@ -42,6 +43,14 @@ pub struct PanelRoot;
 /// 거절된 명령의 이유를 보여 주는 글자입니다.
 #[derive(Component)]
 pub struct ToastText;
+
+/// 커서 아래의 스킬 칸의 설명을 보여 주는 글자입니다.
+#[derive(Component)]
+pub struct TipText;
+
+/// 스킬 칸에 붙이는 그 스킬의 설명입니다.
+#[derive(Component)]
+pub struct SkillTip(String);
 
 /// 항구의 이름표를 담는 바탕입니다.
 #[derive(Component)]
@@ -96,8 +105,27 @@ pub fn setup(mut commands: Commands) {
             position_type: PositionType::Absolute,
             bottom: px(176),
             left: px(10),
+            padding: UiRect::horizontal(px(6)),
             ..default()
         },
+        BackgroundColor(PANEL),
+    ));
+    commands.spawn((
+        TipText,
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(13.0),
+            ..default()
+        },
+        TextColor(GOLD),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(198),
+            left: px(10),
+            padding: UiRect::horizontal(px(6)),
+            ..default()
+        },
+        BackgroundColor(PANEL),
     ));
     commands.spawn((
         LabelRoot,
@@ -186,6 +214,24 @@ pub fn show_top(
         let names = names.collect::<Vec<_>>().join(", ");
         parent.spawn(words(format!("선장: {names}"), 13.0, DIM));
     });
+}
+
+/// 커서 아래의 스킬 칸의 설명을 내 배 패널의 위에 보여 줍니다.
+/// 스킬 칸은 프레임마다 새로 만들므로, 지난 프레임에 놓인 칸의 자리로 찾습니다.
+pub fn show_tip(
+    window: Single<&Window, With<PrimaryWindow>>,
+    cells: Query<(&ComputedNode, &UiGlobalTransform, &SkillTip)>,
+    mut tip: Single<&mut Text, With<TipText>>,
+) {
+    let cursor = window.physical_cursor_position();
+    let pointed = cursor.and_then(|cursor| {
+        let mut cells = cells.iter();
+        cells.find(|(node, place, _)| node.contains_point(**place, cursor))
+    });
+    let pointed = pointed.map_or(String::new(), |(_, _, SkillTip(detail))| detail.clone());
+    if tip.0 != pointed {
+        tip.0 = pointed;
+    }
 }
 
 /// 내 배 패널(선체, 레벨, HP 막대, 경험치 막대, 스킬 칸)을 그리고, 거절된 명령의 이유를 그 위에 보여 줍니다.
@@ -279,7 +325,8 @@ fn show_skill(row: &mut ChildSpawnerCommands, assets: &AssetServer, slot: &Skill
     };
     let learned = slot.rank > 0;
     let name = if learned { TEXT } else { DIM };
-    row.spawn((cell, BackgroundColor(SLOT)))
+    let tip = SkillTip(slot.detail.clone());
+    row.spawn((cell, BackgroundColor(SLOT), tip))
         .with_children(|cell| {
             // 쿨다운이 남은 만큼 칸을 아래에서부터 어둡게 덮습니다.
             if slot.wait > 0.0 {

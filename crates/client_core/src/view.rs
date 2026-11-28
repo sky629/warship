@@ -128,6 +128,8 @@ pub struct ShopWindow {
     /// 열린 탭의 줄의 수입니다.
     pub rows: usize,
     pub columns: usize,
+    /// 설명의 줄의 수입니다. 열린 탭에서 설명이 가장 긴 줄에 맞춥니다.
+    pub footer_lines: usize,
 }
 
 impl ShopWindow {
@@ -137,8 +139,10 @@ impl ShopWindow {
     pub const TAB: f32 = 28.0;
     /// 줄 하나의 높이입니다. 아이콘과 두 줄의 글자가 들어갑니다.
     pub const ROW: f32 = 40.0;
-    /// 설명 줄의 높이입니다.
-    pub const FOOTER: f32 = 24.0;
+    /// 설명의 줄 하나의 높이입니다.
+    pub const FOOTER_LINE: f32 = 18.0;
+    /// 설명의 위아래의 여백을 합한 높이입니다.
+    pub const FOOTER_PAD: f32 = 6.0;
     /// 상점 창의 가장자리와 내용 사이의 간격입니다. 패널의 바탕 그림의 테두리가 이 자리에 보입니다.
     pub const FRAME: f32 = 8.0;
     /// 창의 왼쪽 가장자리와 상점 창 사이의 간격입니다.
@@ -146,9 +150,14 @@ impl ShopWindow {
     /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 막대와 안내 줄을 가리지 않습니다.
     pub const TOP: f32 = 60.0;
 
-    /// 너비가 `window_width`인 창에서, 탭이 `tabs`개이고 열린 탭의 줄이 `rows`개인 상점 창의 자리입니다.
+    /// 너비가 `window_width`인 창에서, 탭이 `tabs`개이고 열린 탭의 줄이 `rows`개이고 설명이 `footer_lines`줄인 상점 창의 자리입니다.
     /// 창이 두 열을 놓기에 좁으면 한 열로 놓습니다.
-    pub fn in_window(window_width: f32, tabs: usize, rows: usize) -> ShopWindow {
+    pub fn in_window(
+        window_width: f32,
+        tabs: usize,
+        rows: usize,
+        footer_lines: usize,
+    ) -> ShopWindow {
         let fits = window_width >= (Self::COLUMN + Self::MARGIN + Self::FRAME) * 2.0;
         ShopWindow {
             left: Self::MARGIN,
@@ -156,6 +165,7 @@ impl ShopWindow {
             tabs,
             rows,
             columns: if fits { 2 } else { 1 },
+            footer_lines,
         }
     }
 
@@ -175,7 +185,12 @@ impl ShopWindow {
 
     /// 탭 줄, 줄, 설명 줄을 합한 내용의 높이입니다.
     fn inner_height(&self) -> f32 {
-        Self::TAB + self.lines() as f32 * Self::ROW + Self::FOOTER
+        Self::TAB + self.lines() as f32 * Self::ROW + self.footer_height()
+    }
+
+    /// 설명의 높이입니다. 설명이 없어도 한 줄의 자리를 둡니다.
+    pub fn footer_height(&self) -> f32 {
+        Self::FOOTER_PAD + self.footer_lines.max(1) as f32 * Self::FOOTER_LINE
     }
 
     pub fn height(&self) -> f32 {
@@ -391,7 +406,7 @@ mod tests {
     #[test]
     fn the_shop_window_has_tabs_two_columns_and_finds_what_is_under_the_cursor() {
         // 탭이 넷이고, 열린 탭의 다섯 줄이 첫 열에 셋, 둘째 열에 둘 놓입니다. 내용은 테두리의 자리(8)만큼 안쪽에 있습니다.
-        let shop = ShopWindow::in_window(1000.0, 4, 5);
+        let shop = ShopWindow::in_window(1000.0, 4, 5, 1);
         assert_eq!((shop.left, shop.top), (10.0, 60.0));
         assert_eq!((shop.width(), shop.height()), (716.0, 188.0));
         assert_eq!(shop.tab_width(), 175.0);
@@ -432,9 +447,9 @@ mod tests {
 
     #[test]
     fn a_narrow_window_gets_the_shop_in_one_column() {
-        assert_eq!(ShopWindow::in_window(736.0, 4, 5).columns, 2);
+        assert_eq!(ShopWindow::in_window(736.0, 4, 5, 1).columns, 2);
 
-        let shop = ShopWindow::in_window(735.0, 4, 5);
+        let shop = ShopWindow::in_window(735.0, 4, 5, 1);
         assert_eq!(shop.columns, 1);
         assert_eq!((shop.width(), shop.height()), (366.0, 268.0));
         assert_eq!(shop.place(4), (8.0, 196.0));

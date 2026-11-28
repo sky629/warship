@@ -1,6 +1,6 @@
 //! 화면 아래의 내 배 패널과 위쪽 상태 막대에 보여 줄 값입니다. 화면은 이 값을 막대와 칸으로 그리기만 합니다.
 
-use warship_protocol::{Welcome, WireScore, WireTeam};
+use warship_protocol::{Welcome, WireScore, WireSkillSpec, WireTeam};
 
 use crate::assets::{Icon, IconKind};
 use crate::interp::MyShip;
@@ -28,6 +28,8 @@ pub struct SkillSlot {
     pub icon: Icon,
     pub key: char,
     pub name: String,
+    /// 이 칸에 커서를 올리면 보여 주는 설명입니다.
+    pub detail: String,
     pub rank: u8,
     pub max_rank: u8,
     /// 다시 쓸 수 있을 때까지 남은 시간(초)입니다. 쓸 수 있으면 0입니다.
@@ -51,6 +53,12 @@ impl HudView {
     }
 }
 
+/// 스킬의 이름, 하는 일, 다시 쓸 수 있을 때까지의 시간을 적은 한 줄입니다.
+pub(crate) fn skill_detail(spec: &WireSkillSpec, tick_hz: u32) -> String {
+    let cooldown = spec.cooldown_ticks as f32 / tick_hz.max(1) as f32;
+    format!("{}: {}. 재사용 {cooldown}초", ko(&spec.name), spec.effect)
+}
+
 pub fn hud_view(welcome: &Welcome, me: &MyShip) -> HudView {
     let hull = welcome.hulls.get(usize::from(me.hull));
     // 레벨 L의 배는 `level_xp[L - 2]`를 넘었고, `level_xp[L - 1]`이 되면 다음 레벨입니다.
@@ -72,6 +80,7 @@ pub fn hud_view(welcome: &Welcome, me: &MyShip) -> HudView {
             icon: Icon::new(IconKind::Skill, &spec.name),
             key,
             name: ko(&spec.name).to_string(),
+            detail: skill_detail(spec, welcome.tick_hz),
             rank: state.rank,
             max_rank: spec.max_rank,
             ready_secs: state.ready_secs,

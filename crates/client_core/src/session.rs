@@ -222,7 +222,7 @@ fn reject_text(reason: RejectReason) -> String {
         RejectReason::RoomFull { capacity } => format!("방이 가득 찼습니다 (배 {capacity}척)"),
         RejectReason::BadRoomCode => "방 코드에는 a-z, 0-9, -, _만 쓸 수 있습니다".to_string(),
         RejectReason::BadName => {
-            "이름에는 영문자, 숫자, 빈칸, -, _를 12자까지 쓸 수 있습니다".to_string()
+            "이름에는 한글, 영문자, 숫자, 빈칸, -, _를 12자까지 쓸 수 있습니다".to_string()
         }
         RejectReason::ServerFull => "서버가 방을 더 열 수 없습니다".to_string(),
         RejectReason::VersionMismatch { server } => {
