@@ -7,3 +7,9 @@ Every file in this folder is either made by a script in `scripts/assets/` or com
 | `models/` | Pirate Kit 2.1 by Kenney (https://kenney.nl/assets/pirate-kit), rearranged to the model rules of the game | `scripts/assets/build_models.py` |
 | `sounds/buy.ogg`, `sounds/refuse.ogg` | Interface Sounds by Kenney (https://kenney.nl/assets/interface-sounds) | `scripts/assets/build_sounds.py` |
 | the other files in `sounds/` | synthesized, no outside material | `scripts/assets/build_sounds.py` |
+| `icons/` | pictograms from Board Game Icons and Game Icons by Kenney (https://kenney.nl/assets/board-game-icons, https://kenney.nl/assets/game-icons); cannons, ships, shots and tiles are drawn by the script | `scripts/assets/build_icons.py` |
+| `ui/`, `textures/water.png` | drawn by the script, no outside material | `scripts/assets/build_ui.py` |
+| `music/start.ogg` | Pirate Game Tune by Tozan (https://opengameart.org/content/pirate-game-tune), unchanged | copied |
+| `music/battle.ogg` | Boss Battle Music by Juhani Junkala / SubspaceAudio (https://opengameart.org/content/boss-battle-music), the seamless loop | `ffmpeg -i <wav> -ac 2 -ar 44100 -c:a vorbis -strict -2 -q:a 5 battle.ogg` |
+
+`scripts/assets/raster.py` holds the drawing code that the icon and UI scripts share.
