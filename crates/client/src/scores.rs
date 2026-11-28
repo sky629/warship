@@ -9,7 +9,7 @@ use crate::net::{CurrentFrame, Net};
 use crate::ui::{self, BAD, BLUE, DIM, GOLD, GOOD, LIT, Panel, RED, TEXT, words};
 
 /// 점수판의 너비입니다.
-const WIDTH: f32 = 460.0;
+const WIDTH: f32 = 508.0;
 /// 열의 너비입니다. 이름, 레벨, 가라앉힌 배, 가라앉은 횟수, 가라앉힌 NPC 배의 순서입니다.
 const COLUMNS: [f32; 6] = [200.0, 44.0, 48.0, 48.0, 48.0, 80.0];
 
@@ -21,6 +21,8 @@ pub fn setup(mut commands: Commands) {
     commands.spawn((
         ScoreRoot,
         Panel,
+        // 점수판은 다른 모든 UI의 위에 그립니다.
+        GlobalZIndex(10),
         Node {
             position_type: PositionType::Absolute,
             top: percent(16),

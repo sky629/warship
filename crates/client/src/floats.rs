@@ -21,6 +21,8 @@ pub struct FloatRoot;
 pub fn setup(mut commands: Commands) {
     commands.spawn((
         FloatRoot,
+        // 떠오르는 숫자는 패널의 아래에 그립니다.
+        GlobalZIndex(-1),
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),

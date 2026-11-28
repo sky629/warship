@@ -75,7 +75,10 @@ fn main() {
             PostUpdate,
             (
                 ui::dress_text,
-                ui::back_panels.before(bevy::ui::UiSystems::Layout),
+                // 바탕 그림은 이번 프레임의 배치와 겹치는 순서의 계산에 들어가야 합니다.
+                ui::back_panels
+                    .before(bevy::ui::UiSystems::Prepare)
+                    .before(bevy::ui::UiSystems::Stack),
             ),
         )
         .add_systems(

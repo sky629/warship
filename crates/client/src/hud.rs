@@ -101,6 +101,8 @@ pub fn setup(mut commands: Commands) {
     ));
     commands.spawn((
         LabelRoot,
+        // 이름표는 패널의 아래에 그립니다.
+        GlobalZIndex(-1),
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),
