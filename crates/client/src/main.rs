@@ -69,8 +69,13 @@ fn main() {
                 scores::setup,
             ),
         )
-        .add_systems(PostStartup, ui::dress_panels)
-        .add_systems(PostUpdate, ui::dress_text)
+        .add_systems(
+            PostUpdate,
+            (
+                ui::dress_text,
+                ui::back_panels.before(bevy::ui::UiSystems::Layout),
+            ),
+        )
         .add_systems(
             Update,
             (

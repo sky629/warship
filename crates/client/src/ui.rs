@@ -104,10 +104,16 @@ pub fn icon_tile(
     }
 }
 
-/// 패널의 바탕 그림이 에셋 폴더에 있으면, 모든 패널의 바탕을 그 그림으로 바꿉니다. 가장자리는 늘이지 않습니다.
-pub fn dress_panels(
+/// 패널의 바탕 그림을 그리는 UI입니다. 패널의 첫째 자식이고, 패널의 안쪽 여백까지 덮습니다.
+#[derive(Component)]
+pub struct Backdrop;
+
+/// 패널의 바탕 그림이 에셋 폴더에 있으면, 바탕 그림이 없는 패널마다 바탕 그림을 첫째 자식으로 넣습니다.
+/// 패널이 자식을 지우고 다시 만들면 바탕 그림도 다시 넣습니다. 가장자리는 늘이지 않습니다.
+pub fn back_panels(
     assets: Res<AssetServer>,
-    panels: Query<Entity, With<Panel>>,
+    panels: Query<(Entity, Option<&Children>), With<Panel>>,
+    backdrops: Query<(), With<Backdrop>>,
     mut commands: Commands,
 ) {
     if !has(PANEL_IMAGE) {
@@ -117,13 +123,26 @@ pub fn dress_panels(
         border: BorderRect::all(PANEL_BORDER),
         ..default()
     };
-    for panel in &panels {
+    for (panel, children) in &panels {
+        let backed = |children: &Children| children.iter().any(|child| backdrops.contains(child));
+        if children.is_some_and(backed) {
+            continue;
+        }
         let image = ImageNode::new(assets.load(PANEL_IMAGE))
             .with_mode(NodeImageMode::Sliced(slicer.clone()));
+        let place = Node {
+            position_type: PositionType::Absolute,
+            left: px(0),
+            top: px(0),
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        };
+        let backdrop = commands.spawn((Backdrop, place, image)).id();
         commands
             .entity(panel)
             .remove::<BackgroundColor>()
-            .insert(image);
+            .insert_children(0, &[backdrop]);
     }
 }
 

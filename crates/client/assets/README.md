@@ -80,7 +80,7 @@ A browser starts sound only after the first click or key press on the page.
 
 | File | Use |
 |---|---|
-| `ui/panel.png` | Background of the top bar, the ship panel, the shop window, the scoreboard and the start panel. Nine-slice: the outer 12 pixels on each side are the border and are not stretched. |
+| `ui/panel.png` | Background of the top bar, the ship panel, the shop window, the scoreboard and the start panel. Nine-slice: the outer 12 pixels on each side are the border and are not stretched. Keep the visible frame within the outer 8 pixels; text starts 8 pixels from the edge in the smallest panel. |
 | `ui/start.png` | Full-screen picture behind the start panel. It is stretched to the window. |
 | `ui/logo.png` | Title picture at the top of the start panel, 96 pixels high. |
 | `fonts/ui.ttf` | Font of all text. |

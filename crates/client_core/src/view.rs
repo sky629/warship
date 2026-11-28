@@ -118,6 +118,7 @@ impl Minimap {
 }
 
 /// 창의 왼쪽 위에 놓이는 상점 창의 자리(픽셀)입니다. 위에서부터 탭 줄, 열린 탭의 줄(두 열), 커서 아래의 줄을 설명하는 줄입니다.
+/// 이 내용의 둘레에 테두리의 자리가 있습니다.
 /// 탭의 너비, 줄의 높이, 열의 너비가 모두 같아서, 커서의 자리로 탭과 줄을 찾습니다. 줄은 첫 열을 위에서부터 채우고 둘째 열로 이어집니다.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShopWindow {
@@ -138,6 +139,8 @@ impl ShopWindow {
     pub const ROW: f32 = 40.0;
     /// 설명 줄의 높이입니다.
     pub const FOOTER: f32 = 24.0;
+    /// 상점 창의 가장자리와 내용 사이의 간격입니다. 패널의 바탕 그림의 테두리가 이 자리에 보입니다.
+    pub const FRAME: f32 = 8.0;
     /// 창의 왼쪽 가장자리와 상점 창 사이의 간격입니다.
     pub const MARGIN: f32 = 10.0;
     /// 창의 위쪽 가장자리와 상점 창 사이의 간격입니다. 맨 위의 상태 막대와 안내 줄을 가리지 않습니다.
@@ -146,7 +149,7 @@ impl ShopWindow {
     /// 너비가 `window_width`인 창에서, 탭이 `tabs`개이고 열린 탭의 줄이 `rows`개인 상점 창의 자리입니다.
     /// 창이 두 열을 놓기에 좁으면 한 열로 놓습니다.
     pub fn in_window(window_width: f32, tabs: usize, rows: usize) -> ShopWindow {
-        let fits = window_width >= Self::COLUMN * 2.0 + Self::MARGIN * 2.0;
+        let fits = window_width >= (Self::COLUMN + Self::MARGIN + Self::FRAME) * 2.0;
         ShopWindow {
             left: Self::MARGIN,
             top: Self::TOP,
@@ -156,8 +159,13 @@ impl ShopWindow {
         }
     }
 
-    pub fn width(&self) -> f32 {
+    /// 테두리의 자리를 뺀 내용의 너비입니다.
+    fn inner_width(&self) -> f32 {
         Self::COLUMN * self.columns as f32
+    }
+
+    pub fn width(&self) -> f32 {
+        self.inner_width() + Self::FRAME * 2.0
     }
 
     /// 열 하나에 놓이는 줄의 수입니다.
@@ -165,13 +173,22 @@ impl ShopWindow {
         self.rows.div_ceil(self.columns)
     }
 
-    /// 탭 줄, 줄, 설명 줄을 합한 높이입니다.
-    pub fn height(&self) -> f32 {
+    /// 탭 줄, 줄, 설명 줄을 합한 내용의 높이입니다.
+    fn inner_height(&self) -> f32 {
         Self::TAB + self.lines() as f32 * Self::ROW + Self::FOOTER
     }
 
+    pub fn height(&self) -> f32 {
+        self.inner_height() + Self::FRAME * 2.0
+    }
+
     pub fn tab_width(&self) -> f32 {
-        self.width() / self.tabs.max(1) as f32
+        self.inner_width() / self.tabs.max(1) as f32
+    }
+
+    /// `index`번 탭이 상점 창의 왼쪽 위에서 얼마나 떨어져 있는지입니다.
+    pub fn tab_place(&self, index: usize) -> (f32, f32) {
+        (Self::FRAME + index as f32 * self.tab_width(), Self::FRAME)
     }
 
     /// `index`번 줄이 상점 창의 왼쪽 위에서 얼마나 떨어져 있는지입니다.
@@ -179,14 +196,17 @@ impl ShopWindow {
         let lines = self.lines().max(1);
         let (column, line) = (index / lines, index % lines);
         (
-            column as f32 * Self::COLUMN,
-            Self::TAB + line as f32 * Self::ROW,
+            Self::FRAME + column as f32 * Self::COLUMN,
+            Self::FRAME + Self::TAB + line as f32 * Self::ROW,
         )
     }
 
     /// 설명 줄이 상점 창의 왼쪽 위에서 얼마나 떨어져 있는지입니다.
     pub fn footer(&self) -> (f32, f32) {
-        (0.0, Self::TAB + self.lines() as f32 * Self::ROW)
+        (
+            Self::FRAME,
+            Self::FRAME + Self::TAB + self.lines() as f32 * Self::ROW,
+        )
     }
 
     /// 창의 `cursor` 자리가 상점 창 위인지입니다.
@@ -195,17 +215,26 @@ impl ShopWindow {
         (0.0..self.width()).contains(&x) && (0.0..self.height()).contains(&y)
     }
 
+    /// 창의 `cursor` 자리가 상점 창의 내용 위이면, 내용의 왼쪽 위에서 잰 자리입니다.
+    fn inside(&self, cursor: (f32, f32)) -> Option<(f32, f32)> {
+        let x = cursor.0 - self.left - Self::FRAME;
+        let y = cursor.1 - self.top - Self::FRAME;
+        let inside =
+            (0.0..self.inner_width()).contains(&x) && (0.0..self.inner_height()).contains(&y);
+        inside.then_some((x, y))
+    }
+
     /// 창의 `cursor` 자리에 탭이 있으면 그 탭의 번호입니다.
     pub fn tab_at(&self, cursor: (f32, f32)) -> Option<usize> {
-        let (x, y) = (cursor.0 - self.left, cursor.1 - self.top);
-        let on_tabs = self.covers(cursor) && y < Self::TAB;
-        on_tabs.then(|| ((x / self.tab_width()) as usize).min(self.tabs.saturating_sub(1)))
+        let (x, y) = self.inside(cursor)?;
+        (y < Self::TAB).then(|| ((x / self.tab_width()) as usize).min(self.tabs.saturating_sub(1)))
     }
 
     /// 창의 `cursor` 자리에 열린 탭의 줄이 있으면 그 줄의 번호입니다.
     pub fn row_at(&self, cursor: (f32, f32)) -> Option<usize> {
-        let (x, y) = (cursor.0 - self.left, cursor.1 - self.top - Self::TAB);
-        if !self.covers(cursor) || y < 0.0 {
+        let (x, y) = self.inside(cursor)?;
+        let y = y - Self::TAB;
+        if y < 0.0 {
             return None;
         }
         let (column, line) = ((x / Self::COLUMN) as usize, (y / Self::ROW) as usize);
@@ -361,47 +390,56 @@ mod tests {
 
     #[test]
     fn the_shop_window_has_tabs_two_columns_and_finds_what_is_under_the_cursor() {
-        // 탭이 넷이고, 열린 탭의 다섯 줄이 첫 열에 셋, 둘째 열에 둘 놓입니다.
+        // 탭이 넷이고, 열린 탭의 다섯 줄이 첫 열에 셋, 둘째 열에 둘 놓입니다. 내용은 테두리의 자리(8)만큼 안쪽에 있습니다.
         let shop = ShopWindow::in_window(1000.0, 4, 5);
         assert_eq!((shop.left, shop.top), (10.0, 60.0));
-        assert_eq!((shop.width(), shop.height()), (700.0, 172.0));
+        assert_eq!((shop.width(), shop.height()), (716.0, 188.0));
         assert_eq!(shop.tab_width(), 175.0);
-        assert_eq!(shop.place(0), (0.0, 28.0));
-        assert_eq!(shop.place(2), (0.0, 108.0));
-        assert_eq!(shop.place(4), (350.0, 68.0));
-        assert_eq!(shop.footer(), (0.0, 148.0));
+        assert_eq!(shop.tab_place(0), (8.0, 8.0));
+        assert_eq!(shop.tab_place(3), (533.0, 8.0));
+        assert_eq!(shop.place(0), (8.0, 36.0));
+        assert_eq!(shop.place(2), (8.0, 116.0));
+        assert_eq!(shop.place(4), (358.0, 76.0));
+        assert_eq!(shop.footer(), (8.0, 156.0));
 
-        assert_eq!(shop.tab_at((10.0, 60.0)), Some(0));
-        assert_eq!(shop.tab_at((185.0, 87.0)), Some(1));
-        assert_eq!(shop.tab_at((709.0, 70.0)), Some(3));
-        assert_eq!(shop.tab_at((200.0, 88.0)), None, "the rows");
+        assert_eq!(shop.tab_at((18.0, 68.0)), Some(0));
+        assert_eq!(shop.tab_at((193.0, 95.0)), Some(1));
+        assert_eq!(shop.tab_at((717.0, 78.0)), Some(3));
+        assert_eq!(shop.tab_at((208.0, 96.0)), None, "the rows");
+        assert_eq!(shop.tab_at((17.0, 70.0)), None, "the frame");
+        assert_eq!(shop.tab_at((100.0, 67.0)), None, "the frame");
 
-        assert_eq!(shop.row_at((10.0, 88.0)), Some(0));
-        assert_eq!(shop.row_at((359.0, 127.0)), Some(0));
-        assert_eq!(shop.row_at((200.0, 128.0)), Some(1));
-        assert_eq!(shop.row_at((360.0, 88.0)), Some(3), "the second column");
-        assert_eq!(shop.row_at((500.0, 167.0)), Some(4));
-        assert_eq!(shop.row_at((500.0, 168.0)), None, "the short column ends");
-        assert_eq!(shop.row_at((200.0, 208.0)), None, "the detail line");
-        assert_eq!(shop.row_at((200.0, 70.0)), None, "the tabs");
+        assert_eq!(shop.row_at((18.0, 96.0)), Some(0));
+        assert_eq!(shop.row_at((367.0, 135.0)), Some(0));
+        assert_eq!(shop.row_at((208.0, 136.0)), Some(1));
+        assert_eq!(shop.row_at((368.0, 96.0)), Some(3), "the second column");
+        assert_eq!(shop.row_at((508.0, 175.0)), Some(4));
+        assert_eq!(shop.row_at((508.0, 176.0)), None, "the short column ends");
+        assert_eq!(shop.row_at((208.0, 216.0)), None, "the detail line");
+        assert_eq!(shop.row_at((208.0, 78.0)), None, "the tabs");
+        assert_eq!(shop.row_at((718.0, 100.0)), None, "the frame");
 
-        assert!(shop.covers((200.0, 231.0)));
-        assert!(!shop.covers((200.0, 232.0)));
-        assert!(!shop.covers((710.0, 100.0)));
+        assert!(shop.covers((200.0, 247.0)));
+        assert!(!shop.covers((200.0, 248.0)));
+        assert!(
+            shop.covers((725.0, 100.0)),
+            "the frame is a part of the window"
+        );
+        assert!(!shop.covers((726.0, 100.0)));
         assert!(!shop.covers((9.0, 100.0)));
         assert!(!shop.covers((200.0, 59.0)));
     }
 
     #[test]
     fn a_narrow_window_gets_the_shop_in_one_column() {
-        assert_eq!(ShopWindow::in_window(720.0, 4, 5).columns, 2);
+        assert_eq!(ShopWindow::in_window(736.0, 4, 5).columns, 2);
 
-        let shop = ShopWindow::in_window(719.0, 4, 5);
+        let shop = ShopWindow::in_window(735.0, 4, 5);
         assert_eq!(shop.columns, 1);
-        assert_eq!((shop.width(), shop.height()), (350.0, 252.0));
-        assert_eq!(shop.place(4), (0.0, 188.0));
-        assert_eq!(shop.row_at((200.0, 60.0 + 28.0 + 4.0 * 40.0)), Some(4));
-        assert!(!shop.covers((360.0, 100.0)), "there is no second column");
+        assert_eq!((shop.width(), shop.height()), (366.0, 268.0));
+        assert_eq!(shop.place(4), (8.0, 196.0));
+        assert_eq!(shop.row_at((200.0, 68.0 + 28.0 + 4.0 * 40.0)), Some(4));
+        assert!(!shop.covers((376.0, 100.0)), "there is no second column");
     }
 
     #[test]

@@ -152,7 +152,7 @@ pub fn show_shop(
     };
     commands.entity(root).with_children(|parent| {
         for (index, tab) in tabs.iter().enumerate() {
-            let at = (index as f32 * shop.tab_width(), 0.0);
+            let at = shop.tab_place(index);
             let back = if index == open.tab { LIT } else { SLOT };
             let color = if near.contains(&tab.shop) { GOOD } else { TEXT };
             let size = (shop.tab_width() - 2.0, ShopWindow::TAB - 2.0);
@@ -185,7 +185,7 @@ pub fn show_shop(
                     line.spawn(words(format!("{}g", row.price), 14.0, price));
                 });
         }
-        let size = (shop.width(), ShopWindow::FOOTER);
+        let size = (shop.width() - ShopWindow::FRAME * 2.0, ShopWindow::FOOTER);
         parent
             .spawn(cell(shop.footer(), size))
             .with_children(|line| {
