@@ -94,6 +94,7 @@ fn pay_assists(
         let Some(ship) = world.ships.get_mut(&wound.by) else {
             continue;
         };
+        ship.assists += 1;
         if gold == 0 {
             continue;
         }

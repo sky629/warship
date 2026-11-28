@@ -105,6 +105,8 @@ fn ships_that_hurt_a_sunk_enemy_share_the_assist_gold_by_the_damage_they_dealt()
     assert_eq!(paid[3] - before[3], 200 * 10 / 40 + income);
     assert_eq!(paid[2] - before[2], income, "an old hit is no help");
     assert!(s.ship(victim).wounds.is_empty());
+    let assists = [killer, helper, late, other].map(|id| s.ship(id).assists);
+    assert_eq!(assists, [0, 1, 0, 1]);
 }
 
 #[test]

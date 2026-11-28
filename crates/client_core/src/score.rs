@@ -1,4 +1,4 @@
-//! 점수판입니다. 진영마다 배의 이름, 레벨, 가라앉힌 적의 배의 수, 가라앉은 횟수, 가라앉힌 NPC 배의 수를 보여 줍니다.
+//! 점수판입니다. 진영마다 배의 이름, 레벨, 가라앉힌 적의 배의 수, 가라앉은 횟수, 도운 횟수, 가라앉힌 NPC 배의 수를 보여 줍니다.
 
 use warship_protocol::{WireMember, WireScore, WireTeam};
 
@@ -21,6 +21,7 @@ pub struct ScoreRow {
     pub level: u8,
     pub kills: u32,
     pub deaths: u32,
+    pub assists: u32,
     pub creep_kills: u32,
 }
 
@@ -37,6 +38,7 @@ pub fn score_table(scores: &[WireScore], roster: &[WireMember], me: u32) -> Vec<
                 level: score.level,
                 kills: score.kills,
                 deaths: score.deaths,
+                assists: score.assists,
                 creep_kills: score.creep_kills,
             }
         });

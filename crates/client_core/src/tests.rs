@@ -159,6 +159,7 @@ fn the_scoreboard_lists_each_team_with_the_best_ship_first() {
         level: 3,
         kills,
         deaths,
+        assists: 5,
         creep_kills: 14,
     };
     let scores = [
@@ -180,6 +181,7 @@ fn the_scoreboard_lists_each_team_with_the_best_ship_first() {
         level: 3,
         kills,
         deaths,
+        assists: 5,
         creep_kills: 14,
     };
     let expected = [
@@ -1030,6 +1032,7 @@ fn the_top_bar_shows_the_clock_and_the_kills_of_each_team() {
         level: 1,
         kills,
         deaths: 0,
+        assists: 0,
         creep_kills: 0,
     };
     let scores = [
@@ -1107,6 +1110,23 @@ fn the_sounds_between_two_frames_are_the_things_that_happened() {
     assert_eq!(events[2].at, None, "my own purchase has no place");
     // 같은 프레임 사이에는 새로 일어난 일이 없습니다.
     assert_eq!(sound_events(&welcome, &next, &next), []);
+    // 새로 나온 골드의 숫자는 보상의 소리를 냅니다. 피해의 숫자는 소리가 없습니다.
+    let mut paid = next.clone();
+    let float = |id, kind| FloatView {
+        id,
+        kind,
+        pos: Vec2::new(5.0, 5.0),
+        amount: 20,
+        age: 0.0,
+    };
+    paid.floats = vec![float(1, FloatKind::Dealt), float(2, FloatKind::Gold)];
+    let gains: Vec<Sound> = sound_events(&welcome, &next, &paid)
+        .into_iter()
+        .map(|event| event.sound)
+        .collect();
+    assert_eq!(gains, [Sound::Gain]);
+    assert_eq!(sound_events(&welcome, &paid, &paid), []);
+    assert_eq!(Sound::Gain.paths(), ["sounds/gain.ogg"]);
     assert_eq!(Sound::LevelUp.paths(), ["sounds/level_up.ogg"]);
     // 포탄의 모형도 그 무기의 것을 먼저 찾고, 없으면 공격 방식의 것을 찾습니다.
     let models = crate::shot_models("Siege Mortar", WireShot::Bomb { radius: 2.5 });
@@ -1129,7 +1149,7 @@ fn a_ship_of_a_hull_with_more_hp_is_drawn_larger() {
     let frame = session.frame(1.15).unwrap();
 
     let sizes: Vec<f32> = frame.ships.iter().map(|ship| ship.size).collect();
-    assert_eq!(sizes, [1.0, 2.0_f32.sqrt()]);
+    assert_eq!(sizes, [1.0, 2.0_f32.cbrt()]);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 
 사용법: python3 scripts/assets/build_sounds.py <Interface Sounds를 푼 폴더>
 
-발사음, 폭발음, 침몰음, 건물이 무너지는 소리, 레벨과 승패의 소리는 ffmpeg의 소리 생성기로 합성합니다.
+발사음, 폭발음, 침몰음, 건물이 무너지는 소리, 골드의 보상, 레벨과 승패의 소리는 ffmpeg의 소리 생성기로 합성합니다.
 구매와 거절의 소리는 Kenney의 Interface Sounds(CC0)에서 가져옵니다.
 모든 소리는 가장 큰 자리가 -3 dB가 되도록 크기를 맞춥니다.
 """
@@ -61,6 +61,8 @@ SYNTH = [
     ("wreck", [noise("brown", 1.8), noise("white", 1.8), wave("sin(2*PI*(60-15*t)*t)*exp(-3*t)", 1.8)],
      "[0]lowpass=f=400,volume='exp(-2*t)':eval=frame[n];[1]bandpass=f=1800:w=1500,tremolo=f=17:d=0.9,"
      "volume='0.4*exp(-3*t)':eval=frame[c];[n][c][2]amix=inputs=3:normalize=0[out]"),
+    # 동전이 부딪히는 짧고 높은 두 음입니다.
+    ("gain", [notes([1568.0, 2093.0], 0.07, 14.0)], "[0]anull[out]"),
     # 올라가는 두 음입니다.
     ("level_up", [notes([659.3, 987.8], 0.12, 6.0)], "[0]anull[out]"),
     # 올라가는 장조의 화음입니다.

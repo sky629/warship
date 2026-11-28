@@ -11,7 +11,7 @@ use crate::ui::{self, BAD, BLUE, DIM, GOLD, GOOD, LIT, Panel, RED, TEXT, words};
 /// 점수판의 너비입니다.
 const WIDTH: f32 = 460.0;
 /// 열의 너비입니다. 이름, 레벨, 가라앉힌 배, 가라앉은 횟수, 가라앉힌 NPC 배의 순서입니다.
-const COLUMNS: [f32; 5] = [200.0, 44.0, 48.0, 48.0, 80.0];
+const COLUMNS: [f32; 6] = [200.0, 44.0, 48.0, 48.0, 48.0, 80.0];
 
 /// 점수판의 바탕입니다.
 #[derive(Component)]
@@ -38,7 +38,7 @@ pub fn setup(mut commands: Commands) {
 }
 
 /// 한 줄의 칸들입니다. 첫 칸은 이름이고 나머지는 오른쪽으로 맞춘 숫자입니다.
-fn line(parent: &mut ChildSpawnerCommands, cells: [String; 5], color: Color, back: Color) {
+fn line(parent: &mut ChildSpawnerCommands, cells: [String; 6], color: Color, back: Color) {
     let row = Node {
         padding: UiRect::axes(px(6), px(2)),
         ..default()
@@ -97,7 +97,7 @@ pub fn show_scores(
                 WireTeam::Blue => ("Blue", BLUE),
                 WireTeam::Wild => ("Wild", DIM),
             };
-            let heading = [title, "Lv", "K", "D", "Creeps"].map(str::to_string);
+            let heading = [title, "Lv", "K", "D", "A", "Creeps"].map(str::to_string);
             line(parent, heading, color, Color::NONE);
             for row in team.rows {
                 let back = if row.mine { LIT } else { Color::NONE };
@@ -106,6 +106,7 @@ pub fn show_scores(
                     row.level.to_string(),
                     row.kills.to_string(),
                     row.deaths.to_string(),
+                    row.assists.to_string(),
                     row.creep_kills.to_string(),
                 ];
                 line(parent, cells, TEXT, back);

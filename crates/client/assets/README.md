@@ -68,6 +68,7 @@ Ogg Vorbis files.
 | `sounds/sink.ogg` | a ship sinks |
 | `sounds/wreck.ogg` | a structure is destroyed |
 | `sounds/buy.ogg` | you spend gold |
+| `sounds/gain.ogg` | your ship gets gold for a kill, an assist or a trade |
 | `sounds/refuse.ogg` | the server refuses your order |
 | `sounds/level_up.ogg` | your ship gains a level |
 | `sounds/victory.ogg`, `sounds/defeat.ogg` | the match ends |

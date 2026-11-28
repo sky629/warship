@@ -350,10 +350,11 @@ fn build(welcome: &Welcome, prev: &Snapshot, next: &Snapshot, alpha: f32) -> Fra
                 mount.ready_at,
             ));
         }
-        // 배는 선체의 최대 HP가 클수록 크게 그립니다. 첫 번째 선체의 크기가 1입니다.
+        // 배는 선체의 최대 HP가 클수록 크게 그립니다. 첫 번째 선체의 크기가 1이고, HP의 비율의 세제곱근만큼 큽니다.
+        // 가장 큰 선체가 건물보다 지나치게 커지지 않게 완만하게 키웁니다.
         let hull_hp = |hull: u16| welcome.hulls.get(usize::from(hull)).map(|hull| hull.max_hp);
         let ratio = hull_hp(ship.hull).zip(hull_hp(0));
-        let size = ratio.map_or(1.0, |(hp, first)| (hp as f32 / first.max(1) as f32).sqrt());
+        let size = ratio.map_or(1.0, |(hp, first)| (hp as f32 / first.max(1) as f32).cbrt());
         ships.push(ShipView {
             id: ship.id,
             team: ship.team,

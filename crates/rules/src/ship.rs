@@ -59,6 +59,8 @@ pub struct Ship {
     pub kills: u32,
     /// 이 배가 가라앉은 횟수입니다.
     pub deaths: u32,
+    /// 다른 배가 가라앉힌 적의 배 가운데, 이 배가 최근에 맞혀서 도운 것의 수입니다.
+    pub assists: u32,
     /// 이 배의 포탄이 가라앉힌 NPC 배의 수입니다.
     pub creep_kills: u32,
     /// 마지막으로 처리한 입력의 순서 번호입니다.
@@ -187,6 +189,7 @@ impl Ship {
             mounts,
             kills: 0,
             deaths: 0,
+            assists: 0,
             creep_kills: 0,
             last_input_seq: 0,
             last_command_seq: 0,

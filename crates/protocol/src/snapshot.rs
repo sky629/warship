@@ -61,6 +61,8 @@ pub struct WireScore {
     pub kills: u32,
     /// 가라앉은 횟수입니다.
     pub deaths: u32,
+    /// 다른 배가 가라앉힌 적의 배 가운데 이 배가 도운 것의 수입니다.
+    pub assists: u32,
     /// 가라앉힌 NPC 배의 수입니다.
     pub creep_kills: u32,
 }
@@ -287,6 +289,7 @@ impl Snapshot {
                     level: ship.level(sim.tuning()) as u8,
                     kills: ship.kills,
                     deaths: ship.deaths,
+                    assists: ship.assists,
                     creep_kills: ship.creep_kills,
                 })
                 .collect(),
