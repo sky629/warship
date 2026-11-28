@@ -45,7 +45,7 @@ pub struct WireNote {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WireNoteKind {
-    /// `target`이 피해를 받았습니다. `by`는 포탄을 쏜 플레이어의 배이고, NPC 배와 건물이 쏜 포탄에는 없습니다.
+    /// `target`이 피해를 받았습니다. `by`는 포탄을 쏜 배가 받는 진영의 배일 때 그 배의 번호입니다.
     Hit { by: Option<u32>, target: WireTarget },
     /// 이 번호의 배가 골드를 받았습니다.
     Gold { ship: u32 },
@@ -305,6 +305,7 @@ impl Snapshot {
 
 /// `team`의 배가 주었거나 받은 피해, 받은 골드의 보상만 전송 형식으로 바꿉니다.
 /// 준 피해는 맞은 순간에 그 개체가 이 진영에 보이고 있었을 때만 싣습니다. 보이지 않는 적의 자리를 알려 주지 않기 위해서입니다.
+/// 쏜 배의 번호는 그 배가 이 진영의 배일 때만 싣습니다. 보이지 않는 적이 쏘았다는 것을 알려 주지 않기 위해서입니다.
 fn wire_note(sim: &Sim, team: Team, note: &Note) -> Option<WireNote> {
     let ours = |ship| sim.ship(ship).is_some_and(|ship| ship.team == team);
     let kind = match note.kind {
@@ -312,7 +313,7 @@ fn wire_note(sim: &Sim, team: Team, note: &Note) -> Option<WireNote> {
             let taken = matches!(target, Target::Ship(ship) if ours(ship));
             let dealt = by.is_some_and(ours) && seen[team.index()];
             (taken || dealt).then_some(WireNoteKind::Hit {
-                by: by.map(|ship| ship.0),
+                by: by.filter(|ship| ours(*ship)).map(|ship| ship.0),
                 target: wire_target(target),
             })?
         }
@@ -452,8 +453,11 @@ mod tests {
         assert_eq!(sent(Team::RED, &on_ship), Some(wire));
         assert_eq!(
             sent(Team::BLUE, &on_ship),
-            Some(wire),
-            "the hit ship's team"
+            Some(WireNoteKind::Hit {
+                by: None,
+                target: WireTarget::Ship(blue.0),
+            }),
+            "the hit ship's team does not learn who fired"
         );
 
         let unseen = hit(Target::Creep(CreepId(4)), [false, false]);

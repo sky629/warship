@@ -109,6 +109,11 @@ fn a_hit_and_a_bounty_are_noted_for_a_second() {
     assert_eq!(kinds, [hit, NoteKind::Gold { ship: killer }]);
     assert_eq!((notes[0].amount, notes[1].amount), (10, 200));
     assert_eq!(notes[0].pos, s.ship(victim).pos);
+    assert_eq!(
+        notes[1].pos,
+        s.ship(killer).pos,
+        "the gold floats over the paid ship"
+    );
     assert_eq!((notes[0].id, notes[1].id), (0, 1));
 
     let noted = notes[0].tick;
