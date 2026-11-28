@@ -87,6 +87,15 @@ A browser starts sound only after the first click or key press on the page.
 
 Without these files, panels are a flat dark color, the start screen has no picture and shows the title as text, and the text uses the built-in font.
 
+## Minimap
+
+| File | Use |
+|---|---|
+| `ui/minimap.png` | Picture of the whole map behind the marks. It is stretched to the minimap (2 pixels for each tile; 192 x 128 for the default map). With this file the island marks are not drawn. |
+| `ui/minimap/<kind>.png` | Mark for one kind: `island`, `port`, `camp`, `tower`, `harbor`, `base`, `creep`, `ship`, `me`. Draw it in white; the game colors it (team color, gold for a port, pale for a monster camp, white for your ship). |
+
+Without a mark file the mark is a square. Ports and monster camps are hollow squares.
+
 ## Sizes on screen
 
 | Slot | Size in pixels |

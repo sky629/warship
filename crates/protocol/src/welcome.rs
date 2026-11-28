@@ -53,6 +53,8 @@ pub struct Welcome {
     pub islands: Vec<WireIsland>,
     /// 어느 진영의 것도 아닌 항구의 자리입니다.
     pub ports: Vec<WireVec2>,
+    /// 중립 몬스터가 지키는 자리입니다.
+    pub camps: Vec<WireVec2>,
 }
 
 /// 원 모양의 섬입니다.
@@ -382,6 +384,12 @@ impl Welcome {
                 .ports
                 .iter()
                 .map(|port| WireVec2::new(port.pos.x, port.pos.y))
+                .collect(),
+            camps: tuning
+                .map
+                .camps
+                .iter()
+                .map(|camp| WireVec2::new(camp.pos.x, camp.pos.y))
                 .collect(),
             tower: structure(StructureKind::Tower),
             harbor: structure(StructureKind::Harbor),

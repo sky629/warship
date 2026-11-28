@@ -100,6 +100,7 @@ fn welcome() -> Welcome {
         },
         shops: Vec::new(),
         ports: Vec::new(),
+        camps: Vec::new(),
     }
 }
 
