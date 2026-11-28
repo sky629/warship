@@ -1,4 +1,5 @@
 //! 골드와 경험치입니다. 모든 배가 1초마다 수입을 받고, 적을 가라앉히거나 건물을 파괴한 포탄을 쏜 배가 보상을 받습니다.
+//! 플레이어의 배를 NPC 배나 건물이 가라앉히면, 그 배를 최근에 마지막으로 맞힌 배가 가라앉힌 배로서 보상을 받습니다.
 //! 플레이어의 배가 가라앉으면, 그 배를 최근에 맞힌 다른 배들도 준 피해의 비율만큼 도움의 보상을 받습니다.
 //! 그 자리 가까이에 있던 배는 경험치를 받습니다. 배마다 가라앉힌 적의 수와 가라앉은 횟수도 여기서 셉니다.
 
@@ -21,7 +22,8 @@ pub(crate) fn pay_income(world: &mut World, tuning: &Tuning, tick: u64) {
 
 /// HP를 0으로 만든 포탄을 쏜 배에 보상 골드를 주고, 그 자리 가까이에 떠 있는 적 진영의 배에 기본 보상과 같은 양의 경험치를 나누어 줍니다.
 /// 플레이어의 배가 가라앉으면 `pay_assists`가 도운 배들에 골드를 줍니다.
-/// NPC 배나 건물이 쏜 포탄에는 골드가 없습니다. 경험치는 누가 쏘았는지와 관계없이 줍니다.
+/// NPC 배나 건물이 쏜 포탄에는 골드가 없습니다. 다만 그 포탄이 플레이어의 배를 가라앉히면 `last_to_hit`의 배가 가라앉힌 배입니다.
+/// 경험치는 누가 쏘았는지와 관계없이 줍니다.
 /// 지우기 전의 개체를 읽으므로, 가라앉은 NPC 배와 파괴된 건물을 지우기 전에 불러야 합니다.
 pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], tick: u64) {
     for kill in kills {
@@ -42,7 +44,11 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], t
         let Some((bounty, team, pos)) = victim else {
             continue;
         };
-        if let Some(ship) = kill.by.and_then(|id| world.ships.get_mut(&id)) {
+        let by = kill.by.or_else(|| match kill.target {
+            Target::Ship(id) => last_to_hit(world.ships.get(&id)?, tuning, tick),
+            Target::Creep(_) | Target::Structure(_) => None,
+        });
+        if let Some(ship) = by.and_then(|id| world.ships.get_mut(&id)) {
             // 보상의 숫자는 받은 배의 자리에 띄웁니다. 가라앉은 개체의 자리는 받는 진영에 보이지 않을 수 있습니다.
             let (id, at, gold) = (ship.id, ship.pos, bounty);
             ship.gold += gold;
@@ -60,7 +66,7 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], t
         {
             ship.deaths += 1;
             let wounds = std::mem::take(&mut ship.wounds);
-            pay_assists(world, tuning, &wounds, kill.by, tick);
+            pay_assists(world, tuning, &wounds, by, tick);
         }
         let near = |ship: &&mut Ship| {
             ship.is_afloat()
@@ -73,6 +79,17 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], t
             ship.xp += share;
         }
     }
+}
+
+/// 도움의 시간 안에 이 배를 맞힌 배 가운데 가장 나중에 맞힌 배입니다.
+fn last_to_hit(victim: &Ship, tuning: &Tuning, tick: u64) -> Option<ShipId> {
+    let fresh = |wound: &&Wound| wound.last + u64::from(tuning.ship.assist_ticks) > tick;
+    let last = victim
+        .wounds
+        .iter()
+        .filter(fresh)
+        .max_by_key(|wound| wound.last);
+    last.map(|wound| wound.by)
 }
 
 /// 가라앉은 배를 최근에 맞힌 배들에 도움의 보상을 줍니다. 가라앉힌 배(`killer`)는 격침의 보상을 받으므로 뺍니다.

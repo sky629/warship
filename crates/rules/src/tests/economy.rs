@@ -1,6 +1,6 @@
 //! 골드를 확인합니다. 수입은 1초(20Tick)에 2골드이고, 보상은 배 200, NPC 배 20, 타워 300입니다.
 
-use super::support::{GUN, Scenario};
+use super::support::{FIRE_GUN, GUN, Scenario};
 use crate::ids::Team;
 use crate::note::{NOTE_TICKS, NoteKind};
 use crate::weapon::Target;
@@ -197,4 +197,35 @@ fn two_ships_that_shoot_the_same_enemy_get_the_bounty_and_the_assist_gold() {
     let kills: u32 = [a, b].iter().map(|id| s.ship(*id).kills).sum();
     let assists: u32 = [a, b].iter().map(|id| s.ship(*id).assists).sum();
     assert_eq!((kills, assists), (1, 1));
+}
+
+/// 붉은 배가 화염포로 한 번 맞힌 뒤 `wait` Tick이 지나서, 붉은 타워가 그 푸른 배를 가라앉힙니다. 붉은 배가 수입 밖에 얻은 골드와 격침의 수입니다.
+fn gold_after_a_tower_sinks_a_ship_hit(wait: u32) -> (u32, u32) {
+    let mut s = Scenario::open_sea();
+    let a = s.ship_at(Team::RED, 10.0, 10.0);
+    let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
+    s.arm(a, FIRE_GUN);
+    s.run_ticks(wait);
+    assert!(s.ship(victim).hp < 1000, "the ship never hit the victim");
+    s.set_ship_hp(victim, 10);
+    s.tower_at(Team::RED, 12.0, 10.0);
+
+    let mut ticks = wait;
+    while s.ship(victim).is_afloat() {
+        s.run_ticks(1);
+        ticks += 1;
+        assert!(ticks < 190, "the tower never sank the victim");
+    }
+    let income = 2 * (ticks / 20);
+    (s.ship(a).gold - income, s.ship(a).kills)
+}
+
+#[test]
+fn the_last_ship_to_hit_gets_the_bounty_when_a_tower_sinks_the_enemy() {
+    assert_eq!(gold_after_a_tower_sinks_a_ship_hit(60), (200, 1));
+}
+
+#[test]
+fn a_hit_older_than_the_assist_time_earns_nothing_when_a_tower_sinks_the_enemy() {
+    assert_eq!(gold_after_a_tower_sinks_a_ship_hit(160), (0, 0));
 }
