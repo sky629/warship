@@ -76,7 +76,7 @@ pub(crate) fn pay_bounties(world: &mut World, tuning: &Tuning, kills: &[Kill], t
 }
 
 /// 가라앉은 배를 최근에 맞힌 배들에 도움의 보상을 줍니다. 가라앉힌 배(`killer`)는 격침의 보상을 받으므로 뺍니다.
-/// 배 하나가 받는 골드는 `assist_bounty`에, 최근에 맞힌 모든 배가 준 피해 가운데 그 배가 준 피해의 비율을 곱한 값입니다.
+/// 도운 배들은 `assist_bounty`를 자기들이 준 피해의 비율로 나누어 받습니다. 가라앉힌 배가 준 피해는 이 비율에 넣지 않습니다.
 fn pay_assists(
     world: &mut World,
     tuning: &Tuning,
@@ -84,15 +84,17 @@ fn pay_assists(
     killer: Option<ShipId>,
     tick: u64,
 ) {
-    let fresh = |wound: &&Wound| wound.last + u64::from(tuning.ship.assist_ticks) > tick;
-    let wounds: Vec<&Wound> = wounds.iter().filter(fresh).collect();
+    let helped = |wound: &&Wound| {
+        Some(wound.by) != killer && wound.last + u64::from(tuning.ship.assist_ticks) > tick
+    };
+    let wounds: Vec<&Wound> = wounds.iter().filter(helped).collect();
     let total: u64 = wounds.iter().map(|wound| u64::from(wound.damage)).sum();
     for wound in wounds {
         let gold = u64::from(tuning.ship.assist_bounty) * u64::from(wound.damage) / total.max(1);
         let Some(ship) = world.ships.get_mut(&wound.by) else {
             continue;
         };
-        if Some(wound.by) == killer || gold == 0 {
+        if gold == 0 {
             continue;
         }
         ship.gold += gold as u32;

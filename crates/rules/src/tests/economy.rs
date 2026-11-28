@@ -77,25 +77,32 @@ fn ships_that_hurt_a_sunk_enemy_share_the_assist_gold_by_the_damage_they_dealt()
     let killer = s.ship_at(Team::RED, 10.0, 10.0);
     let helper = s.ship_at(Team::RED, 30.0, 10.0);
     let late = s.ship_at(Team::RED, 30.0, 12.0);
+    let other = s.ship_at(Team::RED, 30.0, 14.0);
     let victim = s.ship_at(Team::BLUE, 11.0, 10.0);
     s.arm(killer, GUN);
     s.run_ticks(100);
-    // 도운 배는 30을 주었고, 다른 배는 30을 주었지만 100Tick보다 오래 전입니다. 가라앉히는 포탄은 10을 줍니다.
+    // 도운 두 배는 30과 10을 주었고, 또 다른 배는 30을 주었지만 100Tick보다 오래 전입니다. 가라앉히는 포탄은 10을 줍니다.
     let (tuning, tick) = (s.sim.tuning().clone(), s.sim.tick());
     let hurt = s.sim.world_mut().ships.get_mut(&victim).unwrap();
     hurt.wounds.clear();
     hurt.wound(late, 30, &tuning, tick - 100);
     hurt.wound(helper, 30, &tuning, tick);
+    hurt.wound(other, 10, &tuning, tick);
     hurt.hp = 10;
-    let before = [killer, helper, late].map(|id| s.ship(id).gold);
+    let before = [killer, helper, late, other].map(|id| s.ship(id).gold);
 
     s.run_ticks(40);
 
     assert!(!s.ship(victim).is_afloat());
-    let paid = [killer, helper, late].map(|id| s.ship(id).gold);
+    let paid = [killer, helper, late, other].map(|id| s.ship(id).gold);
     let income = 2 * 2;
     assert_eq!(paid[0] - before[0], 200 + income, "the bounty is fixed");
-    assert_eq!(paid[1] - before[1], 200 * 30 / 40 + income);
+    assert_eq!(
+        paid[1] - before[1],
+        200 * 30 / 40 + income,
+        "the helpers split the assist gold among themselves"
+    );
+    assert_eq!(paid[3] - before[3], 200 * 10 / 40 + income);
     assert_eq!(paid[2] - before[2], income, "an old hit is no help");
     assert!(s.ship(victim).wounds.is_empty());
 }
@@ -119,7 +126,7 @@ fn one_sunk_ship_pays_a_team_at_most_250_gold() {
     assert!(!s.ship(victim).is_afloat());
     let paid: u32 = s.sim.ships().map(|ship| ship.gold).sum();
     assert_eq!(s.ship(killer).gold, 200);
-    assert!((240..=250).contains(&paid), "the team got {paid}");
+    assert_eq!(paid, 200 + 4 * (50 / 4), "each of the four helpers gets 12");
 }
 
 #[test]
